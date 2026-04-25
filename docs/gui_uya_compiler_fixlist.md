@@ -9,7 +9,12 @@
 - 建议修复顺序
 - 修复后应补的编译器回归测试
 
+> 2026-04-26 之后，这份文档已经主要转为“历史问题 + 当前回归状态”记录。
+> 除 `#7` 外，其余条目已在编译器 / driver 侧修复；GUI 仓库是否立即撤销绕法，取决于组件侧重构节奏。
+
 ## 优先级
+
+以下优先级是历史修复顺序，保留用于追溯，不代表当前仍待实现。
 
 ### P0
 
@@ -33,28 +38,28 @@
 
 ## 当前状态总览
 
-> 2026-04-26 更新：当前 GUI 仓库已经可以通过 `make test` / `make build`；下表中的“状态”描述的是编译器 / 语言层问题是否已解决，不是 GUI 仓库是否还能继续开发。
+> 2026-04-26 更新：当前 GUI 仓库已经可以通过 `make test` / `make build`；下表中的“状态”描述的是编译器 / 语言层问题是否已解决，不是 GUI 仓库是否还能继续开发。当前编译器侧已修复 `1/2/3/4/5/6/8/9/10/11`，GUI 仓库里的对应绕法可以按需逐步撤销。
 
 | 编号 | 问题 | 当前状态 | 对当前仓库影响 | 当前仓库处理方式 |
 |------|------|----------|----------------|------------------|
-| 1 | 泛型 `union` / `Option<T>` C99 代码生成 | 未修复 | 中 | 用专用 `EventOption` 规避 |
-| 2 | `union` 作为结构体字段的 C99 代码生成 | 未修复 | 中 | 事件负载改扁平字段 |
-| 3 | 泛型构造器 / 泛型返回值实例化 | 未修复 | 中 | 改字面量初始化 / 专用返回类型 |
-| 4 | 结构体比较表达式 C99 代码生成 | 未修复 | 低 | 测试使用字段级 helper |
-| 5 | 全局结构体常量依赖其他全局结构体常量 | 未修复 | 低 | 默认值改函数返回 |
-| 6 | const receiver 限定传播 | 未修复（非阻塞） | 低 | 接受 warning / 局部回避 |
-| 7 | 关键字与方法名冲突 | 待语言设计决策 | 低 | 使用 `union_rect` 等替代命名 |
-| 8 | `interface` 值的全局 / 字段初始化 | 未修复 | 高 | P3 改为 `type_tag + user_data` 分发 |
-| 9 | `&Self` 返回值链式方法 lowering | 未修复 | 中 | Fluent API 拆成多句 |
-| 10 | 跨模块同名 `enum` 的 C99 命名空间冲突 | 未修复 | 中 | 组件侧重命名为 `LabelAlign` |
-| 11 | split-C 下相对 `-o` 路径解析 | 未修复（driver 层） | 低 | Makefile 统一传绝对路径 |
+| 1 | 泛型 `union` / `Option<T>` C99 代码生成 | 已修复（编译器） | 低 | 历史绕法，可回撤 `EventOption` |
+| 2 | `union` 作为结构体字段的 C99 代码生成 | 已修复（编译器） | 低 | 历史绕法，可恢复真正 `union` 字段 |
+| 3 | 泛型构造器 / 泛型返回值实例化 | 已修复（编译器） | 低 | 历史绕法，可回到通用工厂 / 返回类型 |
+| 4 | 结构体比较表达式 C99 代码生成 | 已修复（编译器） | 低 | 历史绕法，可移除字段级 helper |
+| 5 | 全局结构体常量依赖其他全局结构体常量 | 已修复（编译器） | 低 | 历史绕法，可回到全局组合常量 |
+| 6 | const receiver 限定传播 | 已修复（编译器） | 低 | 历史绕法，可去掉局部规避 |
+| 7 | 关键字与方法名冲突 | 语言限制（当前不支持） | 低 | 使用 `union_rect` 等替代命名 |
+| 8 | `interface` 值的全局 / 字段初始化 | 已修复（编译器） | 低 | 历史绕法，可回到接口对象字段 / 全局绑定 |
+| 9 | `&Self` 返回值链式方法 lowering | 已修复（编译器） | 低 | 历史绕法，可恢复 Fluent API |
+| 10 | 跨模块同名 `enum` 的 C99 命名空间冲突 | 已修复（编译器） | 低 | 历史绕法，可恢复原始枚举命名 |
+| 11 | split-C 下相对 `-o` 路径解析 | 已修复（driver 层） | 低 | 历史绕法，可直接使用相对 `-o` |
 
 ## 1. 泛型 `union` / `Option<T>` 的 C99 代码生成
 
 ### 当前状态
 
-- 状态: 未修复
-- 阻塞性: 已有稳定绕法，但仍阻塞回到通用 `Option<T>` 设计
+- 状态: 已修复（编译器）
+- 阻塞性: 已解除；可回到通用 `Option<T>` 设计
 
 ### 现象
 
@@ -70,30 +75,32 @@
 - `Option<Event>` 返回值对应的 C 结构/标签包装未完整生成
 - 结果是宿主 C 编译阶段报“不完整类型”
 
-### 当前绕法
+### 历史绕法
 
 - 不使用 `Option<Event>`
 - 改为局部专用的 `EventOption`
 
-### 建议修复点
+### 修复结果
 
-- 单态化时，确保 `Option<T>` 对任意结构体 `T` 都能生成完整的 tagged wrapper
-- split-C 场景下，声明与定义必须在所有 TU 中一致可见
+- `Option<T>` 对结构体 payload 的单态化已打通
+- split-C 下声明 / 定义一致性已通过回归验证
 
-### 建议补的编译器测试
+### 已补的编译器测试
 
 - `uya/tests/test_option_struct.uya`
-- 覆盖：
+- `tests/verify_gui_fixlist_codegen.sh`
+- 已覆盖：
   - `Option<MyStruct>` 作为返回值
   - `Option<MyStruct>` 作为局部变量
   - `Option<MyStruct>` 跨模块导入使用
+  - split-C 路径
 
 ## 2. `union` 作为结构体字段的 C99 代码生成
 
 ### 当前状态
 
-- 状态: 未修复
-- 阻塞性: 已有稳定绕法，但仍阻塞事件负载恢复为真正 `union` 字段
+- 状态: 已修复（编译器）
+- 阻塞性: 已解除；可恢复事件负载的真正 `union` 字段
 
 ### 现象
 
@@ -109,30 +116,30 @@
 - 生成的 C 中类似 `struct tagged_union data;`，但对应定义缺失或不匹配
 - 宿主 C 编译时报 “field has incomplete type”
 
-### 当前绕法
+### 历史绕法
 
 - 把事件负载拆成 `point` / `key_code` / `encoder_diff` / `value`
 - 仅在出队层面保留 `EventOption`
 
-### 建议修复点
+### 修复结果
 
-- union 成员作为 struct 字段时，确保布局类型在使用点前完整声明
-- 如果语言语义是“tag 仅编译期可见”，C 后端仍需稳定选择可落地的承载表示
+- `union` 作为结构体字段时，C99 后端已能在使用点前生成完整承载类型
+- 结构体内嵌 `union` 的初始化 / match / 返回路径已可正常落地
 
-### 建议补的编译器测试
+### 已补的编译器测试
 
 - `uya/tests/test_union_struct_field_codegen.uya`
-- 结构体中包含：
+- 已覆盖：
   - `union` 字段
   - 多个结构体变体
-  - 跨模块导出/导入
+  - 结构体字段上的初始化与解构
 
 ## 3. 泛型构造器/泛型返回值的实例化与代码生成
 
 ### 当前状态
 
-- 状态: 未修复
-- 阻塞性: 中等；当前不影响仓库继续开发，但会持续限制 API 设计
+- 状态: 已修复（编译器）
+- 阻塞性: 已解除；通用工厂函数 / 泛型返回值可恢复
 
 ### 现象
 
@@ -149,33 +156,32 @@
 - 泛型工厂函数 `obj_pool_new<T>() -> ObjPool<T>` 会在约束检查或生成阶段失败
 - `slice_from_ptr(&values[0], 3)` 这类泛型返回值推断不稳定
 
-### 当前绕法
+### 历史绕法
 
 - `ObjPool<T>` 直接字面量初始化
 - `Slice<T>` 直接字面量初始化
 - `Buffer.as_slice()` 仍返回专用 `ByteSlice`，见 [buf.uya](/home/winger/gui-uya/gui/res/buf.uya#L63)
 
-### 建议修复点
+### 修复结果
 
-- 统一泛型返回值的单态化路径
-- 约束型泛型 `T: IGuiObj` 在构造函数返回值位置应正常工作
-- 推断失败时要么给出明确诊断，要么支持显式类型参数调用
+- 泛型工厂函数与泛型方法返回值的单态化路径已统一
+- 带接口约束的泛型返回值已能正常代码生成
 
-### 建议补的编译器测试
+### 已补的编译器测试
 
 - `uya/tests/test_generic_factory_return.uya`
 - `uya/tests/test_generic_struct_method_return.uya`
-- 覆盖：
+- 已覆盖：
   - `fn new<T>() Container<T>`
-  - `fn wrap<T>(x: &T) Slice<T>`
+  - 泛型结构体方法返回值
   - 带接口约束的泛型返回值
 
 ## 4. 结构体比较表达式的 C99 代码生成
 
 ### 当前状态
 
-- 状态: 未修复
-- 阻塞性: 低；当前主要影响测试和表达力，不阻塞默认构建
+- 状态: 已修复（编译器）
+- 阻塞性: 已解除；可直接使用结构体比较表达式
 
 ### 现象
 
@@ -187,26 +193,29 @@
 - [test_rect.uya](/home/winger/gui-uya/gui/tests/test_rect.uya#L8)
 - [test_core_types.uya](/home/winger/gui-uya/gui/tests/test_core_types.uya#L15)
 
-### 当前绕法
+### 历史绕法
 
 - 全部改成字段级比较 helper：`color_eq`、`rect_eq`、`point_eq`
 
-### 建议修复点
+### 修复结果
 
-- 对结构体 `==` / `!=` 在 lowering 时展开成逐字段比较
-- 嵌套结构体需要递归展开
+- 结构体 `==` / `!=` 已在 lowering / codegen 路径上展开为可落地的 C99 比较
+- 嵌套结构体与数组字段场景已纳入回归
 
-### 建议补的编译器测试
+### 已补的编译器测试
 
 - 扩充现有 `uya/tests/test_struct_comparison.uya`
-- 再加一个 split-C 回归，确保不是单文件路径才成立
+- 已覆盖：
+  - 普通结构体比较
+  - 嵌套结构体比较
+  - 数组字段比较
 
 ## 5. 全局结构体常量初始化依赖其他全局结构体常量
 
 ### 当前状态
 
-- 状态: 未修复
-- 阻塞性: 低；当前主要影响默认值组织方式
+- 状态: 已修复（编译器）
+- 阻塞性: 已解除；可直接回到全局组合结构体常量
 
 ### 现象
 
@@ -217,16 +226,16 @@
 - [style.uya](/home/winger/gui-uya/gui/style/style.uya)
 - 当前用 `style_default()` 返回默认样式，而不是 `DEFAULT_STYLE = { background: TRANSPARENT, ... }`
 
-### 当前绕法
+### 历史绕法
 
 - 把静态结构体组合常量改成普通函数返回
 
-### 建议修复点
+### 修复结果
 
-- 对全局只读结构体常量做常量折叠或内联展开
-- 避免在 C 里生成“另一个非 constexpr 聚合对象”作为初始化项
+- 全局结构体常量对其他全局结构体常量的引用已可正确展开
+- C99 初始化式不再退化成宿主编译器拒绝的非法聚合引用
 
-### 建议补的编译器测试
+### 已补的编译器测试
 
 - `uya/tests/test_global_struct_const_init.uya`
 
@@ -234,8 +243,8 @@
 
 ### 当前状态
 
-- 状态: 未修复（非阻塞）
-- 阻塞性: 低；当前主要是 warning 污染和代码生成质量问题
+- 状态: 已修复（编译器）
+- 阻塞性: 已解除；const receiver warning 已可清理
 
 ### 现象
 
@@ -247,17 +256,16 @@
 - [test_core_types.uya](/home/winger/gui-uya/gui/tests/test_core_types.uya#L16)
 - [test_rect.uya](/home/winger/gui-uya/gui/tests/test_rect.uya#L41)
 
-### 当前影响
+### 修复后效果
 
-- 不阻塞 build/test
-- 但会污染宿主编译输出，后续更难发现真正的 warning
+- 相关调用仍可正常工作
+- `discarded-qualifiers` 定向回归已通过，宿主 warning 污染已清理
 
-### 建议修复点
+### 修复结果
 
-- 对只读 receiver 优先生成 `const T*`
-- 或在 lowering 时先复制到局部非常量临时值
+- const receiver 的生成路径已调整，避免再丢失限定信息
 
-### 建议补的编译器测试
+### 已补的编译器测试
 
 - `uya/tests/test_const_receiver_codegen.uya`
 
@@ -265,8 +273,8 @@
 
 ### 当前状态
 
-- 状态: 待语言设计决策
-- 阻塞性: 低；如果语言层明确“不支持”，则应从 bug 清单转为语言限制说明
+- 状态: 语言限制（当前不支持）
+- 阻塞性: 低；当前按语言限制处理，若后续希望支持再进入语言设计
 
 ### 现象
 
@@ -290,8 +298,8 @@
 
 ### 当前状态
 
-- 状态: 未修复
-- 阻塞性: 高；直接影响更自然的组件回调/适配器架构
+- 状态: 已修复（编译器）
+- 阻塞性: 已解除；可恢复接口对象字段 / 全局初始化
 
 ### 现象
 
@@ -312,7 +320,7 @@
 - 结构体字段初始化报 `incompatible types when initializing type 'void *' using type 'struct XxxAdapter'`
 - 类型检查能通过，但宿主 C 编译失败
 
-### 当前绕法
+### 历史绕法
 
 - 不在全局或结构体字段里保存接口对象
 - `GuiObj` 的 `render_cb` / `input_cb` 统一置空
@@ -321,19 +329,17 @@
   - [page.uya](/home/winger/uya/gui-uya/gui/widget/page.uya)
   - [grid_view.uya](/home/winger/uya/gui-uya/gui/widget/grid_view.uya)
 
-### 建议修复点
+### 修复结果
 
-- 明确 `interface` 在 C 后端的承载表示（通常是 `{data, vtable}` 一类聚合）
-- 保证：
-  - 全局接口值可由具体实现安全初始化
-  - 结构体字段可由具体实现安全初始化
-  - 字面量初始化与赋值初始化使用一致的 lowering 路径
+- `interface` 的全局初始化、结构体字段初始化、返回值初始化已经统一走可落地的 `{data, vtable}` lowering
+- 具体实现装箱到接口值的路径已在单文件与定向脚本中验证
 
-### 建议补的编译器测试
+### 已补的编译器测试
 
 - `uya/tests/test_interface_global_init.uya`
 - `uya/tests/test_interface_field_init.uya`
-- 覆盖：
+- `tests/verify_gui_fixlist_codegen.sh`
+- 已覆盖：
   - `var cb: IFoo = FooImpl{}`
   - `struct S { cb: IFoo }`
   - `return Holder{ cb: FooImpl{} }`
@@ -342,8 +348,8 @@
 
 ### 当前状态
 
-- 状态: 未修复
-- 阻塞性: 中等；会影响 Fluent API 的可用性和代码风格稳定性
+- 状态: 已修复（编译器）
+- 阻塞性: 已解除；Fluent API 可直接恢复
 
 ### 现象
 
@@ -367,7 +373,7 @@ _ = chart.add_point(2).add_point(6).add_point(3).add_point(8);
 - 生成的 C 中出现 `unknown(8)` 之类非法调用
 - 不是类型错误，而是 lowering / 临时值拼接错误
 
-### 当前绕法
+### 历史绕法
 
 - 不写链式调用
 - 拆成多条独立语句：
@@ -377,27 +383,25 @@ _ = chart.add_point(2);
 _ = chart.add_point(6);
 ```
 
-### 建议修复点
+### 修复结果
 
-- 对“方法返回 `&Self`”的链式表达式统一构建 receiver 临时值
-- 明确在“结果被丢弃”的上下文里也要完整保留链式调用副作用
-- 避免在中间 lowering 节点留下占位符/未解析调用名
+- `&Self` 风格的链式方法调用已可稳定 lower 到 C99
+- 结果被丢弃、泛型链式、字面量链式场景已纳入回归
 
-### 建议补的编译器测试
+### 已补的编译器测试
 
 - `uya/tests/test_struct_method_chain.uya`
-- 覆盖：
+- 已覆盖：
   - `a.bump().bump().bump()`
-  - `_ = a.bump().bump()`
   - 结构体方法返回 `&Self`
-  - 跨模块方法链
+  - 泛型 / 字面量 / 括号链式调用
 
 ## 10. 跨模块同名 `enum` 的 C99 命名空间冲突
 
 ### 当前状态
 
-- 状态: 未修复
-- 阻塞性: 中等；会影响模块边界内的常见命名选择
+- 状态: 已修复（编译器）
+- 阻塞性: 已解除；跨模块同名 `enum` 可共存
 
 ### 现象
 
@@ -416,28 +420,30 @@ _ = chart.add_point(6);
   - `TextAlign_Right undeclared`
 - 说明生成代码引用到了组件枚举常量，但对应声明/命名已被另一个模块的同名 `enum` 覆盖或污染
 
-### 当前绕法
+### 历史绕法
 
 - 避免跨模块使用同名 `enum`
 - 组件侧显式改名为 `LabelAlign`
 
-### 建议修复点
+### 修复结果
 
-- C 后端对 `enum` 类型名、枚举值名都带上稳定模块前缀
-- 保证不同模块的同名顶层声明在 C 命名空间里不会互相覆盖
+- C99 后端已为 `enum` 类型名 / 枚举值生成稳定模块前缀
+- `use ... as ...` 导入别名与跨模块同名 `enum` 已可同时工作
 
-### 建议补的编译器测试
+### 已补的编译器测试
 
-- `uya/tests/test_cross_module_enum_name_collision.uya`
-- 两个模块各自导出 `TextAlign`
-- 第三个模块同时导入并使用两者，验证生成的 C 仍可编译
+- `tests/verify_gui_fixlist_codegen.sh`
+- 已覆盖：
+  - 两个模块各自导出 `TextAlign`
+  - 第三个模块同时导入并使用两者
+  - `use ... as ...` 别名路径
 
 ## 11. split-C / `.uyacache` 构建时相对输出路径 `-o` 的解析基准
 
 ### 当前状态
 
-- 状态: 未修复（driver 层）
-- 阻塞性: 低；当前仓库已通过 Makefile 绝对路径规避
+- 状态: 已修复（driver 层）
+- 阻塞性: 已解除；相对 `-o` 可直接稳定使用
 
 ### 现象
 
@@ -453,26 +459,28 @@ _ = chart.add_point(6);
 - 宿主链接阶段报：
   - `cannot open output file build/phase3_smoke: No such file or directory`
 
-### 当前绕法
+### 历史绕法
 
 - 对 split-C 输出统一传绝对路径
 - 当前 Makefile 已使用 `ABS_BUILD_DIR`
 
-### 建议修复点
+### 修复结果
 
-- 如果 `-o` 是相对路径，进入 `.uyacache` 前先相对项目根展开成绝对路径
-- 或在 driver 层显式创建相对输出目录并确保基准一致
+- driver 进入 `.uyacache` 前已把相对 `-o` 展开成绝对路径
+- 单文件 / split-C 两条构建路径都会预创建输出目录
 
-### 建议补的编译器测试
+### 已补的编译器测试
 
-- `uya/tests/test_relative_output_path_driver.sh`
-- 覆盖：
+- `tests/verify_gui_fixlist_codegen.sh`
+- 已覆盖：
   - 单文件 C 路径
   - split-C 路径
   - `-o build/foo`
-  - `-o /abs/path/foo`
+  - 相对项目根输出目录
 
-## 推荐修复顺序
+## 历史修复顺序
+
+当前只剩 `#7` 处于语言设计待决状态；以下顺序保留作追溯。
 
 1. 修 `Option<T>` / 泛型 union 单态化
 2. 修 union 结构体字段
@@ -484,7 +492,9 @@ _ = chart.add_point(6);
 8. 修跨模块同名 enum 的命名空间隔离
 9. 修 const receiver warning
 
-## 修复完成的验收标准
+## 当前验收结论
+
+以下目标中，除 `#7` 关联的关键字命名策略外，其余项在编译器侧都已经具备撤销 GUI 绕法的条件。
 
 - GUI 仓库可以把这些绕法撤掉：
   - `EventOption` 改回通用 `Option<Event>`
