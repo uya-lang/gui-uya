@@ -84,6 +84,8 @@ export struct GuiObj : IGuiObj, IContainer {
     release_cb: EventCallbackSlot,
     long_press_cb: EventCallbackSlot,
     value_change_cb: EventCallbackSlot,
+    pinch_cb: EventCallbackSlot,
+    hover_cb: EventCallbackSlot,
     focus_cb: EventCallbackSlot,
     name_ptr: &const byte,
 }
@@ -364,6 +366,16 @@ GuiObj {
         self.value_change_cb.user_data = user_data;
     }
 
+    fn on_pinch(self: &Self, callback: &IGuiEventCallback, user_data: &void) void {
+        self.pinch_cb.callback = callback;
+        self.pinch_cb.user_data = user_data;
+    }
+
+    fn on_hover(self: &Self, callback: &IGuiEventCallback, user_data: &void) void {
+        self.hover_cb.callback = callback;
+        self.hover_cb.user_data = user_data;
+    }
+
     fn on_focus(self: &Self, callback: &IGuiEventCallback, user_data: &void) void {
         self.focus_cb.callback = callback;
         self.focus_cb.user_data = user_data;
@@ -382,8 +394,14 @@ GuiObj {
         if evt.event_type == EventType.LongPress {
             return gui_obj_dispatch_slot(self, &self.long_press_cb, evt);
         }
-        if evt.event_type == EventType.ValueChange || evt.event_type == EventType.Pinch {
+        if evt.event_type == EventType.ValueChange {
             return gui_obj_dispatch_slot(self, &self.value_change_cb, evt);
+        }
+        if evt.event_type == EventType.PinchStart || evt.event_type == EventType.Pinch || evt.event_type == EventType.PinchEnd {
+            return gui_obj_dispatch_slot(self, &self.pinch_cb, evt);
+        }
+        if evt.event_type == EventType.HoverEnter || evt.event_type == EventType.HoverMove || evt.event_type == EventType.HoverLeave {
+            return gui_obj_dispatch_slot(self, &self.hover_cb, evt);
         }
         if evt.event_type == EventType.FocusIn || evt.event_type == EventType.FocusOut {
             return gui_obj_dispatch_slot(self, &self.focus_cb, evt);
@@ -447,6 +465,8 @@ export fn gui_obj_default() GuiObj {
         release_cb: event_callback_slot_default(),
         long_press_cb: event_callback_slot_default(),
         value_change_cb: event_callback_slot_default(),
+        pinch_cb: event_callback_slot_default(),
+        hover_cb: event_callback_slot_default(),
         focus_cb: event_callback_slot_default(),
         name_ptr: "obj",
     };

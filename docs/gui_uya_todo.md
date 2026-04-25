@@ -211,7 +211,7 @@
     - [x] `fn merge(self, other) void` - 样式合并
     - [x] `fn clone(self) Style` - 样式复制
 - [x] 单元测试（核心路径）
-- [ ] 扩充到 50+ 属性读写/回归用例
+- [x] 扩充到 50+ 属性读写/回归用例
 
 #### Day 3-4: 主题系统
 - [x] `style/theme.uya` - 主题管理
@@ -228,7 +228,7 @@
   - [x] Material Light 主题
   - [x] Material Dark 主题
   - [x] 紧凑主题 (资源受限设备)
-- [ ] 细化到更多组件级主题映射策略
+- [x] 细化到更多组件级主题映射策略
 
 #### Day 5: 样式构建器
 - [x] 实现 Fluent API 构建器
@@ -240,7 +240,7 @@
   - [x] `.build() -> Style`
 - [x] 宏 `style(...)` 简化定义
 - [x] 单元测试
-- [ ] 扩展更完整的声明式 DSL
+- [x] 扩展更完整的声明式 DSL
 
 ### Week 5: 事件系统增强（MVP 已落地）
 
@@ -262,7 +262,7 @@
     - [x] `drag_threshold: u16`
     - [x] `pinch_threshold: u16`
 - [x] 单元测试（点击、滑动）
-- [ ] 补齐长按/拖拽/双击/捏合模拟输入序列
+- [x] 补齐长按/拖拽/双击/捏合模拟输入序列
 
 #### Day 3-4: 事件分发器
 - [x] `core/event_dispatch.uya` - 事件分发
@@ -285,8 +285,8 @@
   - [x] `struct MouseDriver: IInputDev`
   - [x] `struct KeyDriver: IInputDev`
   - [x] `struct EncoderDriver: IInputDev`
-- [ ] 焦点/捕获状态 atomic 化
-- [ ] Hover / capture 完整策略补齐
+- [x] 焦点/捕获状态 atomic 化
+- [x] Hover / capture 完整策略补齐
 
 #### Day 5: 事件回调系统
 - [x] 实现回调机制
@@ -298,7 +298,7 @@
   - [x] `fn on_focus(self, callback) void`
 - [x] 回调上下文传递 (`user_data`)
 - [x] 单元测试（点击、焦点、队列 touch 流程）
-- [ ] 补齐 `press` / `release` / `long_press` / `value_change` / `pinch` 全覆盖
+- [x] 补齐 `press` / `release` / `long_press` / `value_change` / `pinch` 全覆盖
 
 ### Week 6: 布局系统（MVP 已落地）
 
@@ -316,11 +316,11 @@
   - [x] Flex 属性
     - [x] `flex_grow`
     - [x] `align_self` (覆盖容器 `align_items`)
-    - [ ] `flex_shrink`
-    - [ ] `flex_basis`
+    - [x] `flex_shrink`
+    - [x] `flex_basis`
 - [x] 单元测试（基础行布局）
-- [ ] `RowReverse` / `ColumnReverse` 真正反向布局逻辑
-- [ ] `wrap` / `align_content` 生效逻辑
+- [x] `RowReverse` / `ColumnReverse` 真正反向布局逻辑
+- [x] `wrap` / `align_content` 生效逻辑
 - [ ] 扩展各种组合 30+ 用例
 
 #### Day 3: Grid 布局

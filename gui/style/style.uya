@@ -711,6 +711,21 @@ StyleBuilder {
         self.style.set_u32(StyleProp.MarginLeft, value as u32);
     }
 
+    fn size(self: &Self, width: u16, height: u16) void {
+        self.style.set_u32(StyleProp.Width, width as u32);
+        self.style.set_u32(StyleProp.Height, height as u32);
+    }
+
+    fn min_size(self: &Self, width: u16, height: u16) void {
+        self.style.set_u32(StyleProp.MinWidth, width as u32);
+        self.style.set_u32(StyleProp.MinHeight, height as u32);
+    }
+
+    fn max_size(self: &Self, width: u16, height: u16) void {
+        self.style.set_u32(StyleProp.MaxWidth, width as u32);
+        self.style.set_u32(StyleProp.MaxHeight, height as u32);
+    }
+
     fn font(self: &Self, ptr: &void) void {
         self.style.set_ptr(StyleProp.Font, ptr);
     }
@@ -728,6 +743,38 @@ StyleBuilder {
         self.style.set_i32(StyleProp.ShadowOffsetY, offset_y as i32);
         self.style.set_u32(StyleProp.ShadowBlur, blur as u32);
         self.style.set_color(StyleProp.ShadowColor, color);
+    }
+
+    fn state_bg(self: &Self, hover: Color, press: Color, focus: Color, disabled: Color) void {
+        self.style.set_color(StyleProp.BgHoverColor, hover);
+        self.style.set_color(StyleProp.BgPressColor, press);
+        self.style.set_color(StyleProp.BgFocusColor, focus);
+        self.style.set_color(StyleProp.BgDisableColor, disabled);
+    }
+
+    fn layout_mode(self: &Self, mode: u32) void {
+        self.style.set_u32(StyleProp.LayoutMode, mode);
+    }
+
+    fn gap(self: &Self, value: u8) void {
+        self.style.set_u32(StyleProp.Gap, value as u32);
+    }
+
+    fn flex(self: &Self, grow: i32, shrink: i32, basis: i32) void {
+        self.style.set_i32(StyleProp.FlexGrow, grow);
+        self.style.set_i32(StyleProp.FlexShrink, shrink);
+        self.style.set_i32(StyleProp.FlexBasis, basis);
+    }
+
+    fn grid_cell(self: &Self, column: i32, row: i32, col_span: i32, row_span: i32) void {
+        self.style.set_i32(StyleProp.GridColumn, column);
+        self.style.set_i32(StyleProp.GridRow, row);
+        self.style.set_i32(StyleProp.GridColumnSpan, col_span);
+        self.style.set_i32(StyleProp.GridRowSpan, row_span);
+    }
+
+    fn overflow(self: &Self, mode: u32) void {
+        self.style.set_u32(StyleProp.Overflow, mode);
     }
 
     fn build(self: &Self) Style {

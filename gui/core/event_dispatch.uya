@@ -15,16 +15,33 @@ use core.obj_tree.BubblePath;
 use core.obj_tree.ObjTree;
 use core.point.Point;
 
+fn event_uses_capture(evt: Event) bool {
+    if evt.event_type == EventType.HoverEnter || evt.event_type == EventType.HoverMove || evt.event_type == EventType.HoverLeave {
+        return false;
+    }
+    if evt.dev_type == InputDev.Touch || evt.dev_type == InputDev.Mouse {
+        return true;
+    }
+    return false;
+}
+
+fn event_clears_capture(evt: Event) bool {
+    return evt.event_type == EventType.Release
+        || evt.event_type == EventType.DragEnd
+        || evt.event_type == EventType.Click
+        || evt.event_type == EventType.DoubleClick;
+}
+
 export struct EventDispatcher {
     queue: EventQueue,
     gesture: GestureDetector,
-    focus_obj: i32,
-    capture_obj: i32,
-    hover_obj: i32,
+    focus_obj: atomic i32,
+    capture_obj: atomic i32,
+    hover_obj: atomic i32,
 
     fn dispatch(self: &Self, evt: Event, tree: &ObjTree) bool {
         var working: Event = evt;
-        if self.capture_obj >= 0 {
+        if event_uses_capture(working) && self.capture_obj >= 0 {
             working.target = self.capture_obj;
         } else if working.target < 0 {
             working.target = self.find_target(tree, working.point);
@@ -62,13 +79,23 @@ export struct EventDispatcher {
             if working.event_type == EventType.Press && target_obj.flags.focusable {
                 self.update_focus(tree, working.target, working.timestamp);
             }
+            if working.event_type == EventType.Press && event_uses_capture(working) && self.capture_obj < 0 {
+                self.capture_obj = working.target;
+            }
 
             if target_evt.stop_bubble {
+                if event_clears_capture(working) {
+                    self.clear_capture();
+                }
                 return true;
             }
         }
 
-        return self.bubble_event(tree, path, working) || handled;
+        const bubbled: bool = self.bubble_event(tree, path, working) || handled;
+        if event_clears_capture(working) {
+            self.clear_capture();
+        }
+        return bubbled;
     }
 
     fn find_target(self: &Self, tree: &ObjTree, point: Point) i32 {
@@ -108,6 +135,14 @@ export struct EventDispatcher {
         return self.focus_obj;
     }
 
+    fn get_capture(self: &Self) i32 {
+        return self.capture_obj;
+    }
+
+    fn get_hover(self: &Self) i32 {
+        return self.hover_obj;
+    }
+
     fn set_capture(self: &Self, obj_idx: i32) void {
         self.capture_obj = obj_idx;
     }
@@ -142,8 +177,41 @@ export struct EventDispatcher {
     }
 
     fn process_touch(self: &Self, tree: &ObjTree, point: Point, is_down: bool, timestamp: u32) i32 {
-        const target: i32 = self.find_target(tree, point);
+        var target: i32 = self.find_target(tree, point);
+        if self.capture_obj >= 0 {
+            target = self.capture_obj;
+        }
         self.gesture.process_touch(point, is_down, timestamp, target, &self.queue);
+        return self.pump(tree);
+    }
+
+    fn process_hover(self: &Self, tree: &ObjTree, point: Point, timestamp: u32) i32 {
+        const next_hover: i32 = self.find_target(tree, point);
+        if next_hover == self.hover_obj {
+            if next_hover >= 0 {
+                _ = self.dispatch(event_with_phase(event_point(EventType.HoverMove, InputDev.Mouse, next_hover, timestamp, point), EventPhase.Target), tree);
+            }
+            return next_hover;
+        }
+
+        if self.hover_obj >= 0 {
+            _ = self.dispatch(event_with_phase(event_point(EventType.HoverLeave, InputDev.Mouse, self.hover_obj, timestamp, point), EventPhase.Target), tree);
+        }
+
+        self.hover_obj = next_hover;
+        if next_hover >= 0 {
+            _ = self.dispatch(event_with_phase(event_point(EventType.HoverEnter, InputDev.Mouse, next_hover, timestamp, point), EventPhase.Target), tree);
+        }
+        return next_hover;
+    }
+
+    fn process_pinch(self: &Self, tree: &ObjTree, first: Point, second: Point, active: bool, timestamp: u32) i32 {
+        const center: Point = Point{
+            x: ((first.x as i32 + second.x as i32) / 2) as i16,
+            y: ((first.y as i32 + second.y as i32) / 2) as i16,
+        };
+        const target: i32 = self.find_target(tree, center);
+        self.gesture.process_pinch(first, second, active, timestamp, target, &self.queue);
         return self.pump(tree);
     }
 

@@ -195,6 +195,20 @@ Widget {
             return true;
         }
 
+        if evt.event_type == EventType.HoverEnter || evt.event_type == EventType.HoverMove {
+            if self.state == WidgetState.Normal || self.state == WidgetState.Hovered {
+                self.set_state(WidgetState.Hovered);
+            }
+            return true;
+        }
+
+        if evt.event_type == EventType.HoverLeave {
+            if self.state == WidgetState.Hovered {
+                self.set_state(WidgetState.Normal);
+            }
+            return true;
+        }
+
         if evt.event_type == EventType.FocusIn {
             self.set_state(WidgetState.Focused);
             return true;

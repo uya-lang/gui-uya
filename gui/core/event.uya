@@ -30,6 +30,9 @@ export enum EventType {
     DragStart,
     Drag,
     DragEnd,
+    HoverEnter,
+    HoverMove,
+    HoverLeave,
     KeyDown,
     KeyUp,
     FocusIn,
@@ -192,7 +195,7 @@ export struct GestureDetector {
                     self.last_release_time = timestamp;
                     self.last_click_point = touch_point;
                 }
-            } else if moved_sq >= swipe_threshold_sq {
+            } else if !self.dragging && moved_sq >= swipe_threshold_sq {
                 const dx: i32 = touch_point.x as i32 - self.start_point.x as i32;
                 const dy: i32 = touch_point.y as i32 - self.start_point.y as i32;
                 if abs_i32(dx) >= abs_i32(dy) {

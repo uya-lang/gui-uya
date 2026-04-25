@@ -10,6 +10,18 @@ use style.style_builder_new;
 
 export const MAX_THEMES: i32 = 8;
 
+const THEME_WIDGET_BUTTON: u32 = 0x1001u32;
+const THEME_WIDGET_LABEL: u32 = 0x1002u32;
+const THEME_WIDGET_IMAGE: u32 = 0x1003u32;
+const THEME_WIDGET_SLIDER: u32 = 0x1004u32;
+const THEME_WIDGET_SWITCH: u32 = 0x1005u32;
+const THEME_WIDGET_PAGE: u32 = 0x1006u32;
+const THEME_WIDGET_PANEL: u32 = 0x1007u32;
+const THEME_WIDGET_LIST: u32 = 0x1008u32;
+const THEME_WIDGET_GRID_VIEW: u32 = 0x1009u32;
+const THEME_WIDGET_CHART: u32 = 0x100Au32;
+const THEME_WIDGET_CANVAS: u32 = 0x100Bu32;
+
 export enum ThemeVariant {
     Light,
     Dark,
@@ -78,8 +90,25 @@ fn theme_make_style(bg: Color, fg: Color, border_width: u8, border_color: Color,
 }
 
 fn theme_apply_to_obj(theme: &Theme, obj: &GuiObj) void {
-    if obj.flags.clickable {
+    if obj.type_tag == THEME_WIDGET_BUTTON {
         obj.style = theme.button_style.clone();
+    } else if obj.type_tag == THEME_WIDGET_LABEL {
+        obj.style = theme.text_style.clone();
+    } else if obj.type_tag == THEME_WIDGET_PANEL || obj.type_tag == THEME_WIDGET_PAGE {
+        obj.style = theme.panel_style.clone();
+    } else if obj.type_tag == THEME_WIDGET_SLIDER
+        || obj.type_tag == THEME_WIDGET_SWITCH
+        || obj.type_tag == THEME_WIDGET_LIST
+        || obj.type_tag == THEME_WIDGET_GRID_VIEW {
+        obj.style = theme.compact_style.clone();
+    } else if obj.type_tag == THEME_WIDGET_IMAGE
+        || obj.type_tag == THEME_WIDGET_CHART
+        || obj.type_tag == THEME_WIDGET_CANVAS {
+        obj.style = theme.panel_style.clone();
+    } else if obj.flags.clickable {
+        obj.style = theme.button_style.clone();
+    } else if obj.flags.focusable {
+        obj.style = theme.compact_style.clone();
     } else if obj.child_count() > 0 {
         obj.style = theme.panel_style.clone();
     } else {
