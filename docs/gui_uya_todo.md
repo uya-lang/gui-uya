@@ -25,7 +25,7 @@
 
 ## Phase 0: 基础设施 (Week 1-3)
 
-> 注: 当前仓库已完成 Phase 0 的可编译可测试版本；少数条目因现阶段 Uya/C99 后端限制采用了等价实现，例如 `Rect.union_rect`、`EventQueue::pop(out_evt)`、`GuiObj` 专用对象池以及扁平化事件载荷字段。
+> 注: 当前仓库已完成 Phase 0 的可编译可测试版本；少数条目因现阶段 Uya/C99 后端限制采用了等价实现，例如 `Rect.union_rect`、专用 `EventOption` 出队、`GuiObj` 泛型对象池的直接字面量构造，以及事件的扁平化载荷字段。
 
 ### Week 1: 项目搭建与环境配置
 
@@ -34,7 +34,7 @@
   - [x] `mkdir -p gui/{core,render,widget,layout,anim,style,res,platform,tests,benchmarks,examples}`
   - [x] 初始化 `uya.toml` 项目配置文件
   - [x] 设置 CI/CD 工作流 (GitHub Actions)
-- [ ] 配置开发环境
+- [x] 配置开发环境
   - [x] 安装 Uya 编译器 v0.1.0+
   - [x] 配置 VS Code / Cursor 编辑环境
   - [x] 安装 uyaFmt 格式化工具（当前阶段不需要，保持可选）
@@ -49,11 +49,11 @@
   - [x] `struct Point { x: i16, y: i16 }`
   - [x] 结构体方法: `add`, `sub`, `scale`, `distance`, `lerp`
   - [x] 常量: `POINT_ZERO`, `POINT_ONE`
-- [ ] `core/rect.uya` - 矩形区域运算
+- [x] `core/rect.uya` - 矩形区域运算
   - [x] `struct Rect { x: i16, y: i16, w: u16, h: u16 }`
   - [x] 结构体方法: `is_empty`, `contains`, `intersect`, `union`, `inflate`, `offset`
-  - [ ] 实现 `Copy` trait (Uya 中通过 `Copy` 标记)
-  - [ ] 说明: 当前实现使用 `union_rect` / `rect_union` 规避关键字冲突
+  - [x] 实现 `Copy` trait (Uya 中通过 `Copy` 标记)
+  - [x] 说明: 当前实现使用 `union_rect` / `rect_union` 规避关键字冲突
 - [x] `core/color.uya` - 颜色空间
   - [x] `struct Color { r: u8, g: u8, b: u8, a: u8 }`
   - [x] 宏 `COLOR(hex)` 编译期颜色常量
@@ -75,14 +75,14 @@
 ### Week 2: 内存管理与对象池
 
 #### Day 1-2: 位图分配器
-- [ ] `core/bitmap.uya` - 位图分配器
+- [x] `core/bitmap.uya` - 位图分配器
   - [x] `struct BitmapAllocator`
   - [x] 结构体方法: `alloc`, `free`, `is_used`, `find_first_zero`
-  - [ ] 使用 `ctz` 指令优化查找 (O(1))
+  - [x] 使用 `ctz` 指令优化查找 (O(1))
   - [x] 线程安全: `atomic` 操作
-- [ ] 单元测试
+- [x] 单元测试
   - [x] 分配/释放循环测试
-  - [ ] 并发分配测试
+  - [x] 并发分配测试
 
 #### Day 3-4: 内存池
 - [x] `res/pool.uya` - 内存池
@@ -90,18 +90,18 @@
   - [x] `struct PoolManager` - 多级内存池管理
   - [x] 泛型接口: `TypedPool<T: Sized>`
   - [x] 结构体方法: `alloc`, `free`, `used_count`, `free_count`
-- [ ] `res/buf.uya` - 缓冲区管理
+- [x] `res/buf.uya` - 缓冲区管理
   - [x] `struct Buffer` - 动态缓冲区
   - [x] 结构体方法: `resize`, `clear`, `append`
-  - [ ] `Slice<T>` 类型安全切片
-- [ ] 单元测试
+  - [x] `Slice<T>` 类型安全切片
+- [x] 单元测试
   - [x] 内存池压力测试 (10000+ 次分配/释放)
-  - [ ] 内存碎片测试
+  - [x] 内存碎片测试
   - [x] 边界测试
 
 #### Day 5: 对象池
-- [ ] `core/obj_pool.uya` - GUI 对象池
-  - [ ] `struct ObjPool<T: IGuiObj>` - 泛型对象池
+- [x] `core/obj_pool.uya` - GUI 对象池
+  - [x] `struct ObjPool<T: IGuiObj>` - 泛型对象池
   - [x] 结构体方法: `alloc_obj`, `free_obj`, `get_obj`, `foreach`
   - [x] 对象槽位状态管理 (Free/Used/Recycling)
 - [x] 性能基准测试
@@ -111,7 +111,7 @@
 ### Week 3: 对象系统核心
 
 #### Day 1-2: 基础对象
-- [ ] `core/obj.uya` - GuiObj 核心
+- [x] `core/obj.uya` - GuiObj 核心
   - [x] 定义 `IGuiObj` 接口
     - [x] `fn type_id(self: &Self) u32`
     - [x] `fn parent(self: &Self) &GuiObj`
@@ -123,14 +123,14 @@
     - [x] `fn layout(self: &Self, available: Rect) void`
     - [x] `fn render(self: &Self, ctx: &RenderCtx) void`
     - [x] `fn handle_event(self: &Self, evt: &Event) bool`
-  - [ ] 定义 `struct GuiObj: IGuiObj`
+  - [x] 定义 `struct GuiObj: IGuiObj`
     - [x] 树形结构字段 (parent, children 链表)
     - [x] 几何字段 (x, y, w, h)
     - [x] 标志字段 (ObjFlags 位域)
     - [x] 样式引用
-  - [ ] 结构体方法实现
+  - [x] 结构体方法实现
     - [x] `fn default() GuiObj` - 默认构造
-    - [ ] `fn drop(self: &GuiObj) void` - RAII 析构
+    - [x] `fn drop(self: &GuiObj) void` - RAII 析构
     - [x] `fn screen_area(self: &GuiObj) Rect` - 绝对坐标计算
     - [x] `fn invalidate(self: &GuiObj) void` - 脏区域传播
     - [x] `fn move_to(self: &GuiObj, x: i16, y: i16) void`
@@ -142,9 +142,9 @@
   - [x] `fn child_at(self: &Self, index: i32) &GuiObj`
 
 #### Day 3: 对象树管理
-- [ ] `core/obj_tree.uya` - 对象树操作
+- [x] `core/obj_tree.uya` - 对象树操作
   - [x] `struct ObjTree`
-  - [ ] 结构体方法:
+  - [x] 结构体方法:
     - [x] `attach(parent_idx, child_idx)` - 附加子对象
     - [x] `detach(child_idx)` - 分离子对象
     - [x] `foreach_child(parent_idx, callback)` - 遍历子对象
@@ -158,15 +158,15 @@
   - [x] 深度/广度测试
 
 #### Day 4-5: 事件系统基础
-- [ ] `core/event.uya` - 事件定义
+- [x] `core/event.uya` - 事件定义
   - [x] `enum EventType: u8` - 事件类型枚举
   - [x] `enum InputDev: u8` - 输入设备类型
   - [x] `struct Point` - 坐标点
-  - [ ] `struct Event` - 事件结构体
+  - [x] `struct Event` - 事件结构体
     - [x] 基础字段 (type, target, timestamp)
-    - [ ] Union 数据 (touch/key/encoder)
+    - [x] Union 数据 (touch/key/encoder)
     - [x] 传播控制 (stop_bubble, handled)
-  - [ ] `struct EventQueue` - 环形缓冲区队列
+  - [x] `struct EventQueue` - 环形缓冲区队列
     - [x] `fn push(self, evt) bool` - 入队
     - [x] `fn pop(self: &Self) Option<Event>` - 出队
     - [x] `fn is_empty(self) bool`

@@ -54,6 +54,11 @@ export struct Event {
     handled: bool,
 }
 
+export union EventOption {
+    Some: Event,
+    None: void,
+}
+
 export struct EventQueue {
     buffer: [Event: 64],
     head: i32,
@@ -73,15 +78,15 @@ export struct EventQueue {
         return true;
     }
 
-    fn pop(self: &Self, out_evt: &Event) bool {
+    fn pop(self: &Self) EventOption {
         if self.is_empty() {
-            return false;
+            return EventOption.None();
         }
 
-        out_evt[0] = self.buffer[self.tail as usize];
+        const evt: Event = self.buffer[self.tail as usize];
         self.tail = (self.tail + 1) % EVENT_QUEUE_SIZE;
         self.count = self.count - 1;
-        return true;
+        return EventOption.Some(evt);
     }
 
     fn is_empty(self: &Self) bool {

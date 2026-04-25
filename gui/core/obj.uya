@@ -252,6 +252,35 @@ GuiObj {
         self.invalidate();
     }
 
+    fn drop(self: GuiObj) void {
+        if self.obj_idx < 0 {
+            return;
+        }
+
+        const live: &GuiObj = gui_obj_get(self.obj_idx);
+        if live == null {
+            return;
+        }
+
+        if live.parent_ref != null {
+            live.parent_ref.remove_child(live);
+        }
+
+        var child: &GuiObj = live.child_head;
+        while child != null {
+            const next: &GuiObj = child.sibling_next;
+            child.parent_ref = null;
+            child.parent_idx = -1;
+            child.sibling_prev = null;
+            child.sibling_next = null;
+            child = next;
+        }
+
+        live.child_head = null;
+        live.child_tail = null;
+        gui_obj_unregister(self.obj_idx);
+    }
+
 }
 
 export fn gui_obj_default() GuiObj {

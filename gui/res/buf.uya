@@ -1,5 +1,10 @@
 use std.mem.allocator.MallocAllocator;
 
+export struct Slice<T> {
+    ptr: &T,
+    len: usize,
+}
+
 export struct ByteSlice {
     ptr: &byte,
     len: usize,
@@ -75,5 +80,12 @@ export fn buffer_new(allocator: &MallocAllocator) Buffer {
         data: null,
         len: 0,
         cap: 0,
+    };
+}
+
+export fn slice_from_ptr<T>(ptr: &T, len: usize) Slice<T> {
+    return Slice<T>{
+        ptr: ptr,
+        len: len,
     };
 }

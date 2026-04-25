@@ -1,4 +1,5 @@
 extern "libc" fn __atomic_compare_exchange_n(ptr: &i32, expected: &i32, desired: i32, weak: i32, success_mem: i32, failure_mem: i32) i32;
+extern "libc" fn __builtin_ctzll(value: u64) i32;
 
 const BITMAP_ATOMIC_SEQ_CST: i32 = 5;
 
@@ -20,14 +21,11 @@ fn bitmap_unlock(lock: &atomic i32) void {
 }
 
 fn bitmap_find_first_zero_bit(word: u64) i32 {
-    var bit: i32 = 0;
-    while bit < 64 {
-        if (word & (1u64 << bit)) == 0 {
-            return bit;
-        }
-        bit = bit + 1;
+    const inverted: u64 = ~word;
+    if inverted == 0 {
+        return -1;
     }
-    return -1;
+    return __builtin_ctzll(inverted);
 }
 
 export struct BitmapAllocator {

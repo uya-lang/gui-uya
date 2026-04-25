@@ -1,6 +1,7 @@
 use core.obj.GuiObj;
 use core.obj.gui_obj_default;
 use core.obj.gui_obj_register;
+use core.obj.gui_obj_get;
 use core.obj.gui_obj_reset_registry;
 use core.obj_tree.BubblePath;
 use core.obj_tree.ObjTree;
@@ -102,4 +103,14 @@ test "obj tree hit testing prefers deepest child" {
     try assert_eq_i32(tree.find_at_point(0, Point{ x: 25, y: 25 }), 1);
     try assert_eq_i32(tree.find_at_point(0, Point{ x: 35, y: 35 }), 2);
     try assert_eq_i32(tree.find_at_point(0, Point{ x: 250, y: 250 }), -1);
+}
+
+test "gui obj drop unregisters from registry" {
+    gui_obj_reset_registry();
+    {
+        var temp: GuiObj = gui_obj_default();
+        _ = gui_obj_register(7, &temp);
+        try assert_eq_bool(gui_obj_get(7) != null, true);
+    }
+    try assert_eq_bool(gui_obj_get(7) == null, true);
 }

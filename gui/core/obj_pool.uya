@@ -1,6 +1,6 @@
 export const OBJ_POOL_CAPACITY: i32 = 128;
 
-use core.obj.GuiObj;
+use core.obj.IGuiObj;
 
 export enum ObjSlotState {
     Free,
@@ -13,12 +13,12 @@ export struct ObjPoolIndices {
     len: i32,
 }
 
-export struct ObjPool {
-    storage: [GuiObj: 128],
+export struct ObjPool<T: IGuiObj> {
+    storage: [T: 128],
     states: [ObjSlotState: 128],
     live_count: i32,
 
-    fn alloc_obj(self: &Self) &GuiObj {
+    fn alloc_obj(self: &Self) &T {
         var i: i32 = 0;
         while i < OBJ_POOL_CAPACITY {
             if self.states[i] != ObjSlotState.Used {
@@ -31,14 +31,15 @@ export struct ObjPool {
         return null;
     }
 
-    fn free_obj(self: &Self, obj: &GuiObj) void {
+    fn free_obj(self: &Self, obj: &T) void {
         if obj == null {
             return;
         }
 
         const base_addr: usize = @usize_from_ptr(&self.storage[0] as &void);
         const obj_addr: usize = @usize_from_ptr(obj as &void);
-        const item_size: usize = @size_of(GuiObj) as usize;
+        const next_addr: usize = @usize_from_ptr(&self.storage[1] as &void);
+        const item_size: usize = next_addr - base_addr;
         if item_size == 0 || obj_addr < base_addr {
             return;
         }
@@ -59,7 +60,7 @@ export struct ObjPool {
         }
     }
 
-    fn get_obj(self: &Self, index: i32) &GuiObj {
+    fn get_obj(self: &Self, index: i32) &T {
         if index < 0 || index >= OBJ_POOL_CAPACITY {
             return null;
         }
@@ -92,12 +93,4 @@ export struct ObjPool {
     fn capacity(self: &Self) i32 {
         return OBJ_POOL_CAPACITY;
     }
-}
-
-export fn obj_pool_new() ObjPool {
-    return ObjPool{
-        storage: [],
-        states: [],
-        live_count: 0,
-    };
 }
