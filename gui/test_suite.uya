@@ -10,8 +10,9 @@ use tests.test_pool;
 use tests.test_rect;
 use tests.test_style;
 use tests.test_dirty_region;
+use tests.test_widgets;
 
-test "phase1 suite loads" {
+test "phase3 suite loads" {
     const sentinel: i32 = TEST_BITMAP_MODULE
         + TEST_COLOR_MODULE
         + TEST_CORE_TYPES_MODULE
@@ -23,6 +24,7 @@ test "phase1 suite loads" {
         + TEST_POOL_MODULE
         + TEST_RECT_MODULE
         + TEST_STYLE_MODULE
-        + TEST_DIRTY_REGION_MODULE;
+        + TEST_DIRTY_REGION_MODULE
+        + TEST_WIDGET_MODULE;
     _ = sentinel;
 }

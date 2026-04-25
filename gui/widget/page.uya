@@ -1,0 +1,269 @@
+use core.color.Color;
+use core.event.Event;
+use core.obj.GuiObj;
+use core.obj.IContainer;
+use core.obj.IGuiRenderCallback;
+use core.rect.Rect;
+use core.size.Size;
+use render.ctx.RenderCtx;
+use style.StyleProp;
+use widget.btn.Button;
+use widget.base.Widget;
+use widget.base.WIDGET_TYPE_BUTTON;
+use widget.base.WIDGET_TYPE_CANVAS;
+use widget.base.WIDGET_TYPE_CHART;
+use widget.base.WIDGET_TYPE_GRID_VIEW;
+use widget.base.WIDGET_TYPE_IMAGE;
+use widget.base.WIDGET_TYPE_LABEL;
+use widget.base.WIDGET_TYPE_LIST;
+use widget.base.WIDGET_TYPE_PAGE;
+use widget.base.WIDGET_TYPE_PANEL;
+use widget.base.WIDGET_TYPE_SLIDER;
+use widget.base.WIDGET_TYPE_SWITCH;
+use widget.base.WIDGET_TYPE_PAGE;
+use widget.base.widget_bind_callbacks;
+use widget.base.widget_draw_surface;
+use widget.base.widget_inner_rect;
+use widget.base.widget_new;
+use widget.canvas.Canvas;
+use widget.chart.Chart;
+use widget.grid_view.GridView;
+use widget.img.Image;
+use widget.lbl.Label;
+use widget.list.ListView;
+use widget.panel.Panel;
+use widget.slider.Slider;
+use widget.switch.Switch;
+
+fn page_render_obj(obj: &GuiObj, ctx: &RenderCtx) void {
+    if obj == null || obj.user_data == null {
+        return;
+    }
+    if obj.type_tag == WIDGET_TYPE_PANEL {
+        const panel: &Panel = obj.user_data as &Panel;
+        if panel != null {
+            panel.render(ctx);
+        }
+        return;
+    }
+    if obj.type_tag == WIDGET_TYPE_PAGE {
+        const page: &Page = obj.user_data as &Page;
+        if page != null {
+            page.render(ctx);
+        }
+        return;
+    }
+    if obj.type_tag == WIDGET_TYPE_BUTTON {
+        const button: &Button = obj.user_data as &Button;
+        if button != null {
+            button.render(ctx);
+        }
+        return;
+    }
+    if obj.type_tag == WIDGET_TYPE_LABEL {
+        const label: &Label = obj.user_data as &Label;
+        if label != null {
+            label.render(ctx);
+        }
+        return;
+    }
+    if obj.type_tag == WIDGET_TYPE_IMAGE {
+        const image: &Image = obj.user_data as &Image;
+        if image != null {
+            image.render(ctx);
+        }
+        return;
+    }
+    if obj.type_tag == WIDGET_TYPE_SLIDER {
+        const slider: &Slider = obj.user_data as &Slider;
+        if slider != null {
+            slider.render(ctx);
+        }
+        return;
+    }
+    if obj.type_tag == WIDGET_TYPE_SWITCH {
+        const sw: &Switch = obj.user_data as &Switch;
+        if sw != null {
+            sw.render(ctx);
+        }
+        return;
+    }
+    if obj.type_tag == WIDGET_TYPE_LIST {
+        const list: &ListView = obj.user_data as &ListView;
+        if list != null {
+            list.render(ctx);
+        }
+        return;
+    }
+    if obj.type_tag == WIDGET_TYPE_GRID_VIEW {
+        const grid: &GridView = obj.user_data as &GridView;
+        if grid != null {
+            grid.render(ctx);
+        }
+        return;
+    }
+    if obj.type_tag == WIDGET_TYPE_CHART {
+        const chart: &Chart = obj.user_data as &Chart;
+        if chart != null {
+            chart.render(ctx);
+        }
+        return;
+    }
+    if obj.type_tag == WIDGET_TYPE_CANVAS {
+        const canvas: &Canvas = obj.user_data as &Canvas;
+        if canvas != null {
+            canvas.render(ctx);
+        }
+    }
+}
+
+fn page_max_i32(a: i32, b: i32) i32 {
+    if a > b {
+        return a;
+    }
+    return b;
+}
+
+struct PageRenderAdapter : IGuiRenderCallback {}
+
+export struct Page : IContainer {
+    widget: Widget,
+    scrollable: bool,
+    scroll_x: i16,
+    scroll_y: i16,
+    content_size: Size,
+}
+
+PageRenderAdapter {
+    fn invoke(self: &Self, obj: &GuiObj, ctx: &RenderCtx, user_data: &void) void {
+        _ = self;
+        _ = obj;
+        const page: &Page = user_data as &Page;
+        if page != null {
+            page.render(ctx);
+        }
+    }
+}
+
+Page {
+    fn new(name: &const byte) Page {
+        var widget: Widget = widget_new(name, WIDGET_TYPE_PAGE, false, false);
+        widget.size(240, 180);
+        widget.base.style.set_color(StyleProp.BgColor, Color{ r: 246, g: 248, b: 251, a: 255 });
+        widget.base.style.set_color(StyleProp.BorderColor, Color{ r: 220, g: 226, b: 235, a: 255 });
+        widget.base.style.set_u32(StyleProp.BorderWidth, 1u32);
+        widget.base.style.set_u32(StyleProp.Radius, 12u32);
+        widget.base.style.set_u32(StyleProp.PaddingLeft, 10u32);
+        widget.base.style.set_u32(StyleProp.PaddingRight, 10u32);
+        widget.base.style.set_u32(StyleProp.PaddingTop, 10u32);
+        widget.base.style.set_u32(StyleProp.PaddingBottom, 10u32);
+        return Page{
+            widget: widget,
+            scrollable: false,
+            scroll_x: 0,
+            scroll_y: 0,
+            content_size: Size{ w: 0, h: 0 },
+        };
+    }
+
+    fn obj(self: &Self) &GuiObj {
+        return widget_bind_callbacks(&self.widget.base, null, null, self as &void);
+    }
+
+    fn recalc_content_size(self: &Self) void {
+        var max_w: i32 = 0;
+        var max_h: i32 = 0;
+        var child: &GuiObj = self.widget.base.child_head;
+        while child != null {
+            max_w = page_max_i32(max_w, child.x as i32 + child.w as i32);
+            max_h = page_max_i32(max_h, child.y as i32 + child.h as i32);
+            child = child.sibling_next;
+        }
+        self.content_size = Size{
+            w: max_w as u16,
+            h: max_h as u16,
+        };
+    }
+
+    fn add(self: &Self, child: &GuiObj) &GuiObj {
+        self.widget.base.add_child(child);
+        self.recalc_content_size();
+        return child;
+    }
+
+    fn remove(self: &Self, child: &GuiObj) void {
+        self.widget.base.remove_child(child);
+        self.recalc_content_size();
+    }
+
+    fn set_layout(self: &Self, layout_mode: u32) void {
+        self.widget.base.style.set_u32(StyleProp.LayoutMode, layout_mode);
+    }
+
+    fn scroll_to(self: &Self, x: i16, y: i16) void {
+        if !self.scrollable {
+            self.scroll_x = 0;
+            self.scroll_y = 0;
+            return;
+        }
+        const inner: Rect = widget_inner_rect(&self.widget);
+        var max_x: i32 = self.content_size.w as i32 - inner.w as i32;
+        var max_y: i32 = self.content_size.h as i32 - inner.h as i32;
+        if max_x < 0 {
+            max_x = 0;
+        }
+        if max_y < 0 {
+            max_y = 0;
+        }
+        self.scroll_x = x;
+        self.scroll_y = y;
+        if self.scroll_x < 0 {
+            self.scroll_x = 0;
+        } else if self.scroll_x as i32 > max_x {
+            self.scroll_x = max_x as i16;
+        }
+        if self.scroll_y < 0 {
+            self.scroll_y = 0;
+        } else if self.scroll_y as i32 > max_y {
+            self.scroll_y = max_y as i16;
+        }
+        self.widget.base.invalidate();
+    }
+
+    fn render(self: &Self, ctx: &RenderCtx) void {
+        const inner: Rect = widget_draw_surface(&self.widget, ctx);
+        ctx.push_clip(inner);
+        var child: &GuiObj = self.widget.base.child_head;
+        while child != null {
+            const orig_x: i16 = child.x;
+            const orig_y: i16 = child.y;
+            if self.scrollable {
+                child.x = orig_x - self.scroll_x;
+                child.y = orig_y - self.scroll_y;
+            }
+            page_render_obj(child, ctx);
+            child.x = orig_x;
+            child.y = orig_y;
+            child = child.sibling_next;
+        }
+        ctx.pop_clip();
+    }
+
+    fn add_child(self: &Self, child: &GuiObj) void {
+        self.widget.base.add_child(child);
+        self.recalc_content_size();
+    }
+
+    fn remove_child(self: &Self, child: &GuiObj) void {
+        self.widget.base.remove_child(child);
+        self.recalc_content_size();
+    }
+
+    fn child_count(self: &Self) i32 {
+        return self.widget.base.child_count();
+    }
+
+    fn child_at(self: &Self, index: i32) &GuiObj {
+        return self.widget.base.child_at(index);
+    }
+}

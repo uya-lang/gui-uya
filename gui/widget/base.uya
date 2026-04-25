@@ -1,0 +1,428 @@
+use core.color.BLACK;
+use core.color.Color;
+use core.color.TRANSPARENT;
+use core.color.WHITE;
+use core.event.Event;
+use core.event.EventType;
+use core.obj.GuiObj;
+use core.obj.IGuiInputCallback;
+use core.obj.IGuiRenderCallback;
+use core.obj.gui_obj_default;
+use core.rect.Rect;
+use libc.strlen;
+use render.ctx.RenderCtx;
+use render.font.Font;
+use render.font.font_default;
+use style.Style;
+use style.StyleProp;
+use style.StyleValue;
+use style.style_default;
+use style.theme.Theme;
+
+export const WIDGET_TYPE_WIDGET: u32 = 0x1000u32;
+export const WIDGET_TYPE_BUTTON: u32 = 0x1001u32;
+export const WIDGET_TYPE_LABEL: u32 = 0x1002u32;
+export const WIDGET_TYPE_IMAGE: u32 = 0x1003u32;
+export const WIDGET_TYPE_SLIDER: u32 = 0x1004u32;
+export const WIDGET_TYPE_SWITCH: u32 = 0x1005u32;
+export const WIDGET_TYPE_PAGE: u32 = 0x1006u32;
+export const WIDGET_TYPE_PANEL: u32 = 0x1007u32;
+export const WIDGET_TYPE_LIST: u32 = 0x1008u32;
+export const WIDGET_TYPE_GRID_VIEW: u32 = 0x1009u32;
+export const WIDGET_TYPE_CHART: u32 = 0x100Au32;
+export const WIDGET_TYPE_CANVAS: u32 = 0x100Bu32;
+
+var _widget_default_font: Font = Font{
+    height: 8,
+    baseline: 7,
+    line_height: 10,
+    glyph_width: 6,
+    glyph_height: 8,
+    tracking: 1,
+};
+
+fn widget_copy_color(color: Color) Color {
+    return Color{
+        r: color.r,
+        g: color.g,
+        b: color.b,
+        a: color.a,
+    };
+}
+
+fn widget_transparent() Color {
+    return Color{ r: 0, g: 0, b: 0, a: 0 };
+}
+
+fn widget_event_slot_default() WidgetEventSlot {
+    return WidgetEventSlot{
+        callback: null,
+        user_data: null,
+    };
+}
+
+fn widget_value_slot_default() WidgetValueSlot {
+    return WidgetValueSlot{
+        callback: null,
+        user_data: null,
+    };
+}
+
+fn widget_dispatch_event(slot: &WidgetEventSlot, widget: &Widget, evt: &Event) void {
+    if slot.callback != null {
+        slot.callback.invoke(widget, evt, slot.user_data);
+    }
+}
+
+fn widget_dispatch_value(slot: &WidgetValueSlot, widget: &Widget, value: i32) void {
+    if slot.callback != null {
+        slot.callback.invoke(widget, value, slot.user_data);
+    }
+}
+
+export enum WidgetState {
+    Normal,
+    Hovered,
+    Pressed,
+    Disabled,
+    Focused,
+    Checked,
+}
+
+export enum WidgetOrientation {
+    Horizontal,
+    Vertical,
+}
+
+export interface IStyled {
+    fn style(self: &Self) &Style;
+    fn set_style_prop(self: &Self, prop: StyleProp, value: StyleValue) void;
+    fn apply_theme(self: &Self, theme: &Theme) void;
+}
+
+export interface IWidgetEventCallback {
+    fn invoke(self: &Self, widget: &Widget, evt: &Event, user_data: &void) void;
+}
+
+export interface IWidgetValueCallback {
+    fn invoke(self: &Self, widget: &Widget, value: i32, user_data: &void) void;
+}
+
+export interface IScrollable {
+    fn scroll_to(self: &Self, x: i16, y: i16) void;
+    fn scroll_by(self: &Self, dx: i16, dy: i16) void;
+    fn content_size(self: &Self) Rect;
+}
+
+export interface ISelectable {
+    fn select(self: &Self, index: i32) void;
+    fn selected(self: &Self) i32;
+    fn select_next(self: &Self) void;
+    fn select_prev(self: &Self) void;
+}
+
+export struct AnimState {
+    progress: f32,
+    active: bool,
+}
+
+export struct WidgetEventSlot {
+    callback: &IWidgetEventCallback,
+    user_data: &void,
+}
+
+export struct WidgetValueSlot {
+    callback: &IWidgetValueCallback,
+    user_data: &void,
+}
+
+export struct Widget : IStyled {
+    base: GuiObj,
+    state: WidgetState,
+    anim_state: &AnimState,
+    click_cb: WidgetEventSlot,
+    press_cb: WidgetEventSlot,
+    release_cb: WidgetEventSlot,
+    value_change_cb: WidgetValueSlot,
+}
+
+Widget {
+    fn style(self: &Self) &Style {
+        return &self.base.style;
+    }
+
+    fn set_style_prop(self: &Self, prop: StyleProp, value: StyleValue) void {
+        match value {
+            .color(v) => { self.base.style.set_color(prop, v); },
+            .u(v) => { self.base.style.set_u32(prop, v); },
+            .i(v) => { self.base.style.set_i32(prop, v); },
+            .b(v) => { self.base.style.set_bool(prop, v); },
+            .ptr(v) => { self.base.style.set_ptr(prop, v); },
+        };
+    }
+
+    fn apply_theme(self: &Self, theme: &Theme) void {
+        if self.base.flags.clickable {
+            self.base.style = theme.button_style.clone();
+        } else if self.base.child_count() > 0 {
+            self.base.style = theme.panel_style.clone();
+        } else {
+            self.base.style = theme.text_style.clone();
+        }
+    }
+
+    fn handle_input(self: &Self, evt: &Event) bool {
+        if !self.is_enabled() {
+            return false;
+        }
+
+        if evt.event_type == EventType.Press {
+            self.set_state(WidgetState.Pressed);
+            widget_dispatch_event(&self.press_cb, self, evt);
+            return true;
+        }
+
+        if evt.event_type == EventType.Release {
+            if self.state == WidgetState.Pressed || self.state == WidgetState.Checked {
+                self.set_state(WidgetState.Normal);
+            }
+            widget_dispatch_event(&self.release_cb, self, evt);
+            return true;
+        }
+
+        if evt.event_type == EventType.Click || evt.event_type == EventType.DoubleClick {
+            widget_dispatch_event(&self.click_cb, self, evt);
+            return true;
+        }
+
+        if evt.event_type == EventType.FocusIn {
+            self.set_state(WidgetState.Focused);
+            return true;
+        }
+
+        if evt.event_type == EventType.FocusOut {
+            if self.state != WidgetState.Disabled {
+                self.set_state(WidgetState.Normal);
+            }
+            return true;
+        }
+
+        return false;
+    }
+
+    fn set_state(self: &Self, state: WidgetState) void {
+        self.state = state;
+        if state == WidgetState.Disabled {
+            self.base.flags.enabled = false;
+        } else if !self.base.flags.enabled {
+            self.base.flags.enabled = true;
+        }
+        self.base.invalidate();
+    }
+
+    fn is_enabled(self: &Self) bool {
+        return self.base.flags.enabled && self.state != WidgetState.Disabled;
+    }
+
+    fn set_enabled(self: &Self, enabled: bool) void {
+        if enabled {
+            self.base.flags.enabled = true;
+            if self.state == WidgetState.Disabled {
+                self.state = WidgetState.Normal;
+            }
+        } else {
+            self.base.flags.enabled = false;
+            self.state = WidgetState.Disabled;
+        }
+        self.base.invalidate();
+    }
+
+    fn at(self: &Self, x: i16, y: i16) &Widget {
+        self.base.move_to(x, y);
+        return self;
+    }
+
+    fn size(self: &Self, w: u16, h: u16) &Widget {
+        self.base.set_size(w, h);
+        return self;
+    }
+
+    fn with_style(self: &Self, style: &Style) &Widget {
+        self.base.style = style.clone();
+        return self;
+    }
+
+    fn on_click(self: &Self, callback: &IWidgetEventCallback, user_data: &void) &Widget {
+        self.click_cb.callback = callback;
+        self.click_cb.user_data = user_data;
+        return self;
+    }
+
+    fn on_press(self: &Self, callback: &IWidgetEventCallback, user_data: &void) &Widget {
+        self.press_cb.callback = callback;
+        self.press_cb.user_data = user_data;
+        return self;
+    }
+
+    fn on_release(self: &Self, callback: &IWidgetEventCallback, user_data: &void) &Widget {
+        self.release_cb.callback = callback;
+        self.release_cb.user_data = user_data;
+        return self;
+    }
+
+    fn on_value_change(self: &Self, callback: &IWidgetValueCallback, user_data: &void) &Widget {
+        self.value_change_cb.callback = callback;
+        self.value_change_cb.user_data = user_data;
+        return self;
+    }
+
+    fn emit_value_change(self: &Self, value: i32) void {
+        widget_dispatch_value(&self.value_change_cb, self, value);
+    }
+}
+
+export fn widget_text_len(text: &const byte) usize {
+    if text == null {
+        return 0usize;
+    }
+    return strlen(text as *const byte);
+}
+
+export fn widget_new(name_ptr: &const byte, type_tag: u32, clickable: bool, focusable: bool) Widget {
+    var base: GuiObj = gui_obj_default();
+    base.type_tag = type_tag;
+    base.name_ptr = name_ptr;
+    base.flags.clickable = clickable;
+    base.flags.focusable = focusable;
+    base.style = style_default();
+    return Widget{
+        base: base,
+        state: WidgetState.Normal,
+        anim_state: null,
+        click_cb: widget_event_slot_default(),
+        press_cb: widget_event_slot_default(),
+        release_cb: widget_event_slot_default(),
+        value_change_cb: widget_value_slot_default(),
+    };
+}
+
+export fn widget_bind_callbacks(base: &GuiObj, render_cb: &IGuiRenderCallback, input_cb: &IGuiInputCallback, user_data: &void) &GuiObj {
+    base.render_cb = render_cb;
+    base.input_cb = input_cb;
+    base.user_data = user_data;
+    return base;
+}
+
+export fn widget_font(style: &Style) &Font {
+    const font_ptr: &void = style.get_ptr_or(StyleProp.Font, null);
+    if font_ptr == null {
+        return &_widget_default_font;
+    }
+    return font_ptr as &Font;
+}
+
+export fn widget_text_color(style: &Style, state: WidgetState) Color {
+    const fg: Color = style.get_color_or(StyleProp.FgColor, BLACK);
+    const bg: Color = style.get_color_or(StyleProp.BgColor, WHITE);
+    if state == WidgetState.Disabled {
+        return fg.lerp(bg, 0.45);
+    }
+    if state == WidgetState.Pressed {
+        return fg.lerp(WHITE, 0.12);
+    }
+    if state == WidgetState.Focused {
+        return fg.lerp(WHITE, 0.08);
+    }
+    return fg;
+}
+
+export fn widget_state_bg(style: &Style, state: WidgetState) Color {
+    const base: Color = style.get_color_or(StyleProp.BgColor, WHITE);
+    if state == WidgetState.Hovered {
+        return style.get_color_or(StyleProp.BgHoverColor, base.lerp(WHITE, 0.08));
+    }
+    if state == WidgetState.Pressed {
+        return style.get_color_or(StyleProp.BgPressColor, base.lerp(BLACK, 0.10));
+    }
+    if state == WidgetState.Focused || state == WidgetState.Checked {
+        return style.get_color_or(StyleProp.BgFocusColor, base.lerp(WHITE, 0.04));
+    }
+    if state == WidgetState.Disabled {
+        return style.get_color_or(StyleProp.BgDisableColor, base.lerp(WHITE, 0.30));
+    }
+    return base;
+}
+
+export fn widget_inner_rect(widget: &Widget) Rect {
+    const area: Rect = widget.base.screen_area();
+    const pad_left: i16 = (widget.base.style.get_u32_or(StyleProp.PaddingLeft, 0u32) as! i16).value;
+    const pad_top: i16 = (widget.base.style.get_u32_or(StyleProp.PaddingTop, 0u32) as! i16).value;
+    const pad_right: i16 = (widget.base.style.get_u32_or(StyleProp.PaddingRight, 0u32) as! i16).value;
+    const pad_bottom: i16 = (widget.base.style.get_u32_or(StyleProp.PaddingBottom, 0u32) as! i16).value;
+    var inner_w: i32 = area.w as i32 - pad_left as i32 - pad_right as i32;
+    var inner_h: i32 = area.h as i32 - pad_top as i32 - pad_bottom as i32;
+    if inner_w < 0 {
+        inner_w = 0;
+    }
+    if inner_h < 0 {
+        inner_h = 0;
+    }
+    return Rect{
+        x: area.x + pad_left,
+        y: area.y + pad_top,
+        w: (inner_w as! u16).value,
+        h: (inner_h as! u16).value,
+    };
+}
+
+export fn widget_draw_surface(widget: &Widget, ctx: &RenderCtx) Rect {
+    const area: Rect = widget.base.screen_area();
+    const style: &Style = &widget.base.style;
+    const bg: Color = widget_state_bg(style, widget.state);
+    const border_color: Color = style.get_color_or(StyleProp.BorderColor, widget_transparent());
+    const shadow_color: Color = style.get_color_or(StyleProp.ShadowColor, widget_transparent());
+    const radius: u8 = (style.get_u32_or(StyleProp.Radius, 0u32) as! u8).value;
+    const border_width: u8 = (style.get_u32_or(StyleProp.BorderWidth, 0u32) as! u8).value;
+    const shadow_x: i16 = (style.get_i32_or(StyleProp.ShadowOffsetX, 0) as! i16).value;
+    const shadow_y: i16 = (style.get_i32_or(StyleProp.ShadowOffsetY, 0) as! i16).value;
+
+    if shadow_color.a > 0 && (shadow_x != 0 || shadow_y != 0) {
+        ctx.fill_round_rect(area.offset(shadow_x, shadow_y), radius, shadow_color);
+    }
+
+    if bg.a > 0 {
+        ctx.fill_round_rect(Rect{ x: area.x, y: area.y, w: area.w, h: area.h }, radius, bg);
+    }
+
+    if border_width > 0 && border_color.a > 0 {
+        ctx.draw_round_rect(Rect{ x: area.x, y: area.y, w: area.w, h: area.h }, radius, border_color, border_width);
+    }
+
+    return widget_inner_rect(widget);
+}
+
+export fn widget_render_children(base: &GuiObj, ctx: &RenderCtx) void {
+    var child: &GuiObj = base.child_head;
+    while child != null {
+        if child.visible() {
+            child.render(ctx);
+        }
+        child = child.sibling_next;
+    }
+}
+
+export fn widget_measure_text(text: &const byte, font: &Font) i16 {
+    const len: usize = widget_text_len(text);
+    if len == 0 {
+        return 0;
+    }
+    return ((font.glyph_width as i32 + font.tracking as i32) * len as i32 - font.tracking as i32) as i16;
+}
+
+export fn widget_clone_color(color: Color) Color {
+    return widget_copy_color(color);
+}
+
+export fn widget_default_font() Font {
+    return font_default();
+}

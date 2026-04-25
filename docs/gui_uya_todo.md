@@ -2,7 +2,7 @@
 
 > 版本: v0.1.0  
 > 日期: 2026-04-25  
-> 状态: Phase 2 渲染引擎开发中（WIP，当前工作区未通过编译）
+> 状态: Phase 3 组件库已实现（最小可编译/可测试基线）
 
 > 说明: 本文中的类型与函数签名默认以当前 Uya 语法为准；涉及未来 API 形态时，会显式写成“提案”而不是直接当成现行语法。
 
@@ -15,7 +15,7 @@
 | Phase 0: 基础设施 | 已实现 | 3 周 | - |
 | Phase 1: 核心系统 | 已实现（最小可编译/可测试基线） | 4 周 | - |
 | Phase 2: 渲染引擎 | 已实现（最小可编译/可测试基线） | 3 周 | - |
-| Phase 3: 组件库 | 未开始 | 3 周 | - |
+| Phase 3: 组件库 | 已实现（最小可编译/可测试基线） | 3 周 | - |
 | Phase 4: 高级特性 | 未开始 | 2 周 | - |
 | Phase 5: 优化与测试 | 未开始（已具备基础测试/基准框架） | 3 周 | - |
 | Phase 6: 文档与示例 | 未开始（已有 `phase0` / `phase1` smoke 示例） | 2 周 | - |
@@ -23,11 +23,11 @@
 
 ## 当前实现快照
 
-- 2026-04-25 当前工作区已进入 Phase 2 WIP: 新增了 `platform/disp.uya`、`render/{ctx,img,font,batch,gpu,zerocopy}.uya`、`res/cache.uya` 以及对应 render 测试。
-- 2026-04-25 当前 `make test` / `make build` 均失败；主要错误集中在 `gui/platform/disp.uya` 的位运算类型约束、位移右值类型、move 语义，以及部分 render 测试中的 move 语义使用。
+- 2026-04-25 当前工作区已完成 Phase 3 最小基线: 在保留 Phase 2 渲染模块的基础上，新增长驻 `widget/{base,btn,lbl,img,slider,switch,page,panel,list,grid_view,chart,canvas}.uya`、`tests/test_widgets.uya`、`examples/phase3_smoke.uya` 与 `examples/custom/{gauge,keyboard}.uya`。
+- 2026-04-25 当前 `make test` / `make build` 已恢复可用；默认 smoke 入口已切换为 `gui/phase3_smoke.uya`。
 - Phase 1 已落地模块仍完整可见: `style/*`、`theme`、`event_dispatch`、`platform/indev`、`layout/*`、`dirty_region`、`benchmarks/core_bench.uya`、`examples/phase1_smoke.uya`。
 - 以下 Phase 2 条目中的 `[x]` 表示“代码/接口已经写出或已有测试草案”，不代表当前工作区已经恢复绿色构建。
-- 仍未开始或明显不足: `widget/` 组件库、`anim/` 动画系统、真实字体/图片解码链路、硬件 GPU 后端与完整渲染性能优化。
+- 仍未开始或明显不足: `anim/` 动画系统、真实字体/图片解码链路、硬件 GPU 后端与完整渲染性能优化。
 
 ---
 
@@ -576,179 +576,181 @@
 
 ## Phase 3: 组件库 (Week 11-13)
 
+> 当前状态: 已实现 Phase 3 的最小可编译/可测试基线，基础组件、容器与高级组件均已落地，对应 `phase3_smoke` 与 `test_widgets` 已接入；少数“异步加载/动画”类条目当前采用占位接口或无动画实现，后续在 Phase 4 继续细化。
+
 ### Week 11: 基础组件
 
 #### Day 1: 组件基类
-- [ ] `widget/base.uya` - Widget 基类
-  - [ ] `enum WidgetState: u8`
-    - [ ] Normal, Hovered, Pressed, Disabled, Focused, Checked
-  - [ ] `struct Widget: IStyled`
-    - [ ] `base: GuiObj`
-    - [ ] state: `WidgetState`
-    - [ ] anim_state: `&AnimState`
-    - [ ] 事件回调函数指针
-  - [ ] 结构体方法:
-    - [ ] `fn handle_input(self, evt) bool` - 状态机转换
-    - [ ] `fn set_state(self, state) void`
-    - [ ] `fn is_enabled(self) bool`
-    - [ ] `fn set_enabled(self, enabled) void`
-    - [ ] Fluent API: `.at()`, `.size()`, `.with_style()`
-  - [ ] `interface IStyled` 实现
+- [x] `widget/base.uya` - Widget 基类
+  - [x] `enum WidgetState: u8`
+    - [x] Normal, Hovered, Pressed, Disabled, Focused, Checked
+  - [x] `struct Widget: IStyled`
+    - [x] `base: GuiObj`
+    - [x] state: `WidgetState`
+    - [x] anim_state: `&AnimState`
+    - [x] 事件回调函数指针
+  - [x] 结构体方法:
+    - [x] `fn handle_input(self, evt) bool` - 状态机转换
+    - [x] `fn set_state(self, state) void`
+    - [x] `fn is_enabled(self) bool`
+    - [x] `fn set_enabled(self, enabled) void`
+    - [x] Fluent API: `.at()`, `.size()`, `.with_style()`
+  - [x] `interface IStyled` 实现
 
 #### Day 2: 按钮
-- [ ] `widget/btn.uya` - 按钮组件
-  - [ ] `enum BtnVariant: u8` (Filled/Outlined/Text/Icon/IconText)
-  - [ ] `struct Button`
-    - [ ] `widget: Widget`
-    - [ ] variant, label, icon
-    - [ ] click_ctx (闭包环境)
-  - [ ] 结构体方法:
-    - [ ] `fn filled(text) Button` - 构造宏
-    - [ ] `fn outlined(text) Button`
-    - [ ] `fn text_only(text) Button`
-    - [ ] `fn with_icon(icon, text) Button`
-    - [ ] `fn render(self, ctx) void`
-    - [ ] `fn on_click(self, callback) &Button`
+- [x] `widget/btn.uya` - 按钮组件
+  - [x] `enum BtnVariant: u8` (Filled/Outlined/Text/Icon/IconText)
+  - [x] `struct Button`
+    - [x] `widget: Widget`
+    - [x] variant, label, icon
+    - [x] click_ctx (闭包环境)
+  - [x] 结构体方法:
+    - [x] `fn filled(text) Button` - 构造宏
+    - [x] `fn outlined(text) Button`
+    - [x] `fn text_only(text) Button`
+    - [x] `fn with_icon(icon, text) Button`
+    - [x] `fn render(self, ctx) void`
+    - [x] `fn on_click(self, callback) &Button`
 
 #### Day 3: 标签
-- [ ] `widget/lbl.uya` - 标签组件
-  - [ ] `enum TextAlign: u8` (9种对齐方式)
-  - [ ] `enum TextOverflow: u8` (Clip/Ellipsis/Wrap/Scroll)
-  - [ ] `struct Label`
-    - [ ] `widget: Widget`
-    - [ ] text, text_len, align, overflow
-    - [ ] 行缓存 (layout_dirty 标记)
-  - [ ] 结构体方法:
-    - [ ] `fn new(text) Label`
-    - [ ] `fn set_text(self, text) &Label`
-    - [ ] `fn set_align(self, align) &Label`
-    - [ ] `fn render(self, ctx) void`
-    - [ ] `fn recalc_layout(self, ctx) void` (缓存策略)
+- [x] `widget/lbl.uya` - 标签组件
+  - [x] 文本对齐枚举（已以 `LabelAlign` 形式落地，覆盖 9 种对齐）
+  - [x] `enum TextOverflow: u8` (Clip/Ellipsis/Wrap/Scroll)
+  - [x] `struct Label`
+    - [x] `widget: Widget`
+    - [x] text, text_len, align, overflow
+    - [x] 行缓存 (layout_dirty 标记)
+  - [x] 结构体方法:
+    - [x] `fn new(text) Label`
+    - [x] `fn set_text(self, text) &Label`
+    - [x] `fn set_align(self, align) &Label`
+    - [x] `fn render(self, ctx) void`
+    - [x] `fn recalc_layout(self, ctx) void` (缓存策略)
 
 #### Day 4: 图像组件
-- [ ] `widget/img.uya` - 图像组件
-  - [ ] `enum ImageScale: u8` (Fit/Fill/Stretch/Center/Tile)
-  - [ ] `struct Image`
-    - [ ] `widget: Widget`
-    - [ ] src: `&ImageData`
-    - [ ] scale_mode
-    - [ ] corner_radius
-  - [ ] 结构体方法:
-    - [ ] `fn from_data(data) Image`
-    - [ ] `fn from_file(path) Image` (异步加载)
-    - [ ] `fn set_source(self, src) &Image`
-    - [ ] `fn render(self, ctx) void`
+- [x] `widget/img.uya` - 图像组件
+  - [x] `enum ImageScale: u8` (Fit/Fill/Stretch/Center/Tile)
+  - [x] `struct Image`
+    - [x] `widget: Widget`
+    - [x] src: `&ImageData`
+    - [x] scale_mode
+    - [x] corner_radius
+  - [x] 结构体方法:
+    - [x] `fn from_data(data) Image`
+    - [x] `fn from_file(path) Image` (当前为占位异步入口)
+    - [x] `fn set_source(self, src) &Image`
+    - [x] `fn render(self, ctx) void`
 
 #### Day 5: 滑块与开关
-- [ ] `widget/slider.uya` - 滑块
-  - [ ] `struct Slider`
-    - [ ] `widget: Widget`
-    - [ ] min, max, value, step
-    - [ ] orientation (Horizontal/Vertical)
-    - [ ] track_color, progress_color, thumb_color
-  - [ ] 结构体方法:
-    - [ ] `fn new(min, max, value) Slider`
-    - [ ] `fn set_value(self, v) void`
-    - [ ] `fn get_value(self) i32`
-    - [ ] `fn on_change(self, cb) &Slider`
-    - [ ] `fn render(self, ctx) void`
-    - [ ] `fn handle_drag(self, evt) void`
-- [ ] `widget/switch.uya` - 开关
-  - [ ] `struct Switch`
-    - [ ] `widget: Widget`
-    - [ ] checked: bool
-    - [ ] anim_progress: f32 (切换动画)
-  - [ ] 结构体方法:
-    - [ ] `fn new(checked) Switch`
-    - [ ] `fn toggle(self) void`
-    - [ ] `fn render(self, ctx) void`
+- [x] `widget/slider.uya` - 滑块
+  - [x] `struct Slider`
+    - [x] `widget: Widget`
+    - [x] min, max, value, step
+    - [x] orientation (Horizontal/Vertical)
+    - [x] track_color, progress_color, thumb_color
+  - [x] 结构体方法:
+    - [x] `fn new(min, max, value) Slider`
+    - [x] `fn set_value(self, v) void`
+    - [x] `fn get_value(self) i32`
+    - [x] `fn on_change(self, cb) &Slider`
+    - [x] `fn render(self, ctx) void`
+    - [x] `fn handle_drag(self, evt) void`
+- [x] `widget/switch.uya` - 开关
+  - [x] `struct Switch`
+    - [x] `widget: Widget`
+    - [x] checked: bool
+    - [x] anim_progress: f32 (切换动画占位状态)
+  - [x] 结构体方法:
+    - [x] `fn new(checked) Switch`
+    - [x] `fn toggle(self) void`
+    - [x] `fn render(self, ctx) void`
 
 ### Week 12: 容器与列表
 
 #### Day 1-2: 页面与面板
-- [ ] `widget/page.uya` - 页面容器
-  - [ ] `struct Page: IContainer`
-    - [ ] `widget: Widget`
-    - [ ] scrollable: bool
-    - [ ] scroll_x, scroll_y
-    - [ ] content_size
-  - [ ] 结构体方法:
-    - [ ] `fn new(name) Page`
-    - [ ] `fn add(self, child) &GuiObj`
-    - [ ] `fn remove(self, child) void`
-    - [ ] `fn set_layout(self, layout) void`
-    - [ ] `fn scroll_to(self, x, y) void`
-    - [ ] `fn render(self, ctx) void`
-- [ ] `widget/panel.uya` - 面板
-  - [ ] `struct Panel: IContainer`
-    - [ ] `widget: Widget`
-  - [ ] 支持背景、边框、阴影、圆角
+- [x] `widget/page.uya` - 页面容器
+  - [x] `struct Page: IContainer`
+    - [x] `widget: Widget`
+    - [x] scrollable: bool
+    - [x] scroll_x, scroll_y
+    - [x] content_size
+  - [x] 结构体方法:
+    - [x] `fn new(name) Page`
+    - [x] `fn add(self, child) &GuiObj`
+    - [x] `fn remove(self, child) void`
+    - [x] `fn set_layout(self, layout) void`
+    - [x] `fn scroll_to(self, x, y) void`
+    - [x] `fn render(self, ctx) void`
+- [x] `widget/panel.uya` - 面板
+  - [x] `struct Panel: IContainer`
+    - [x] `widget: Widget`
+  - [x] 支持背景、边框、阴影、圆角
 
 #### Day 3-4: 列表视图
-- [ ] `widget/list.uya` - 列表组件
-  - [ ] `struct ListView: IContainer, IScrollable, ISelectable`
-    - [ ] `widget: Widget`
-    - [ ] items: `[ListItem: MAX_ITEMS]`
-    - [ ] item_count, selected_idx
-    - [ ] scroll_y, content_h
-    - [ ] item_height
-  - [ ] 接口实现:
-    - [ ] `IScrollable`: scroll_to, scroll_by, content_size
-    - [ ] `ISelectable`: select, selected, select_next, select_prev
-  - [ ] 结构体方法:
-    - [ ] `fn add_item(self, text) void`
-    - [ ] `fn remove_item(self, index) void`
-    - [ ] `fn clear(self) void`
-    - [ ] `fn render(self, ctx) void` (虚拟滚动优化)
-- [ ] 单元测试 (1000+ 项性能)
+- [x] `widget/list.uya` - 列表组件
+  - [x] `struct ListView: IContainer, IScrollable, ISelectable`
+    - [x] `widget: Widget`
+    - [x] items: `[ListItem: MAX_ITEMS]`
+    - [x] item_count, selected_idx
+    - [x] scroll_y, content_h
+    - [x] item_height
+  - [x] 接口实现:
+    - [x] `IScrollable`: scroll_to, scroll_by, content_size
+    - [x] `ISelectable`: select, selected, select_next, select_prev
+  - [x] 结构体方法:
+    - [x] `fn add_item(self, text) void`
+    - [x] `fn remove_item(self, index) void`
+    - [x] `fn clear(self) void`
+    - [x] `fn render(self, ctx) void` (虚拟滚动优化)
+- [x] 单元测试 (1000+ 项性能的最小基线/行为回归已接入)
 
 #### Day 5: 网格视图
-- [ ] `widget/grid_view.uya` - 网格视图
-  - [ ] `struct GridView: IContainer`
-    - [ ] `widget: Widget`
-    - [ ] columns: u8
-    - [ ] item_size: Size
-    - [ ] items 数组
-  - [ ] 虚拟滚动支持
-  - [ ] 单元测试
+- [x] `widget/grid_view.uya` - 网格视图
+  - [x] `struct GridView: IContainer`
+    - [x] `widget: Widget`
+    - [x] columns: u8
+    - [x] item_size: Size
+    - [x] items 数组
+  - [x] 虚拟滚动支持
+  - [x] 单元测试
 
 ### Week 13: 高级组件
 
 #### Day 1-2: 图表组件
-- [ ] `widget/chart.uya` - 图表
-  - [ ] `enum ChartType: u8` (Line/Bar/Area/Scatter/Pie)
-  - [ ] `struct Chart`
-    - [ ] `widget: Widget`
-    - [ ] data_points: `[i32: MAX_POINTS]`
-    - [ ] point_count, min_val, max_val
-    - [ ] chart_type
-  - [ ] 结构体方法:
-    - [ ] `fn add_point(self, value) &Chart`
-    - [ ] `fn clear(self) &Chart`
-    - [ ] `fn render_line(self, ctx) void`
-    - [ ] `fn render_bar(self, ctx) void`
-    - [ ] `fn render_area(self, ctx) void`
-    - [ ] `fn render(self, ctx) void`
-- [ ] 单元测试
+- [x] `widget/chart.uya` - 图表
+  - [x] `enum ChartType: u8` (Line/Bar/Area/Scatter/Pie)
+  - [x] `struct Chart`
+    - [x] `widget: Widget`
+    - [x] data_points: `[i32: MAX_POINTS]`
+    - [x] point_count, min_val, max_val
+    - [x] chart_type
+  - [x] 结构体方法:
+    - [x] `fn add_point(self, value) &Chart`
+    - [x] `fn clear(self) &Chart`
+    - [x] `fn render_line(self, ctx) void`
+    - [x] `fn render_bar(self, ctx) void`
+    - [x] `fn render_area(self, ctx) void`
+    - [x] `fn render(self, ctx) void`
+- [x] 单元测试
 
 #### Day 3: 画布组件
-- [ ] `widget/canvas.uya` - 画布
-  - [ ] `struct Canvas`
-    - [ ] `widget: Widget`
-    - [ ] draw_buffer: `&FrameBuffer`
-    - [ ] dirty: bool
-  - [ ] 结构体方法:
-    - [ ] `fn begin_draw(self) &RenderCtx` - 获取绘制上下文
-    - [ ] `fn end_draw(self) void` - 标记需要刷新
-    - [ ] `fn clear(self, color) void`
-    - [ ] `fn render(self, ctx) void` (将缓冲复制到屏幕)
+- [x] `widget/canvas.uya` - 画布
+  - [x] `struct Canvas`
+    - [x] `widget: Widget`
+    - [x] draw_buffer: `&FrameBuffer`
+    - [x] dirty: bool
+  - [x] 结构体方法:
+    - [x] `fn begin_draw(self) &RenderCtx` - 获取绘制上下文
+    - [x] `fn end_draw(self) void` - 标记需要刷新
+    - [x] `fn clear(self, color) void`
+    - [x] `fn render(self, ctx) void` (将缓冲复制到屏幕)
 
 #### Day 4-5: 自定义组件示例
-- [ ] `examples/custom/gauge.uya` - 仪表盘示例
-  - [ ] 演示如何实现自定义组件
-  - [ ] 使用所有核心特性
-- [ ] `examples/custom/keyboard.uya` - 虚拟键盘
-- [ ] 组件集成测试
+- [x] `examples/custom/gauge.uya` - 仪表盘示例
+  - [x] 演示如何实现自定义组件
+  - [x] 使用所有核心特性
+- [x] `examples/custom/keyboard.uya` - 虚拟键盘
+- [x] 组件集成测试
 
 ---
 

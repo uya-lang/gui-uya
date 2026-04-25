@@ -1,0 +1,241 @@
+use core.color.Color;
+use core.color.TRANSPARENT;
+use core.obj.GuiObj;
+use core.obj.IGuiRenderCallback;
+use core.rect.Rect;
+use render.ctx.RenderCtx;
+use render.font.Font;
+use render.font.draw_text;
+use style.StyleProp;
+use widget.base.Widget;
+use widget.base.WIDGET_TYPE_LABEL;
+use widget.base.widget_bind_callbacks;
+use widget.base.widget_draw_surface;
+use widget.base.widget_font;
+use widget.base.widget_measure_text;
+use widget.base.widget_new;
+use widget.base.widget_text_color;
+use widget.base.widget_text_len;
+
+export const MAX_LABEL_LINES: i32 = 8;
+
+export enum LabelAlign {
+    Left,
+    Center,
+    Right,
+    TopLeft,
+    TopCenter,
+    TopRight,
+    BottomLeft,
+    BottomCenter,
+    BottomRight,
+}
+
+export enum TextOverflow {
+    Clip,
+    Ellipsis,
+    Wrap,
+    Scroll,
+}
+
+struct LabelRenderAdapter : IGuiRenderCallback {}
+
+struct TextLine {
+    start: usize,
+    len: usize,
+    width: u16,
+}
+
+export struct Label {
+    widget: Widget,
+    text: &const byte,
+    text_len: usize,
+    align: LabelAlign,
+    overflow: TextOverflow,
+    lines: [TextLine: 8],
+    line_count: u8,
+    text_w: u16,
+    text_h: u16,
+    layout_dirty: bool,
+    scroll_offset: i16,
+}
+
+LabelRenderAdapter {
+    fn invoke(self: &Self, obj: &GuiObj, ctx: &RenderCtx, user_data: &void) void {
+        _ = self;
+        _ = obj;
+        const label: &Label = user_data as &Label;
+        if label != null {
+            label.render(ctx);
+        }
+    }
+}
+
+fn label_line_start_y(label: &Label, area: Rect, font: &Font) i16 {
+    const line_height: i16 = font.line_height as i16;
+    const total_h: i16 = label.line_count as i16 * line_height;
+    if label.align == LabelAlign.BottomLeft || label.align == LabelAlign.BottomCenter || label.align == LabelAlign.BottomRight {
+        return area.y + area.h as i16 - total_h;
+    }
+    if label.align == LabelAlign.Center || label.align == LabelAlign.Left || label.align == LabelAlign.Right {
+        return area.y + ((area.h as i32 - total_h as i32) / 2) as i16;
+    }
+    return area.y;
+}
+
+fn label_line_x(label: &Label, area: Rect, line_w: i16) i16 {
+    if label.align == LabelAlign.Center || label.align == LabelAlign.TopCenter || label.align == LabelAlign.BottomCenter {
+        return area.x + ((area.w as i32 - line_w as i32) / 2) as i16;
+    }
+    if label.align == LabelAlign.Right || label.align == LabelAlign.TopRight || label.align == LabelAlign.BottomRight {
+        return area.x + area.w as i16 - line_w;
+    }
+    return area.x;
+}
+
+Label {
+    fn new(text: &const byte) Label {
+        var widget: Widget = widget_new("Label", WIDGET_TYPE_LABEL, false, false);
+        widget.size(140, 24);
+        widget.base.style.set_color(StyleProp.BgColor, TRANSPARENT);
+        widget.base.style.set_color(StyleProp.FgColor, Color{ r: 20, g: 24, b: 33, a: 255 });
+        widget.base.style.set_u32(StyleProp.FontSize, 14u32);
+        return Label{
+            widget: widget,
+            text: text,
+            text_len: widget_text_len(text),
+            align: LabelAlign.Left,
+            overflow: TextOverflow.Clip,
+            lines: [],
+            line_count: 0,
+            text_w: 0,
+            text_h: 0,
+            layout_dirty: true,
+            scroll_offset: 0,
+        };
+    }
+
+    fn obj(self: &Self) &GuiObj {
+        return widget_bind_callbacks(&self.widget.base, null, null, self as &void);
+    }
+
+    fn set_text(self: &Self, text: &const byte) &Label {
+        self.text = text;
+        self.text_len = widget_text_len(text);
+        self.layout_dirty = true;
+        self.widget.base.invalidate();
+        return self;
+    }
+
+    fn set_align(self: &Self, align: LabelAlign) &Label {
+        self.align = align;
+        self.widget.base.invalidate();
+        return self;
+    }
+
+    fn recalc_layout(self: &Self, ctx: &RenderCtx) void {
+        _ = ctx;
+        if !self.layout_dirty {
+            return;
+        }
+
+        const font: &Font = widget_font(&self.widget.base.style);
+        const inner: Rect = widget_draw_surface(&self.widget, ctx);
+        const advance: i32 = font.glyph_width as i32 + font.tracking as i32;
+        var max_chars: i32 = inner.w as i32 / advance;
+        if max_chars < 1 {
+            max_chars = 1;
+        }
+
+        self.line_count = 0;
+        self.text_w = 0;
+        self.text_h = 0;
+
+        if self.overflow != TextOverflow.Wrap {
+            if self.line_count < MAX_LABEL_LINES as u8 {
+                const width: i16 = widget_measure_text(self.text, font);
+                self.lines[0] = TextLine{
+                    start: 0usize,
+                    len: self.text_len,
+                    width: width as u16,
+                };
+                self.line_count = 1;
+                self.text_w = width as u16;
+                self.text_h = font.line_height as u16;
+            }
+            self.layout_dirty = false;
+            return;
+        }
+
+        var cursor: usize = 0usize;
+        while cursor < self.text_len && self.line_count < MAX_LABEL_LINES as u8 {
+            var line_len: usize = 0usize;
+            var line_width: i32 = 0;
+            while cursor + line_len < self.text_len && line_len < max_chars as usize {
+                if self.text[cursor + line_len] == '\n' {
+                    break;
+                }
+                line_len = line_len + 1usize;
+                line_width = line_width + advance;
+            }
+            if line_len == 0usize {
+                line_len = 1usize;
+                line_width = advance;
+            }
+
+            self.lines[self.line_count as usize] = TextLine{
+                start: cursor,
+                len: line_len,
+                width: line_width as u16,
+            };
+            self.line_count = self.line_count + 1;
+            if line_width > self.text_w as i32 {
+                self.text_w = line_width as u16;
+            }
+            cursor = cursor + line_len;
+            if cursor < self.text_len && self.text[cursor] == '\n' {
+                cursor = cursor + 1usize;
+            }
+        }
+
+        self.text_h = self.line_count as u16 * font.line_height as u16;
+        self.layout_dirty = false;
+    }
+
+    fn render(self: &Self, ctx: &RenderCtx) void {
+        const inner: Rect = widget_draw_surface(&self.widget, ctx);
+        const font: &Font = widget_font(&self.widget.base.style);
+        const color: Color = widget_text_color(&self.widget.base.style, self.widget.state);
+        self.recalc_layout(ctx);
+
+        ctx.push_clip(inner);
+        var y: i16 = label_line_start_y(self, inner, font);
+        var idx: i32 = 0;
+        while idx < self.line_count as i32 {
+            const line: TextLine = self.lines[idx];
+            var draw_len: usize = line.len;
+            var draw_x: i16 = label_line_x(self, inner, line.width as i16);
+            if self.overflow == TextOverflow.Scroll {
+                draw_x = draw_x - self.scroll_offset;
+            }
+
+            if self.overflow == TextOverflow.Ellipsis {
+                const line_cap: usize = (inner.w as i32 / (font.glyph_width as i32 + font.tracking as i32)) as usize;
+                if line_cap > 3usize && draw_len > line_cap {
+                    draw_len = line_cap - 3usize;
+                    draw_text(ctx, draw_x, y, @ptr_from_usize(@usize_from_ptr(self.text as &void) + line.start) as &const byte, draw_len, font, color);
+                    var dots: [byte: 4] = ['.', '.', '.', 0];
+                    draw_text(ctx, draw_x + line.width as i16 - 18, y, &dots[0], 3usize, font, color);
+                    y = y + font.line_height as i16;
+                    idx = idx + 1;
+                    continue;
+                }
+            }
+
+            draw_text(ctx, draw_x, y, @ptr_from_usize(@usize_from_ptr(self.text as &void) + line.start) as &const byte, draw_len, font, color);
+            y = y + font.line_height as i16;
+            idx = idx + 1;
+        }
+        ctx.pop_clip();
+    }
+}

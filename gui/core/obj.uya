@@ -32,6 +32,18 @@ export interface IGuiEventCallback {
     fn invoke(self: &Self, obj: &GuiObj, evt: &Event, user_data: &void) bool;
 }
 
+export interface IGuiRenderCallback {
+    fn invoke(self: &Self, obj: &GuiObj, ctx: &RenderCtx, user_data: &void) void;
+}
+
+export interface IGuiLayoutCallback {
+    fn invoke(self: &Self, obj: &GuiObj, available: Rect, user_data: &void) void;
+}
+
+export interface IGuiInputCallback {
+    fn invoke(self: &Self, obj: &GuiObj, evt: &Event, user_data: &void) bool;
+}
+
 export struct EventCallbackSlot {
     callback: &IGuiEventCallback,
     user_data: &void,
@@ -64,6 +76,9 @@ export struct GuiObj : IGuiObj, IContainer {
     flags: ObjFlags,
     style: Style,
     user_data: &void,
+    render_cb: &IGuiRenderCallback,
+    layout_cb: &IGuiLayoutCallback,
+    input_cb: &IGuiInputCallback,
     click_cb: EventCallbackSlot,
     press_cb: EventCallbackSlot,
     release_cb: EventCallbackSlot,
@@ -164,6 +179,11 @@ GuiObj {
     }
 
     fn layout(self: &Self, available: Rect) void {
+        if self.layout_cb != null {
+            self.layout_cb.invoke(self, available, self.user_data);
+            self.flags.dirty = false;
+            return;
+        }
         if self.w == 0 {
             self.w = available.w;
         }
@@ -174,8 +194,9 @@ GuiObj {
     }
 
     fn render(self: &Self, ctx: &RenderCtx) void {
-        _ = self;
-        _ = ctx;
+        if self.render_cb != null {
+            self.render_cb.invoke(self, ctx, self.user_data);
+        }
     }
 
     fn handle_event(self: &Self, evt: &Event) bool {
@@ -185,6 +206,17 @@ GuiObj {
 
         if evt.phase == EventPhase.Target && evt.target != self.obj_idx {
             return false;
+        }
+
+        var delegated: bool = false;
+        if self.input_cb != null {
+            delegated = self.input_cb.invoke(self, evt, self.user_data);
+            if delegated {
+                evt.handled = true;
+            }
+            if evt.stop_bubble {
+                return delegated;
+            }
         }
 
         if self.dispatch_callback(evt) {
@@ -211,7 +243,7 @@ GuiObj {
                 return true;
             }
         }
-        return false;
+        return delegated;
     }
 
     fn add_child(self: &Self, child: &GuiObj) void {
@@ -407,6 +439,9 @@ export fn gui_obj_default() GuiObj {
         flags: obj_flags_default(),
         style: style_default(),
         user_data: null,
+        render_cb: null,
+        layout_cb: null,
+        input_cb: null,
         click_cb: event_callback_slot_default(),
         press_cb: event_callback_slot_default(),
         release_cb: event_callback_slot_default(),

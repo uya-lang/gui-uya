@@ -1,0 +1,103 @@
+use core.color.Color;
+use core.obj.GuiObj;
+use core.obj.IGuiRenderCallback;
+use core.rect.Rect;
+use platform.disp.FrameBuffer;
+use platform.disp.PixelFormat;
+use platform.disp.empty_framebuffer;
+use platform.disp.framebuffer_new;
+use render.ctx.RenderCtx;
+use render.ctx.empty_render_ctx;
+use render.ctx.render_ctx_new;
+use render.img.ImageData;
+use render.img.draw_image_scaled;
+use render.img.image_data_new;
+use style.StyleProp;
+use widget.base.Widget;
+use widget.base.WIDGET_TYPE_CANVAS;
+use widget.base.widget_bind_callbacks;
+use widget.base.widget_draw_surface;
+use widget.base.widget_new;
+
+struct CanvasRenderAdapter : IGuiRenderCallback {}
+
+export struct Canvas {
+    widget: Widget,
+    draw_buffer: FrameBuffer,
+    draw_ctx: RenderCtx,
+    dirty: bool,
+}
+
+CanvasRenderAdapter {
+    fn invoke(self: &Self, obj: &GuiObj, ctx: &RenderCtx, user_data: &void) void {
+        _ = self;
+        _ = obj;
+        const canvas: &Canvas = user_data as &Canvas;
+        if canvas != null {
+            canvas.render(ctx);
+        }
+    }
+}
+
+Canvas {
+    fn new() Canvas {
+        var widget: Widget = widget_new("Canvas", WIDGET_TYPE_CANVAS, false, false);
+        widget.size(160, 120);
+        widget.base.style.set_color(StyleProp.BgColor, Color{ r: 255, g: 255, b: 255, a: 255 });
+        widget.base.style.set_color(StyleProp.BorderColor, Color{ r: 221, g: 226, b: 235, a: 255 });
+        widget.base.style.set_u32(StyleProp.BorderWidth, 1u32);
+        widget.base.style.set_u32(StyleProp.Radius, 8u32);
+        return Canvas{
+            widget: widget,
+            draw_buffer: empty_framebuffer(),
+            draw_ctx: empty_render_ctx(),
+            dirty: false,
+        };
+    }
+
+    fn with_buffer(pixels: &byte, w: u16, h: u16, stride: u16, format: PixelFormat) Canvas {
+        var canvas: Canvas = Canvas.new();
+        canvas.attach_buffer(pixels, w, h, stride, format);
+        return canvas;
+    }
+
+    fn obj(self: &Self) &GuiObj {
+        return widget_bind_callbacks(&self.widget.base, null, null, self as &void);
+    }
+
+    fn attach_buffer(self: &Self, pixels: &byte, w: u16, h: u16, stride: u16, format: PixelFormat) void {
+        self.draw_buffer = framebuffer_new(pixels, w, h, stride, format);
+        self.draw_ctx = render_ctx_new(self.draw_buffer);
+        if self.widget.base.w == 0 || self.widget.base.h == 0 {
+            self.widget.size(w, h);
+        }
+        self.dirty = true;
+    }
+
+    fn begin_draw(self: &Self) &RenderCtx {
+        return &self.draw_ctx;
+    }
+
+    fn end_draw(self: &Self) void {
+        self.dirty = true;
+        self.widget.base.invalidate();
+    }
+
+    fn clear(self: &Self, color: Color) void {
+        if self.draw_buffer.pixels == null {
+            return;
+        }
+        self.draw_ctx.clear(color);
+        self.dirty = true;
+    }
+
+    fn render(self: &Self, ctx: &RenderCtx) void {
+        const inner: Rect = widget_draw_surface(&self.widget, ctx);
+        if self.draw_buffer.pixels == null {
+            return;
+        }
+        const img: ImageData = image_data_new(self.draw_buffer.pixels, self.draw_buffer.size.w, self.draw_buffer.size.h, self.draw_buffer.stride, self.draw_buffer.format);
+        draw_image_scaled(ctx, inner, &img);
+        self.dirty = false;
+    }
+}

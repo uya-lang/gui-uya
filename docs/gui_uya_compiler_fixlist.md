@@ -1,6 +1,6 @@
 # GUI Uya Compiler Fixlist
 
-本清单整理了实现 `Phase 0` 过程中实际遇到、并且值得在 Uya 编译器侧修复的问题。
+本清单整理了实现 `Phase 0` 到 `Phase 3` 过程中实际遇到、并且值得在 Uya 编译器侧修复的问题。
 
 目标不是记录“理想语义”，而是记录：
 
@@ -17,17 +17,44 @@
 2. `union` 作为结构体字段的 C99 代码生成
 3. 泛型构造器/泛型返回值的实例化与代码生成
 4. 结构体比较表达式的 C99 代码生成
+8. 接口值（`interface`）的全局/字段初始化与 C99 代码生成
 
 ### P1
 
 5. 全局结构体常量初始化依赖其他全局结构体常量
 6. const 值调用实例方法时的 `const` 限定传播
+9. `&Self` 返回值的链式方法调用 lowering
+10. 跨模块同名 `enum` 的 C99 命名空间冲突
 
 ### P2
 
 7. 方法名与关键字冲突时的解析策略（如 `union`）
+11. split-C / `.uyacache` 构建时相对输出路径 `-o` 的解析基准
+
+## 当前状态总览
+
+> 2026-04-26 更新：当前 GUI 仓库已经可以通过 `make test` / `make build`；下表中的“状态”描述的是编译器 / 语言层问题是否已解决，不是 GUI 仓库是否还能继续开发。
+
+| 编号 | 问题 | 当前状态 | 对当前仓库影响 | 当前仓库处理方式 |
+|------|------|----------|----------------|------------------|
+| 1 | 泛型 `union` / `Option<T>` C99 代码生成 | 未修复 | 中 | 用专用 `EventOption` 规避 |
+| 2 | `union` 作为结构体字段的 C99 代码生成 | 未修复 | 中 | 事件负载改扁平字段 |
+| 3 | 泛型构造器 / 泛型返回值实例化 | 未修复 | 中 | 改字面量初始化 / 专用返回类型 |
+| 4 | 结构体比较表达式 C99 代码生成 | 未修复 | 低 | 测试使用字段级 helper |
+| 5 | 全局结构体常量依赖其他全局结构体常量 | 未修复 | 低 | 默认值改函数返回 |
+| 6 | const receiver 限定传播 | 未修复（非阻塞） | 低 | 接受 warning / 局部回避 |
+| 7 | 关键字与方法名冲突 | 待语言设计决策 | 低 | 使用 `union_rect` 等替代命名 |
+| 8 | `interface` 值的全局 / 字段初始化 | 未修复 | 高 | P3 改为 `type_tag + user_data` 分发 |
+| 9 | `&Self` 返回值链式方法 lowering | 未修复 | 中 | Fluent API 拆成多句 |
+| 10 | 跨模块同名 `enum` 的 C99 命名空间冲突 | 未修复 | 中 | 组件侧重命名为 `LabelAlign` |
+| 11 | split-C 下相对 `-o` 路径解析 | 未修复（driver 层） | 低 | Makefile 统一传绝对路径 |
 
 ## 1. 泛型 `union` / `Option<T>` 的 C99 代码生成
+
+### 当前状态
+
+- 状态: 未修复
+- 阻塞性: 已有稳定绕法，但仍阻塞回到通用 `Option<T>` 设计
 
 ### 现象
 
@@ -63,6 +90,11 @@
 
 ## 2. `union` 作为结构体字段的 C99 代码生成
 
+### 当前状态
+
+- 状态: 未修复
+- 阻塞性: 已有稳定绕法，但仍阻塞事件负载恢复为真正 `union` 字段
+
 ### 现象
 
 普通 `union` 本身可用，但把 `union` 放进结构体字段里后，C99 代码生成会产出不完整字段类型。
@@ -96,6 +128,11 @@
   - 跨模块导出/导入
 
 ## 3. 泛型构造器/泛型返回值的实例化与代码生成
+
+### 当前状态
+
+- 状态: 未修复
+- 阻塞性: 中等；当前不影响仓库继续开发，但会持续限制 API 设计
 
 ### 现象
 
@@ -135,6 +172,11 @@
 
 ## 4. 结构体比较表达式的 C99 代码生成
 
+### 当前状态
+
+- 状态: 未修复
+- 阻塞性: 低；当前主要影响测试和表达力，不阻塞默认构建
+
 ### 现象
 
 语言层允许结构体比较，但部分生成路径会直接输出非法的 C `struct == struct`。
@@ -161,6 +203,11 @@
 
 ## 5. 全局结构体常量初始化依赖其他全局结构体常量
 
+### 当前状态
+
+- 状态: 未修复
+- 阻塞性: 低；当前主要影响默认值组织方式
+
 ### 现象
 
 多个结构体常量互相引用时，生成的 C 初始化式不一定是宿主编译器认可的常量表达式。
@@ -184,6 +231,11 @@
 - `uya/tests/test_global_struct_const_init.uya`
 
 ## 6. const 值调用实例方法时的限定传播
+
+### 当前状态
+
+- 状态: 未修复（非阻塞）
+- 阻塞性: 低；当前主要是 warning 污染和代码生成质量问题
 
 ### 现象
 
@@ -211,6 +263,11 @@
 
 ## 7. 关键字与方法名冲突
 
+### 当前状态
+
+- 状态: 待语言设计决策
+- 阻塞性: 低；如果语言层明确“不支持”，则应从 bug 清单转为语言限制说明
+
 ### 现象
 
 如果按直觉把矩形并集方法命名为 `union`，语法层会和关键字冲突。
@@ -229,14 +286,203 @@
 - 若不打算支持，文档要明确保留字不能作方法名
 - 若打算支持，优先只支持 `obj.union(...)` 这类成员访问位点
 
+## 8. 接口值（`interface`）的全局/字段初始化与 C99 代码生成
+
+### 当前状态
+
+- 状态: 未修复
+- 阻塞性: 高；直接影响更自然的组件回调/适配器架构
+
+### 现象
+
+`interface` 类型在参数、返回值、局部变量层面通常可用，但一旦进入“全局接口值初始化”或“结构体字段初始化为具体实现”路径，当前 C99 后端会产出非法初始化代码。
+
+### GUI 侧复现点
+
+- `Phase 3` 组件库初版尝试在 `widget/*` 内保存 `IGuiRenderCallback` / `IGuiInputCallback`
+- 具体踩点在：
+  - [btn.uya](/home/winger/uya/gui-uya/gui/widget/btn.uya)
+  - [panel.uya](/home/winger/uya/gui-uya/gui/widget/panel.uya)
+  - [page.uya](/home/winger/uya/gui-uya/gui/widget/page.uya)
+  - [grid_view.uya](/home/winger/uya/gui-uya/gui/widget/grid_view.uya)
+
+### 当时的失败表现
+
+- 全局接口值初始化报 `invalid initializer`
+- 结构体字段初始化报 `incompatible types when initializing type 'void *' using type 'struct XxxAdapter'`
+- 类型检查能通过，但宿主 C 编译失败
+
+### 当前绕法
+
+- 不在全局或结构体字段里保存接口对象
+- `GuiObj` 的 `render_cb` / `input_cb` 统一置空
+- 容器层改为 `type_tag + user_data` 的显式分发，见：
+  - [panel.uya](/home/winger/uya/gui-uya/gui/widget/panel.uya)
+  - [page.uya](/home/winger/uya/gui-uya/gui/widget/page.uya)
+  - [grid_view.uya](/home/winger/uya/gui-uya/gui/widget/grid_view.uya)
+
+### 建议修复点
+
+- 明确 `interface` 在 C 后端的承载表示（通常是 `{data, vtable}` 一类聚合）
+- 保证：
+  - 全局接口值可由具体实现安全初始化
+  - 结构体字段可由具体实现安全初始化
+  - 字面量初始化与赋值初始化使用一致的 lowering 路径
+
+### 建议补的编译器测试
+
+- `uya/tests/test_interface_global_init.uya`
+- `uya/tests/test_interface_field_init.uya`
+- 覆盖：
+  - `var cb: IFoo = FooImpl{}`
+  - `struct S { cb: IFoo }`
+  - `return Holder{ cb: FooImpl{} }`
+
+## 9. `&Self` 返回值的链式方法调用 lowering
+
+### 当前状态
+
+- 状态: 未修复
+- 阻塞性: 中等；会影响 Fluent API 的可用性和代码风格稳定性
+
+### 现象
+
+链式 Fluent API 在类型检查阶段可以通过，但某些“返回 `&Self` 且结果被丢弃”的路径，会在 C99 生成后退化成 `unknown(...)` 之类无意义调用。
+
+### GUI 侧复现点
+
+- `Chart.add_point(self) &Chart`
+- 本次 `Phase 3` 中最初写法类似：
+
+```uya
+_ = chart.add_point(2).add_point(6).add_point(3).add_point(8);
+```
+
+- 当前已拆成逐句调用，见：
+  - [test_widgets.uya](/home/winger/uya/gui-uya/gui/tests/test_widgets.uya)
+  - [phase3_smoke.uya](/home/winger/uya/gui-uya/gui/examples/phase3_smoke.uya)
+
+### 当时的失败表现
+
+- 生成的 C 中出现 `unknown(8)` 之类非法调用
+- 不是类型错误，而是 lowering / 临时值拼接错误
+
+### 当前绕法
+
+- 不写链式调用
+- 拆成多条独立语句：
+
+```uya
+_ = chart.add_point(2);
+_ = chart.add_point(6);
+```
+
+### 建议修复点
+
+- 对“方法返回 `&Self`”的链式表达式统一构建 receiver 临时值
+- 明确在“结果被丢弃”的上下文里也要完整保留链式调用副作用
+- 避免在中间 lowering 节点留下占位符/未解析调用名
+
+### 建议补的编译器测试
+
+- `uya/tests/test_struct_method_chain.uya`
+- 覆盖：
+  - `a.bump().bump().bump()`
+  - `_ = a.bump().bump()`
+  - 结构体方法返回 `&Self`
+  - 跨模块方法链
+
+## 10. 跨模块同名 `enum` 的 C99 命名空间冲突
+
+### 当前状态
+
+- 状态: 未修复
+- 阻塞性: 中等；会影响模块边界内的常见命名选择
+
+### 现象
+
+不同模块里可以定义同名 `enum`，语义层面可区分，但当前 C99 后端的命名空间隔离不足，会在生成的 C 中出现枚举标签/常量名冲突或缺失。
+
+### GUI 侧复现点
+
+- `render/font.uya` 已有 `TextAlign`
+- `widget/lbl.uya` 初版也定义了 `TextAlign`
+- 当前稳定实现已把组件侧枚举改名为 `LabelAlign`，见 [lbl.uya](/home/winger/uya/gui-uya/gui/widget/lbl.uya)
+
+### 当时的失败表现
+
+- C 编译阶段报：
+  - `TextAlign_BottomLeft undeclared`
+  - `TextAlign_Right undeclared`
+- 说明生成代码引用到了组件枚举常量，但对应声明/命名已被另一个模块的同名 `enum` 覆盖或污染
+
+### 当前绕法
+
+- 避免跨模块使用同名 `enum`
+- 组件侧显式改名为 `LabelAlign`
+
+### 建议修复点
+
+- C 后端对 `enum` 类型名、枚举值名都带上稳定模块前缀
+- 保证不同模块的同名顶层声明在 C 命名空间里不会互相覆盖
+
+### 建议补的编译器测试
+
+- `uya/tests/test_cross_module_enum_name_collision.uya`
+- 两个模块各自导出 `TextAlign`
+- 第三个模块同时导入并使用两者，验证生成的 C 仍可编译
+
+## 11. split-C / `.uyacache` 构建时相对输出路径 `-o` 的解析基准
+
+### 当前状态
+
+- 状态: 未修复（driver 层）
+- 阻塞性: 低；当前仓库已通过 Makefile 绝对路径规避
+
+### 现象
+
+在 split-C 路径下执行 `uya build ... -o build/app`，编译器会通过 `make -C .uyacache` 链接；如果 `UYA_OUT` 仍保留相对路径，就会相对 `.uyacache/` 而不是项目根目录解析。
+
+### GUI 侧复现点
+
+- `Phase 3` 默认 smoke 切换到 [Makefile](/home/winger/uya/gui-uya/Makefile)
+- 本次显式使用绝对路径 `$(ABS_BUILD_DIR)` 规避
+
+### 当时的失败表现
+
+- 宿主链接阶段报：
+  - `cannot open output file build/phase3_smoke: No such file or directory`
+
+### 当前绕法
+
+- 对 split-C 输出统一传绝对路径
+- 当前 Makefile 已使用 `ABS_BUILD_DIR`
+
+### 建议修复点
+
+- 如果 `-o` 是相对路径，进入 `.uyacache` 前先相对项目根展开成绝对路径
+- 或在 driver 层显式创建相对输出目录并确保基准一致
+
+### 建议补的编译器测试
+
+- `uya/tests/test_relative_output_path_driver.sh`
+- 覆盖：
+  - 单文件 C 路径
+  - split-C 路径
+  - `-o build/foo`
+  - `-o /abs/path/foo`
+
 ## 推荐修复顺序
 
 1. 修 `Option<T>` / 泛型 union 单态化
 2. 修 union 结构体字段
 3. 修泛型工厂函数/泛型返回值
-4. 修结构体比较 lowering
-5. 修全局结构体常量初始化
-6. 修 const receiver warning
+4. 修接口值初始化 / interface lowering
+5. 修结构体比较 lowering
+6. 修全局结构体常量初始化
+7. 修 `&Self` 链式方法 lowering
+8. 修跨模块同名 enum 的命名空间隔离
+9. 修 const receiver warning
 
 ## 修复完成的验收标准
 
@@ -247,3 +493,7 @@
   - `obj_pool_new<T>()` 恢复为普通泛型工厂函数
   - 测试里移除 `color_eq` / `rect_eq` / `point_eq` 这类字段级比较 helper
   - `Style` 默认值可安全回到全局结构体常量
+  - `widget/*` 可恢复接口对象驱动的组件回调绑定，而不是 `type_tag + user_data` 分发
+  - `Chart.add_point(...).add_point(...)` 这类 Fluent API 可以直接恢复
+  - `widget/lbl.uya` 可安全使用 `TextAlign` 这类与其他模块同名的枚举名
+  - `uya build ... -o build/app` 在 split-C 模式下可以稳定输出到项目根的 `build/`

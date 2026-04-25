@@ -1,0 +1,213 @@
+use core.color.Color;
+use core.event.Event;
+use core.event.EventType;
+use core.event.InputDev;
+use core.event.event_point;
+use core.obj.gui_obj_register;
+use core.obj.gui_obj_reset_registry;
+use core.point.Point;
+use core.rect.Rect;
+use platform.disp.PixelFormat;
+use platform.disp.framebuffer_new;
+use render.ctx.RenderCtx;
+use render.ctx.ctx_pixel;
+use render.ctx.render_ctx_new;
+use render.img.ImageData;
+use render.img.image_data_new;
+use style.StyleProp;
+use std.testing.assert_eq_bool;
+use std.testing.assert_eq_i32;
+use widget.base.IWidgetEventCallback;
+use widget.base.IWidgetValueCallback;
+use widget.base.Widget;
+use widget.btn.Button;
+use widget.canvas.Canvas;
+use widget.chart.Chart;
+use widget.chart.ChartType;
+use widget.grid_view.GridView;
+use widget.img.Image;
+use widget.lbl.Label;
+use widget.list.ListView;
+use widget.page.Page;
+use widget.panel.Panel;
+use widget.slider.Slider;
+use widget.switch.Switch;
+
+export const TEST_WIDGET_MODULE: i32 = 1;
+
+fn widget_test_color_eq(a: Color, b: Color) bool {
+    return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
+}
+
+struct CountingWidgetEvent : IWidgetEventCallback {
+    count_ref: &i32,
+}
+
+struct CountingWidgetValue : IWidgetValueCallback {
+    value_ref: &i32,
+}
+
+CountingWidgetEvent {
+    fn invoke(self: &Self, widget: &Widget, evt: &Event, user_data: &void) void {
+        _ = widget;
+        _ = evt;
+        _ = user_data;
+        self.count_ref[0] = self.count_ref[0] + 1;
+    }
+}
+
+CountingWidgetValue {
+    fn invoke(self: &Self, widget: &Widget, value: i32, user_data: &void) void {
+        _ = widget;
+        _ = user_data;
+        self.value_ref[0] = value;
+    }
+}
+
+test "button integrates with dispatcher click callback" {
+    var button: Button = Button.filled("OK");
+    button.widget.at(0, 0);
+
+    var click_count: i32 = 0;
+    var cb_impl: CountingWidgetEvent = CountingWidgetEvent{ count_ref: &click_count };
+    var cb: IWidgetEventCallback = cb_impl;
+    button.on_click(&cb, null);
+
+    var press_evt: Event = event_point(EventType.Press, InputDev.Touch, -1, 100, Point{ x: 8, y: 8 });
+    var release_evt: Event = event_point(EventType.Release, InputDev.Touch, -1, 160, Point{ x: 8, y: 8 });
+    var click_evt: Event = event_point(EventType.Click, InputDev.Touch, -1, 161, Point{ x: 8, y: 8 });
+    _ = button.handle_event(&press_evt);
+    _ = button.handle_event(&release_evt);
+    _ = button.handle_event(&click_evt);
+
+    try assert_eq_i32(click_count, 1);
+}
+
+test "panel renders child button and label through gui tree" {
+    var bytes: [byte: 4096] = [];
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 32, 32, 128, PixelFormat.ARGB8888));
+
+    var panel: Panel = Panel.new();
+    var button: Button = Button.filled("A");
+    var label: Label = Label.new("T");
+
+    panel.widget.at(0, 0);
+    panel.widget.size(32, 32);
+    button.widget.at(4, 4);
+    button.widget.size(20, 12);
+    label.widget.at(4, 20);
+    label.widget.size(20, 8);
+
+    panel.add(button.obj());
+    panel.add(label.obj());
+    panel.render(&ctx);
+
+    try assert_eq_bool(widget_test_color_eq(ctx_pixel(&ctx, 16, 13), Color{ r: 33, g: 126, b: 227, a: 255 }), true);
+}
+
+test "image widget scales source into target area" {
+    var fb: [byte: 4096] = [];
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&fb[0], 16, 16, 64, PixelFormat.ARGB8888));
+    var img_bytes: [byte: 12] = [255, 0, 0,   0, 255, 0,   0, 0, 255,   255, 255, 255];
+    var image_data: ImageData = image_data_new(&img_bytes[0], 2, 2, 6, PixelFormat.RGB888);
+    var image: Image = Image.from_data(&image_data);
+    image.widget.at(0, 0);
+    image.widget.size(8, 8);
+
+    image.render(&ctx);
+    try assert_eq_bool(ctx.stats.image_ops > 0u32, true);
+}
+
+test "slider and switch propagate value changes" {
+    var slider: Slider = Slider.new(0, 100, 25);
+    var sw: Switch = Switch.new(false);
+    var value: i32 = -1;
+    var cb_impl: CountingWidgetValue = CountingWidgetValue{ value_ref: &value };
+    var cb: IWidgetValueCallback = cb_impl;
+    slider.on_change(&cb, null);
+
+    var slider_evt: Event = event_point(EventType.Click, InputDev.Touch, 2, 10, Point{ x: 140, y: 10 });
+    _ = slider.handle_event(&slider_evt);
+    try assert_eq_bool(value >= 0, true);
+
+    value = -1;
+    sw.on_change(&cb, null);
+    var switch_evt: Event = event_point(EventType.Click, InputDev.Touch, 3, 12, Point{ x: 12, y: 12 });
+    _ = sw.handle_event(&switch_evt);
+    try assert_eq_bool(sw.checked, true);
+    try assert_eq_i32(value, 1);
+}
+
+test "list view selection and grid view children work" {
+    var list: ListView = ListView.new();
+    list.add_item("One");
+    list.add_item("Two");
+    list.add_item("Three");
+    list.select_next();
+    list.select_next();
+    try assert_eq_i32(list.selected(), 1);
+    try assert_eq_i32(list.content_size().h as i32, 72);
+
+    var grid: GridView = GridView.new();
+    var a: Button = Button.outlined("1");
+    var b: Button = Button.outlined("2");
+    grid.add_child(a.obj());
+    grid.add_child(b.obj());
+    try assert_eq_i32(grid.child_count(), 2);
+}
+
+test "chart and canvas render content" {
+    var back_bytes: [byte: 8192] = [];
+    var canvas_bytes: [byte: 1024] = [];
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&back_bytes[0], 48, 32, 192, PixelFormat.ARGB8888));
+
+    var chart: Chart = Chart.new();
+    chart.chart_type = ChartType.Area;
+    _ = chart.add_point(2);
+    _ = chart.add_point(6);
+    _ = chart.add_point(3);
+    _ = chart.add_point(8);
+    chart.widget.at(0, 0);
+    chart.widget.size(24, 16);
+    chart.render(&ctx);
+    try assert_eq_bool(ctx.stats.line_ops > 0u32, true);
+
+    var canvas: Canvas = Canvas.with_buffer(&canvas_bytes[0], 8, 8, 32, PixelFormat.ARGB8888);
+    canvas.widget.at(24, 0);
+    canvas.widget.size(16, 16);
+    canvas.begin_draw().fill_rect(Rect{ x: 0, y: 0, w: 8, h: 8 }, Color{ r: 0, g: 255, b: 0, a: 255 });
+    canvas.end_draw();
+    canvas.render(&ctx);
+
+    try assert_eq_bool(widget_test_color_eq(ctx_pixel(&ctx, 28, 4), Color{ r: 0, g: 255, b: 0, a: 255 }), true);
+}
+
+test "page can render nested widgets" {
+    gui_obj_reset_registry();
+
+    var bytes: [byte: 8192] = [];
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 48, 32, 192, PixelFormat.ARGB8888));
+    var page: Page = Page.new("Page");
+    var panel: Panel = Panel.new();
+    var button: Button = Button.filled("Go");
+
+    page.widget.size(48, 32);
+    page.widget.base.style.set_u32(StyleProp.PaddingLeft, 0u32);
+    page.widget.base.style.set_u32(StyleProp.PaddingRight, 0u32);
+    page.widget.base.style.set_u32(StyleProp.PaddingTop, 0u32);
+    page.widget.base.style.set_u32(StyleProp.PaddingBottom, 0u32);
+    panel.widget.at(2, 2);
+    panel.widget.size(28, 18);
+    panel.widget.base.style.set_u32(StyleProp.PaddingLeft, 2u32);
+    panel.widget.base.style.set_u32(StyleProp.PaddingRight, 2u32);
+    panel.widget.base.style.set_u32(StyleProp.PaddingTop, 2u32);
+    panel.widget.base.style.set_u32(StyleProp.PaddingBottom, 2u32);
+    button.widget.at(4, 4);
+    button.widget.size(16, 10);
+
+    page.add(panel.obj());
+    panel.add(button.obj());
+    page.render(&ctx);
+
+    try assert_eq_bool(widget_test_color_eq(ctx_pixel(&ctx, 14, 12), Color{ r: 33, g: 126, b: 227, a: 255 }), true);
+}
