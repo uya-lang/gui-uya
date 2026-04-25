@@ -25,7 +25,7 @@
 
 ## Phase 0: 基础设施 (Week 1-3)
 
-> 注: 当前仓库已完成 Phase 0 的可编译可测试版本；少数条目因现阶段 Uya/C99 后端限制采用了等价实现，例如 `Rect.union_rect`、专用 `EventOption` 出队、`GuiObj` 泛型对象池的直接字面量构造，以及事件的扁平化载荷字段。
+> 注: 当前仓库已完成 Phase 0 的可编译可测试版本；少数条目因现阶段 Uya/C99 后端限制采用了等价实现，例如 `Rect.union_rect`、专用 `EventOption` 出队、`GuiObj` 泛型对象池的直接字面量构造，以及事件的扁平化载荷字段。相关编译器修复清单见 [gui_uya_compiler_fixlist.md](/home/winger/gui-uya/docs/gui_uya_compiler_fixlist.md)。
 
 ### Week 1: 项目搭建与环境配置
 
