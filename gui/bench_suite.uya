@@ -1,0 +1,7 @@
+use std.runtime.entry;
+
+use benchmarks.core_bench.run_core_bench;
+
+export fn main() i32 {
+    return run_core_bench();
+}

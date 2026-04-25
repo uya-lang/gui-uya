@@ -1,0 +1,60 @@
+use core.point.Point;
+use core.rect.RECT_ZERO;
+use core.rect.Rect;
+use std.testing.assert_eq_bool;
+use std.testing.assert_eq_i32;
+use std.testing.expect;
+
+export const TEST_RECT_MODULE: i32 = 1;
+
+fn rect_eq(a: Rect, b: Rect) bool {
+    return a.x == b.x && a.y == b.y && a.w == b.w && a.h == b.h;
+}
+
+test "rect contains and empty checks" {
+    const rect: Rect = Rect{ x: 10, y: 20, w: 50, h: 40 };
+    try assert_eq_bool(rect.is_empty(), false);
+    try assert_eq_bool(RECT_ZERO.is_empty(), true);
+    try assert_eq_bool(rect.contains(Point{ x: 10, y: 20 }), true);
+    try assert_eq_bool(rect.contains(Point{ x: 59, y: 59 }), true);
+    try assert_eq_bool(rect.contains(Point{ x: 60, y: 20 }), false);
+    try assert_eq_bool(rect.contains(Point{ x: 9, y: 20 }), false);
+}
+
+test "rect intersection cases" {
+    const a: Rect = Rect{ x: 0, y: 0, w: 20, h: 20 };
+    const b: Rect = Rect{ x: 10, y: 10, w: 20, h: 20 };
+    const c: Rect = Rect{ x: 30, y: 30, w: 5, h: 5 };
+    const d: Rect = Rect{ x: 5, y: 5, w: 4, h: 4 };
+
+    try expect(rect_eq(a.intersect(b), Rect{ x: 10, y: 10, w: 10, h: 10 }));
+    try expect(rect_eq(a.intersect(c), RECT_ZERO));
+    try expect(rect_eq(a.intersect(d), d));
+    try expect(rect_eq(d.intersect(a), d));
+}
+
+test "rect union cases" {
+    const a: Rect = Rect{ x: 0, y: 0, w: 20, h: 20 };
+    const b: Rect = Rect{ x: 10, y: 10, w: 20, h: 20 };
+    const c: Rect = Rect{ x: -5, y: -3, w: 2, h: 2 };
+
+    try expect(rect_eq(a.union_rect(b), Rect{ x: 0, y: 0, w: 30, h: 30 }));
+    try expect(rect_eq(a.union_rect(RECT_ZERO), a));
+    try expect(rect_eq(RECT_ZERO.union_rect(b), b));
+    try expect(rect_eq(a.union_rect(c), Rect{ x: -5, y: -3, w: 25, h: 23 }));
+}
+
+test "rect inflate and offset" {
+    const r: Rect = Rect{ x: 10, y: 10, w: 20, h: 20 };
+
+    try expect(rect_eq(r.inflate(5, 3), Rect{ x: 5, y: 7, w: 30, h: 26 }));
+    try expect(rect_eq(r.inflate(-5, -5), Rect{ x: 15, y: 15, w: 10, h: 10 }));
+    try expect(rect_eq(r.inflate(-20, -20), RECT_ZERO));
+    try expect(rect_eq(r.offset(4, -2), Rect{ x: 14, y: 8, w: 20, h: 20 }));
+}
+
+test "rect size view" {
+    const r: Rect = Rect{ x: 1, y: 2, w: 3, h: 4 };
+    try assert_eq_i32(r.size().w as i32, 3);
+    try assert_eq_i32(r.size().h as i32, 4);
+}

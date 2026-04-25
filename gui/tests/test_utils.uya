@@ -1,0 +1,36 @@
+use libc.fabs;
+use std.testing.test_suite_begin;
+
+extern "libc" fn printf(fmt: *byte, ...) i32;
+
+error GuiTestAssertionFailed;
+
+export fn _assert_eq_impl<T>(actual: &T, expected: &T, actual_src: &const byte, expected_src: &const byte) !void {
+    if actual[0] != expected[0] {
+        printf("assert_eq failed: %s == %s\n" as *byte, actual_src, expected_src);
+        return error.GuiTestAssertionFailed;
+    }
+}
+
+export mc assert_eq(actual: expr, expected: expr) expr {
+    _assert_eq_impl(&actual, &expected, @mc_source(actual), @mc_source(expected));
+}
+
+export fn _assert_near_impl(actual: f64, expected: f64, epsilon: f64, actual_src: &const byte, expected_src: &const byte) !void {
+    if fabs(actual - expected) > epsilon {
+        printf("assert_near failed: %s ~= %s\n" as *byte, actual_src, expected_src);
+        return error.GuiTestAssertionFailed;
+    }
+}
+
+export mc assert_near(actual: expr, expected: expr, epsilon: expr) expr {
+    _assert_near_impl(actual as f64, expected as f64, epsilon as f64, @mc_source(actual), @mc_source(expected));
+}
+
+export fn _test_suite_impl(name: &const byte) void {
+    test_suite_begin(name);
+}
+
+export mc test_suite(name: expr) expr {
+    _test_suite_impl(name);
+}

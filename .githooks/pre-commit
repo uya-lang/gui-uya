@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(git rev-parse --show-toplevel)"
+cd "$ROOT_DIR"
+
+STAGED_UYA_FILES="$(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.uya$' || true)"
+
+if command -v uyaFmt >/dev/null 2>&1 && [ -n "$STAGED_UYA_FILES" ]; then
+    echo "Formatting staged Uya files with uyaFmt"
+    uyaFmt $STAGED_UYA_FILES
+    git add $STAGED_UYA_FILES
+else
+    echo "uyaFmt not found or no staged .uya files; skipping format step"
+fi
+
+make test

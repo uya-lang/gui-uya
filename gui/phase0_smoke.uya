@@ -1,0 +1,7 @@
+use std.runtime.entry;
+
+use examples.phase0_smoke.run_phase0_smoke;
+
+export fn main() i32 {
+    return run_phase0_smoke();
+}

@@ -1,0 +1,10 @@
+build/
+gui/build/
+.uyacache/
+*.o
+*.out
+*.pobj
+*.uapp
+*.result
+.DS_Store
+.vscode/

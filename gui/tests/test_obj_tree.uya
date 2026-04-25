@@ -1,0 +1,105 @@
+use core.obj.GuiObj;
+use core.obj.gui_obj_default;
+use core.obj.gui_obj_register;
+use core.obj.gui_obj_reset_registry;
+use core.obj_tree.BubblePath;
+use core.obj_tree.ObjTree;
+use core.obj_tree.obj_tree_new;
+use core.point.Point;
+use core.rect.Rect;
+use std.testing.assert_eq_bool;
+use std.testing.assert_eq_i32;
+
+export const TEST_OBJ_TREE_MODULE: i32 = 1;
+
+test "obj tree attach detach and bubble path" {
+    gui_obj_reset_registry();
+
+    var root: GuiObj = gui_obj_default();
+    var child: GuiObj = gui_obj_default();
+    var leaf: GuiObj = gui_obj_default();
+
+    root.set_area(Rect{ x: 0, y: 0, w: 100, h: 100 });
+    child.set_area(Rect{ x: 10, y: 10, w: 50, h: 50 });
+    leaf.set_area(Rect{ x: 5, y: 5, w: 10, h: 10 });
+
+    _ = gui_obj_register(0, &root);
+    _ = gui_obj_register(1, &child);
+    _ = gui_obj_register(2, &leaf);
+
+    var tree: ObjTree = obj_tree_new();
+    tree.set_root(0, &root);
+    tree.attach(0, 1);
+    tree.attach(1, 2);
+
+    try assert_eq_i32(root.child_count(), 1);
+    try assert_eq_i32(child.child_count(), 1);
+    try assert_eq_i32(child.parent_idx, 0);
+    try assert_eq_i32(leaf.parent_idx, 1);
+
+    const path: BubblePath = tree.bubble_path(2);
+    try assert_eq_i32(path.len, 3);
+    try assert_eq_i32(path.nodes[0], 2);
+    try assert_eq_i32(path.nodes[1], 1);
+    try assert_eq_i32(path.nodes[2], 0);
+
+    tree.detach(2);
+    try assert_eq_i32(child.child_count(), 0);
+    try assert_eq_i32(leaf.parent_idx, -1);
+}
+
+test "obj tree traversal order" {
+    gui_obj_reset_registry();
+
+    var root: GuiObj = gui_obj_default();
+    var left: GuiObj = gui_obj_default();
+    var right: GuiObj = gui_obj_default();
+
+    _ = gui_obj_register(0, &root);
+    _ = gui_obj_register(1, &left);
+    _ = gui_obj_register(2, &right);
+
+    var tree: ObjTree = obj_tree_new();
+    tree.set_root(0, &root);
+    tree.attach(0, 1);
+    tree.attach(0, 2);
+
+    const pre_path: BubblePath = tree.pre_order(0);
+    const post_path: BubblePath = tree.post_order(0);
+
+    try assert_eq_i32(pre_path.len, 3);
+    try assert_eq_i32(pre_path.nodes[0], 0);
+    try assert_eq_i32(pre_path.nodes[1], 1);
+    try assert_eq_i32(pre_path.nodes[2], 2);
+
+    try assert_eq_i32(post_path.len, 3);
+    try assert_eq_i32(post_path.nodes[0], 1);
+    try assert_eq_i32(post_path.nodes[1], 2);
+    try assert_eq_i32(post_path.nodes[2], 0);
+}
+
+test "obj tree hit testing prefers deepest child" {
+    gui_obj_reset_registry();
+
+    var root: GuiObj = gui_obj_default();
+    var child: GuiObj = gui_obj_default();
+    var leaf: GuiObj = gui_obj_default();
+
+    root.set_area(Rect{ x: 0, y: 0, w: 200, h: 200 });
+    child.set_area(Rect{ x: 20, y: 20, w: 80, h: 80 });
+    leaf.set_area(Rect{ x: 10, y: 10, w: 30, h: 30 });
+
+    _ = gui_obj_register(0, &root);
+    _ = gui_obj_register(1, &child);
+    _ = gui_obj_register(2, &leaf);
+
+    var tree: ObjTree = obj_tree_new();
+    tree.set_root(0, &root);
+    tree.attach(0, 1);
+    tree.attach(1, 2);
+
+    try assert_eq_i32(tree.find_at_point(0, Point{ x: 5, y: 5 }), 0);
+    try assert_eq_i32(tree.find_at_point(0, Point{ x: 25, y: 25 }), 1);
+    try assert_eq_i32(tree.find_at_point(0, Point{ x: 35, y: 35 }), 2);
+    try assert_eq_i32(tree.find_at_point(0, Point{ x: 250, y: 250 }), -1);
+}

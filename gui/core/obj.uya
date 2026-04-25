@@ -1,0 +1,319 @@
+use core.event.Event;
+use core.event.EventType;
+use core.rect.Rect;
+use render.ctx.RenderCtx;
+use style.Style;
+use style.style_default;
+
+export const GUI_OBJ_REGISTRY_CAPACITY: i32 = 256;
+
+export interface IGuiObj {
+    fn type_id(self: &Self) u32;
+    fn parent(self: &Self) &GuiObj;
+    fn area(self: &Self) Rect;
+    fn set_area(self: &Self, r: Rect) void;
+    fn screen_area(self: &Self) Rect;
+    fn invalidate(self: &Self) void;
+    fn visible(self: &Self) bool;
+    fn layout(self: &Self, available: Rect) void;
+    fn render(self: &Self, ctx: &RenderCtx) void;
+    fn handle_event(self: &Self, evt: &Event) bool;
+}
+
+export interface IContainer {
+    fn add_child(self: &Self, child: &GuiObj) void;
+    fn remove_child(self: &Self, child: &GuiObj) void;
+    fn child_count(self: &Self) i32;
+    fn child_at(self: &Self, index: i32) &GuiObj;
+}
+
+export struct ObjFlags {
+    visible: bool,
+    enabled: bool,
+    invalid: bool,
+    floating: bool,
+    clickable: bool,
+    focusable: bool,
+    dirty: bool,
+    reserved: u8,
+}
+
+export struct GuiObj : IGuiObj, IContainer {
+    obj_idx: i32,
+    type_tag: u32,
+    parent_ref: &GuiObj,
+    parent_idx: i32,
+    child_head: &GuiObj,
+    child_tail: &GuiObj,
+    sibling_prev: &GuiObj,
+    sibling_next: &GuiObj,
+    x: i16,
+    y: i16,
+    w: u16,
+    h: u16,
+    flags: ObjFlags,
+    style: Style,
+    user_data: &void,
+    name_ptr: &const byte,
+}
+
+var _gui_obj_registry: [&GuiObj: 256] = [];
+
+export fn obj_flags_default() ObjFlags {
+    return ObjFlags{
+        visible: true,
+        enabled: true,
+        invalid: false,
+        floating: false,
+        clickable: false,
+        focusable: false,
+        dirty: true,
+        reserved: 0,
+    };
+}
+
+GuiObj {
+    fn type_id(self: &Self) u32 {
+        return self.type_tag;
+    }
+
+    fn parent(self: &Self) &GuiObj {
+        return self.parent_ref;
+    }
+
+    fn area(self: &Self) Rect {
+        return Rect{
+            x: self.x,
+            y: self.y,
+            w: self.w,
+            h: self.h,
+        };
+    }
+
+    fn set_area(self: &Self, r: Rect) void {
+        self.x = r.x;
+        self.y = r.y;
+        self.w = r.w;
+        self.h = r.h;
+        self.flags.dirty = true;
+    }
+
+    fn screen_area(self: &Self) Rect {
+        var current: &GuiObj = self.parent_ref;
+        var sx: i32 = self.x as i32;
+        var sy: i32 = self.y as i32;
+
+        while current != null {
+            sx = sx + current.x as i32;
+            sy = sy + current.y as i32;
+            current = current.parent_ref;
+        }
+
+        return Rect{
+            x: sx as i16,
+            y: sy as i16,
+            w: self.w,
+            h: self.h,
+        };
+    }
+
+    fn invalidate(self: &Self) void {
+        var current: &GuiObj = self;
+        while current != null {
+            if current.flags.invalid {
+                break;
+            }
+            current.flags.invalid = true;
+            current.flags.dirty = true;
+            current = current.parent_ref;
+        }
+    }
+
+    fn visible(self: &Self) bool {
+        return self.flags.visible;
+    }
+
+    fn layout(self: &Self, available: Rect) void {
+        if self.w == 0 {
+            self.w = available.w;
+        }
+        if self.h == 0 {
+            self.h = available.h;
+        }
+        self.flags.dirty = false;
+    }
+
+    fn render(self: &Self, ctx: &RenderCtx) void {
+        _ = self;
+        _ = ctx;
+    }
+
+    fn handle_event(self: &Self, evt: &Event) bool {
+        if !self.flags.enabled || evt.target != self.obj_idx {
+            return false;
+        }
+        if evt.event_type == EventType.Click || evt.event_type == EventType.Press || evt.event_type == EventType.Release {
+            evt.handled = true;
+            return true;
+        }
+        return false;
+    }
+
+    fn add_child(self: &Self, child: &GuiObj) void {
+        if child == null || child == self {
+            return;
+        }
+
+        if child.parent_ref != null {
+            child.parent_ref.remove_child(child);
+        }
+
+        child.parent_ref = self;
+        child.parent_idx = self.obj_idx;
+        child.sibling_prev = self.child_tail;
+        child.sibling_next = null;
+
+        if self.child_tail != null {
+            self.child_tail.sibling_next = child;
+        } else {
+            self.child_head = child;
+        }
+
+        self.child_tail = child;
+        self.invalidate();
+    }
+
+    fn remove_child(self: &Self, child: &GuiObj) void {
+        if child == null || child.parent_ref != self {
+            return;
+        }
+
+        if child.sibling_prev != null {
+            child.sibling_prev.sibling_next = child.sibling_next;
+        } else {
+            self.child_head = child.sibling_next;
+        }
+
+        if child.sibling_next != null {
+            child.sibling_next.sibling_prev = child.sibling_prev;
+        } else {
+            self.child_tail = child.sibling_prev;
+        }
+
+        child.parent_ref = null;
+        child.parent_idx = -1;
+        child.sibling_prev = null;
+        child.sibling_next = null;
+        self.invalidate();
+    }
+
+    fn child_count(self: &Self) i32 {
+        var count: i32 = 0;
+        var child: &GuiObj = self.child_head;
+        while child != null {
+            count = count + 1;
+            child = child.sibling_next;
+        }
+        return count;
+    }
+
+    fn child_at(self: &Self, index: i32) &GuiObj {
+        if index < 0 {
+            return null;
+        }
+
+        var child: &GuiObj = self.child_head;
+        var i: i32 = 0;
+        while child != null {
+            if i == index {
+                return child;
+            }
+            child = child.sibling_next;
+            i = i + 1;
+        }
+        return null;
+    }
+
+    fn move_to(self: &Self, nx: i16, ny: i16) void {
+        if self.x == nx && self.y == ny {
+            return;
+        }
+        self.x = nx;
+        self.y = ny;
+        self.invalidate();
+    }
+
+    fn set_size(self: &Self, nw: u16, nh: u16) void {
+        if self.w == nw && self.h == nh {
+            return;
+        }
+        self.w = nw;
+        self.h = nh;
+        self.invalidate();
+    }
+
+}
+
+export fn gui_obj_default() GuiObj {
+    return GuiObj{
+        obj_idx: -1,
+        type_tag: 0,
+        parent_ref: null,
+        parent_idx: -1,
+        child_head: null,
+        child_tail: null,
+        sibling_prev: null,
+        sibling_next: null,
+        x: 0,
+        y: 0,
+        w: 0,
+        h: 0,
+        flags: obj_flags_default(),
+        style: style_default(),
+        user_data: null,
+        name_ptr: "obj",
+    };
+}
+
+export fn gui_obj_register(idx: i32, obj: &GuiObj) bool {
+    if idx < 0 || idx >= GUI_OBJ_REGISTRY_CAPACITY || obj == null {
+        return false;
+    }
+    const slot: usize = (idx as! usize).value;
+    if slot >= (GUI_OBJ_REGISTRY_CAPACITY as usize) {
+        return false;
+    }
+    _gui_obj_registry[slot] = obj;
+    obj.obj_idx = idx;
+    return true;
+}
+
+export fn gui_obj_get(idx: i32) &GuiObj {
+    if idx < 0 || idx >= GUI_OBJ_REGISTRY_CAPACITY {
+        return null;
+    }
+    const slot: usize = (idx as! usize).value;
+    if slot >= (GUI_OBJ_REGISTRY_CAPACITY as usize) {
+        return null;
+    }
+    return _gui_obj_registry[slot];
+}
+
+export fn gui_obj_unregister(idx: i32) void {
+    if idx < 0 || idx >= GUI_OBJ_REGISTRY_CAPACITY {
+        return;
+    }
+    const slot: usize = (idx as! usize).value;
+    if slot >= (GUI_OBJ_REGISTRY_CAPACITY as usize) {
+        return;
+    }
+    _gui_obj_registry[slot] = null;
+}
+
+export fn gui_obj_reset_registry() void {
+    var i: i32 = 0;
+    while i < GUI_OBJ_REGISTRY_CAPACITY {
+        _gui_obj_registry[i] = null;
+        i = i + 1;
+    }
+}

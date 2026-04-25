@@ -1,0 +1,182 @@
+use core.obj.GuiObj;
+use core.obj.gui_obj_get;
+use core.point.Point;
+use core.rect.Rect;
+
+export const OBJ_TREE_MAX_PATH: i32 = 64;
+
+export struct BubblePath {
+    nodes: [i32: 64],
+    len: i32,
+}
+
+fn bubble_path_append(path: &BubblePath, idx: i32) void {
+    if path.len >= OBJ_TREE_MAX_PATH {
+        return;
+    }
+    path.nodes[path.len as usize] = idx;
+    path.len = path.len + 1;
+}
+
+export struct ObjTree {
+    root_idx: i32,
+    root: &GuiObj,
+    node_count: i32,
+
+    fn set_root(self: &Self, root_idx: i32, root: &GuiObj) void {
+        self.root_idx = root_idx;
+        self.root = root;
+        if root != null {
+            root.parent_ref = null;
+            root.parent_idx = -1;
+            self.node_count = 1;
+        } else {
+            self.node_count = 0;
+        }
+    }
+
+    fn attach(self: &Self, parent_idx: i32, child_idx: i32) void {
+        const parent: &GuiObj = gui_obj_get(parent_idx);
+        const child: &GuiObj = gui_obj_get(child_idx);
+        if parent == null || child == null {
+            return;
+        }
+
+        parent.add_child(child);
+        if self.node_count < OBJ_TREE_MAX_PATH {
+            self.node_count = self.node_count + 1;
+        }
+    }
+
+    fn detach(self: &Self, child_idx: i32) void {
+        const child: &GuiObj = gui_obj_get(child_idx);
+        if child == null || child.parent_ref == null {
+            return;
+        }
+
+        child.parent_ref.remove_child(child);
+        if self.node_count > 0 {
+            self.node_count = self.node_count - 1;
+        }
+    }
+
+    fn foreach_child(self: &Self, parent_idx: i32) BubblePath {
+        _ = self;
+        var out: BubblePath = BubblePath{
+            nodes: [],
+            len: 0,
+        };
+        const parent: &GuiObj = gui_obj_get(parent_idx);
+        if parent == null {
+            return out;
+        }
+
+        var child: &GuiObj = parent.child_head;
+        while child != null {
+            bubble_path_append(&out, child.obj_idx);
+            child = child.sibling_next;
+        }
+        return out;
+    }
+
+    fn pre_order(self: &Self, root_idx: i32) BubblePath {
+        var out: BubblePath = BubblePath{
+            nodes: [],
+            len: 0,
+        };
+        self.pre_order_fill(root_idx, &out);
+        return out;
+    }
+
+    fn pre_order_fill(self: &Self, root_idx: i32, out: &BubblePath) void {
+        const root: &GuiObj = gui_obj_get(root_idx);
+        if root == null {
+            return;
+        }
+
+        bubble_path_append(out, root_idx);
+        var child: &GuiObj = root.child_head;
+        while child != null {
+            self.pre_order_fill(child.obj_idx, out);
+            child = child.sibling_next;
+        }
+    }
+
+    fn post_order(self: &Self, root_idx: i32) BubblePath {
+        var out: BubblePath = BubblePath{
+            nodes: [],
+            len: 0,
+        };
+        self.post_order_fill(root_idx, &out);
+        return out;
+    }
+
+    fn post_order_fill(self: &Self, root_idx: i32, out: &BubblePath) void {
+        const root: &GuiObj = gui_obj_get(root_idx);
+        if root == null {
+            return;
+        }
+
+        var child: &GuiObj = root.child_head;
+        while child != null {
+            self.post_order_fill(child.obj_idx, out);
+            child = child.sibling_next;
+        }
+        bubble_path_append(out, root_idx);
+    }
+
+    fn find_at_point(self: &Self, root_idx: i32, point: Point) i32 {
+        const root: &GuiObj = gui_obj_get(root_idx);
+        return self.find_recursive(root, point);
+    }
+
+    fn bubble_path(self: &Self, target_idx: i32) BubblePath {
+        _ = self;
+        var path: BubblePath = BubblePath{
+            nodes: [],
+            len: 0,
+        };
+
+        var current: &GuiObj = gui_obj_get(target_idx);
+        while current != null && path.len < OBJ_TREE_MAX_PATH {
+            path.nodes[path.len as usize] = current.obj_idx;
+            path.len = path.len + 1;
+            current = current.parent_ref;
+        }
+        return path;
+    }
+
+    fn find_recursive(self: &Self, node: &GuiObj, point: Point) i32 {
+        _ = self;
+        if node == null || !node.visible() {
+            return -1;
+        }
+
+        var hit: i32 = -1;
+        var child: &GuiObj = node.child_head;
+        while child != null {
+            const child_hit: i32 = self.find_recursive(child, point);
+            if child_hit >= 0 {
+                hit = child_hit;
+            }
+            child = child.sibling_next;
+        }
+
+        if hit >= 0 {
+            return hit;
+        }
+        const area: Rect = node.screen_area();
+        if area.contains(point) {
+            return node.obj_idx;
+        }
+        return -1;
+    }
+}
+
+export fn obj_tree_new() ObjTree {
+    return ObjTree{
+        root_idx: -1,
+        root: null,
+        node_count: 0,
+    };
+}

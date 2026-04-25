@@ -1,0 +1,69 @@
+use libc.sqrt;
+
+fn point_clamp_unit_f64(v: f64) f64 {
+    if v < 0.0 {
+        return 0.0;
+    }
+    if v > 1.0 {
+        return 1.0;
+    }
+    return v;
+}
+
+fn round_to_i16(v: f64) i16 {
+    if v >= 0.0 {
+        return (v + 0.5) as i16;
+    }
+    return (v - 0.5) as i16;
+}
+
+export struct Point {
+    x: i16,
+    y: i16,
+}
+
+export const POINT_ZERO: Point = Point{ x: 0, y: 0 };
+export const POINT_ONE: Point = Point{ x: 1, y: 1 };
+
+Point {
+    fn add(self: &Self, other: Point) Point {
+        return Point{
+            x: (self.x as i32 + other.x as i32) as i16,
+            y: (self.y as i32 + other.y as i32) as i16,
+        };
+    }
+
+    fn sub(self: &Self, other: Point) Point {
+        return Point{
+            x: (self.x as i32 - other.x as i32) as i16,
+            y: (self.y as i32 - other.y as i32) as i16,
+        };
+    }
+
+    fn scale(self: &Self, factor: i16) Point {
+        return Point{
+            x: (self.x as i32 * factor as i32) as i16,
+            y: (self.y as i32 * factor as i32) as i16,
+        };
+    }
+
+    fn distance(self: &Self, other: Point) f64 {
+        const dx: i32 = self.x as i32 - other.x as i32;
+        const dy: i32 = self.y as i32 - other.y as i32;
+        const dist_sq: i32 = dx * dx + dy * dy;
+        return sqrt(dist_sq as f64);
+    }
+
+    fn lerp(self: &Self, other: Point, t: f64) Point {
+        const tt: f64 = point_clamp_unit_f64(t);
+        const x0: f64 = self.x as f64;
+        const y0: f64 = self.y as f64;
+        const dx: f64 = (other.x as f64) - x0;
+        const dy: f64 = (other.y as f64) - y0;
+
+        return Point{
+            x: round_to_i16(x0 + dx * tt),
+            y: round_to_i16(y0 + dy * tt),
+        };
+    }
+}

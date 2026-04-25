@@ -1,0 +1,69 @@
+use core.event.Event;
+use core.event.EventQueue;
+use core.event.EventType;
+use core.event.GestureDetector;
+use core.event.InputDev;
+use core.event.event_none;
+use core.event.event_point;
+use core.event.event_queue_new;
+use core.event.gesture_detector_new;
+use core.point.Point;
+use std.testing.assert_eq_bool;
+use std.testing.assert_eq_i32;
+use std.testing.expect;
+
+export const TEST_EVENT_MODULE: i32 = 1;
+
+test "event queue push pop order" {
+    var queue: EventQueue = event_queue_new();
+    var first: Event = event_none();
+    var second: Event = event_none();
+
+    try assert_eq_bool(queue.is_empty(), true);
+    try assert_eq_bool(queue.push(event_point(EventType.Press, InputDev.Touch, 1, 10, Point{ x: 1, y: 2 })), true);
+    try assert_eq_bool(queue.push(event_point(EventType.Release, InputDev.Touch, 1, 20, Point{ x: 3, y: 4 })), true);
+    try assert_eq_i32(queue.len(), 2);
+
+    try assert_eq_bool(queue.pop(&first), true);
+    try assert_eq_bool(queue.pop(&second), true);
+
+    try expect(first.event_type == EventType.Press);
+    try expect(second.event_type == EventType.Release);
+    try assert_eq_bool(queue.is_empty(), true);
+}
+
+test "gesture detector click sequence" {
+    var detector: GestureDetector = gesture_detector_new();
+    var queue: EventQueue = event_queue_new();
+    var press_evt: Event = event_none();
+    var release_evt: Event = event_none();
+    var click_evt: Event = event_none();
+
+    detector.process_touch(Point{ x: 10, y: 10 }, true, 100, 7, &queue);
+    detector.process_touch(Point{ x: 12, y: 12 }, false, 180, 7, &queue);
+
+    try assert_eq_bool(queue.pop(&press_evt), true);
+    try assert_eq_bool(queue.pop(&release_evt), true);
+    try assert_eq_bool(queue.pop(&click_evt), true);
+
+    try expect(press_evt.event_type == EventType.Press);
+    try expect(release_evt.event_type == EventType.Release);
+    try expect(click_evt.event_type == EventType.Click);
+    try assert_eq_bool(queue.is_empty(), true);
+}
+
+test "gesture detector swipe sequence" {
+    var detector: GestureDetector = gesture_detector_new();
+    var queue: EventQueue = event_queue_new();
+    var evt: Event = event_none();
+
+    detector.process_touch(Point{ x: 0, y: 0 }, true, 100, 3, &queue);
+    detector.process_touch(Point{ x: 30, y: 0 }, false, 200, 3, &queue);
+
+    try assert_eq_bool(queue.pop(&evt), true);
+    try expect(evt.event_type == EventType.Press);
+    try assert_eq_bool(queue.pop(&evt), true);
+    try expect(evt.event_type == EventType.Release);
+    try assert_eq_bool(queue.pop(&evt), true);
+    try expect(evt.event_type == EventType.SwipeRight);
+}

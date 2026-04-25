@@ -1,0 +1,18 @@
+use tests.test_bitmap;
+use tests.test_color;
+use tests.test_core_types;
+use tests.test_event;
+use tests.test_obj_tree;
+use tests.test_pool;
+use tests.test_rect;
+
+test "phase0 suite loads" {
+    const sentinel: i32 = TEST_BITMAP_MODULE
+        + TEST_COLOR_MODULE
+        + TEST_CORE_TYPES_MODULE
+        + TEST_EVENT_MODULE
+        + TEST_OBJ_TREE_MODULE
+        + TEST_POOL_MODULE
+        + TEST_RECT_MODULE;
+    _ = sentinel;
+}

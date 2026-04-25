@@ -1,0 +1,31 @@
+name: gui-phase0
+
+on:
+  push:
+    paths:
+      - "gui/**"
+      - "docs/gui_uya_todo.md"
+      - "docs/development.md"
+      - "Makefile"
+      - "uya.toml"
+      - ".github/workflows/gui-phase0.yml"
+  pull_request:
+    paths:
+      - "gui/**"
+      - "docs/gui_uya_todo.md"
+      - "docs/development.md"
+      - "Makefile"
+      - "uya.toml"
+      - ".github/workflows/gui-phase0.yml"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show compiler version
+        run: ./uya/bin/uya --version
+      - name: Build smoke example
+        run: make build
+      - name: Run GUI tests
+        run: make test

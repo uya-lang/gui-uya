@@ -1,0 +1,60 @@
+use std.runtime.entry;
+
+use core.obj.GuiObj;
+use core.obj.gui_obj_default;
+use core.obj_pool.ObjPool;
+use core.obj_pool.obj_pool_new;
+use std.mem.allocator.MallocAllocator;
+use std.mem.allocator.g_allocator;
+use std.time.now_ms;
+
+extern "libc" fn printf(fmt: *byte, ...) i32;
+
+const BENCH_ITERATIONS: i32 = 5000;
+
+fn bench_obj_pool() !u64 {
+    var pool: ObjPool = obj_pool_new();
+    const start_ms: u64 = try now_ms();
+
+    var i: i32 = 0;
+    while i < BENCH_ITERATIONS {
+        const obj: &GuiObj = pool.alloc_obj();
+        if obj == null {
+            return 0u64;
+        }
+        obj[0] = gui_obj_default();
+        obj.type_tag = (i as! u32).value;
+        pool.free_obj(obj);
+        i = i + 1;
+    }
+
+    return (try now_ms()) - start_ms;
+}
+
+fn bench_allocator() !u64 {
+    const allocator: &MallocAllocator = &g_allocator;
+    const start_ms: u64 = try now_ms();
+
+    var i: i32 = 0;
+    while i < BENCH_ITERATIONS {
+        const ptr: &byte = try allocator.alloc(@size_of(GuiObj) as usize);
+        allocator.dealloc(ptr);
+        i = i + 1;
+    }
+
+    return (try now_ms()) - start_ms;
+}
+
+export fn run_core_bench() i32 {
+    const pool_ms: u64 = bench_obj_pool() catch {
+        return 1;
+    };
+    const heap_ms: u64 = bench_allocator() catch {
+        return 2;
+    };
+
+    printf("Phase0 benchmark (%d iterations)\n" as *byte, BENCH_ITERATIONS);
+    printf("obj_pool : %lu ms\n" as *byte, pool_ms);
+    printf("allocator: %lu ms\n" as *byte, heap_ms);
+    return 0;
+}

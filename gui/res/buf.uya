@@ -1,0 +1,79 @@
+use std.mem.allocator.MallocAllocator;
+
+export struct ByteSlice {
+    ptr: &byte,
+    len: usize,
+}
+
+export struct Buffer {
+    allocator: &MallocAllocator,
+    data: &byte,
+    len: usize,
+    cap: usize,
+
+    fn resize(self: &Self, new_len: usize) !void {
+        if new_len > self.cap {
+            var new_cap: usize = self.cap;
+            if new_cap == 0 {
+                new_cap = 32;
+            }
+            while new_cap < new_len {
+                new_cap = new_cap * 2;
+            }
+
+            if self.data == null {
+                self.data = try self.allocator.alloc(new_cap);
+            } else {
+                self.data = try self.allocator.realloc(self.data, new_cap);
+            }
+            self.cap = new_cap;
+        }
+
+        if new_len > self.len {
+            var i: usize = self.len;
+            while i < new_len {
+                self.data[i] = 0;
+                i = i + 1;
+            }
+        }
+
+        self.len = new_len;
+    }
+
+    fn clear(self: &Self) void {
+        self.len = 0;
+    }
+
+    fn append(self: &Self, src: &[const byte]) !void {
+        const old_len: usize = self.len;
+        try self.resize(old_len + src.len);
+
+        var i: usize = 0;
+        while i < src.len {
+            self.data[old_len + i] = src.ptr[i];
+            i = i + 1;
+        }
+    }
+
+    fn as_slice(self: &Self) ByteSlice {
+        return ByteSlice{
+            ptr: self.data,
+            len: self.len,
+        };
+    }
+
+    fn drop(self: Buffer) void {
+        if self.data != null {
+            self.allocator.dealloc(self.data);
+        }
+    }
+}
+
+export fn buffer_new(allocator: &MallocAllocator) Buffer {
+    return Buffer{
+        allocator: allocator,
+        data: null,
+        len: 0,
+        cap: 0,
+    };
+}

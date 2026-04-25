@@ -1,0 +1,133 @@
+extern "libc" fn __atomic_compare_exchange_n(ptr: &i32, expected: &i32, desired: i32, weak: i32, success_mem: i32, failure_mem: i32) i32;
+
+const BITMAP_ATOMIC_SEQ_CST: i32 = 5;
+
+export const BITMAP_ALLOCATOR_MAX_BITS: i32 = 256;
+const BITMAP_ALLOCATOR_WORDS: i32 = 4;
+
+error BitmapAllocatorExhausted;
+
+fn bitmap_lock(lock: &atomic i32) void {
+    var expected: i32 = 0;
+    while __atomic_compare_exchange_n(lock as &i32, &expected, 1, 0, BITMAP_ATOMIC_SEQ_CST, BITMAP_ATOMIC_SEQ_CST) == 0 {
+        expected = 0;
+    }
+}
+
+fn bitmap_unlock(lock: &atomic i32) void {
+    var raw: &i32 = lock as &i32;
+    raw[0] = 0;
+}
+
+fn bitmap_find_first_zero_bit(word: u64) i32 {
+    var bit: i32 = 0;
+    while bit < 64 {
+        if (word & (1u64 << bit)) == 0 {
+            return bit;
+        }
+        bit = bit + 1;
+    }
+    return -1;
+}
+
+export struct BitmapAllocator {
+    words: [u64: 4],
+    capacity: i32,
+    used_count: atomic i32,
+    lock: atomic i32,
+}
+
+BitmapAllocator {
+    fn find_first_zero_unlocked(self: &Self) i32 {
+        var word_idx: i32 = 0;
+        while word_idx < BITMAP_ALLOCATOR_WORDS {
+            if self.words[word_idx] != 0xFFFFFFFFFFFFFFFFu64 {
+                const bit_idx: i32 = bitmap_find_first_zero_bit(self.words[word_idx]);
+                if bit_idx >= 0 {
+                    const slot: i32 = word_idx * 64 + bit_idx;
+                    if slot < self.capacity {
+                        return slot;
+                    }
+                }
+            }
+            word_idx = word_idx + 1;
+        }
+        return -1;
+    }
+
+    fn set_used_unlocked(self: &Self, idx: i32, used: bool) void {
+        const word_idx: usize = (idx / 64) as usize;
+        const bit_idx: i32 = idx % 64;
+        const mask: u64 = 1u64 << bit_idx;
+        if used {
+            self.words[word_idx] = self.words[word_idx] | mask;
+        } else {
+            self.words[word_idx] = self.words[word_idx] & (~mask);
+        }
+    }
+
+    fn alloc(self: &Self) i32 {
+        bitmap_lock(&self.lock);
+        const idx: i32 = self.find_first_zero_unlocked();
+        if idx >= 0 {
+            self.set_used_unlocked(idx, true);
+            self.used_count += 1;
+        }
+        bitmap_unlock(&self.lock);
+        return idx;
+    }
+
+    fn free(self: &Self, idx: i32) void {
+        if idx < 0 || idx >= self.capacity {
+            return;
+        }
+        bitmap_lock(&self.lock);
+        if self.is_used(idx) {
+            self.set_used_unlocked(idx, false);
+            self.used_count -= 1;
+        }
+        bitmap_unlock(&self.lock);
+    }
+
+    fn is_used(self: &Self, idx: i32) bool {
+        if idx < 0 || idx >= self.capacity {
+            return false;
+        }
+        const word_idx: usize = (idx / 64) as usize;
+        const bit_idx: i32 = idx % 64;
+        const mask: u64 = 1u64 << bit_idx;
+        return (self.words[word_idx] & mask) != 0;
+    }
+
+    fn find_first_zero(self: &Self) i32 {
+        bitmap_lock(&self.lock);
+        const idx: i32 = self.find_first_zero_unlocked();
+        bitmap_unlock(&self.lock);
+        return idx;
+    }
+
+    fn used(self: &Self) i32 {
+        return self.used_count;
+    }
+
+    fn free_slots(self: &Self) i32 {
+        return self.capacity - self.used_count;
+    }
+}
+
+export fn bitmap_allocator_new(capacity: i32) BitmapAllocator {
+    var capped: i32 = capacity;
+    if capped < 0 {
+        capped = 0;
+    }
+    if capped > BITMAP_ALLOCATOR_MAX_BITS {
+        capped = BITMAP_ALLOCATOR_MAX_BITS;
+    }
+
+    return BitmapAllocator{
+        words: [],
+        capacity: capped,
+        used_count: 0,
+        lock: 0,
+    };
+}

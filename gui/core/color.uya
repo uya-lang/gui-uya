@@ -1,0 +1,88 @@
+fn clamp_channel(v: f64) u8 {
+    if v <= 0.0 {
+        return 0;
+    }
+    if v >= 255.0 {
+        return 255;
+    }
+    return (v + 0.5) as u8;
+}
+
+fn color_clamp_unit_f64(v: f64) f64 {
+    if v < 0.0 {
+        return 0.0;
+    }
+    if v > 1.0 {
+        return 1.0;
+    }
+    return v;
+}
+
+export struct Color {
+    r: u8,
+    g: u8,
+    b: u8,
+    a: u8,
+}
+
+export const BLACK: Color = Color{ r: 0, g: 0, b: 0, a: 255 };
+export const WHITE: Color = Color{ r: 255, g: 255, b: 255, a: 255 };
+export const RED: Color = Color{ r: 255, g: 0, b: 0, a: 255 };
+export const GREEN: Color = Color{ r: 0, g: 255, b: 0, a: 255 };
+export const BLUE: Color = Color{ r: 0, g: 0, b: 255, a: 255 };
+export const TRANSPARENT: Color = Color{ r: 0, g: 0, b: 0, a: 0 };
+
+export mc COLOR(hex: expr) expr {
+    @mc_code(@mc_ast(Color{
+        r: ((${hex} >> 16) & 0xFF) as u8,
+        g: ((${hex} >> 8) & 0xFF) as u8,
+        b: (${hex} & 0xFF) as u8,
+        a: 0xFF,
+    }));
+}
+
+Color {
+    fn blend(self: &Self, src: Color) Color {
+        if src.a == 255 {
+            return src;
+        }
+        if src.a == 0 {
+            return Color{ r: self.r, g: self.g, b: self.b, a: self.a };
+        }
+
+        const sa: u32 = src.a as u32;
+        const inv_sa: u32 = 255u32 - sa;
+        const out_a: u32 = sa + (((self.a as u32) * inv_sa + 127u32) / 255u32);
+
+        return Color{
+            r: (((src.r as u32) * sa + (self.r as u32) * inv_sa + 127u32) / 255u32) as u8,
+            g: (((src.g as u32) * sa + (self.g as u32) * inv_sa + 127u32) / 255u32) as u8,
+            b: (((src.b as u32) * sa + (self.b as u32) * inv_sa + 127u32) / 255u32) as u8,
+            a: out_a as u8,
+        };
+    }
+
+    fn to_rgb565(self: &Self) u16 {
+        const r5: u16 = ((self.r as u16) >> 3) & 0x1F;
+        const g6: u16 = ((self.g as u16) >> 2) & 0x3F;
+        const b5: u16 = ((self.b as u16) >> 3) & 0x1F;
+        return (r5 << 11) | (g6 << 5) | b5;
+    }
+
+    fn to_argb8888(self: &Self) u32 {
+        return ((self.a as u32) << 24)
+            | ((self.r as u32) << 16)
+            | ((self.g as u32) << 8)
+            | (self.b as u32);
+    }
+
+    fn lerp(self: &Self, other: Color, t: f64) Color {
+        const tt: f64 = color_clamp_unit_f64(t);
+        return Color{
+            r: clamp_channel((self.r as f64) + ((other.r as f64) - (self.r as f64)) * tt),
+            g: clamp_channel((self.g as f64) + ((other.g as f64) - (self.g as f64)) * tt),
+            b: clamp_channel((self.b as f64) + ((other.b as f64) - (self.b as f64)) * tt),
+            a: clamp_channel((self.a as f64) + ((other.a as f64) - (self.a as f64)) * tt),
+        };
+    }
+}

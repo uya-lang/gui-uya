@@ -1,0 +1,41 @@
+use core.color.Color;
+use core.color.TRANSPARENT;
+use core.rect.RECT_ZERO;
+use core.rect.Rect;
+use core.size.SIZE_ZERO;
+use core.size.Size;
+
+export enum PixelFormat {
+    RGB565,
+    ARGB8888,
+}
+
+export struct FrameBuffer {
+    pixels: &byte,
+    size: Size,
+    stride: u16,
+    format: PixelFormat,
+}
+
+export struct RenderCtx {
+    fb: FrameBuffer,
+    clip: Rect,
+    clear_color: Color,
+}
+
+export fn empty_framebuffer() FrameBuffer {
+    return FrameBuffer{
+        pixels: null,
+        size: SIZE_ZERO,
+        stride: 0,
+        format: PixelFormat.RGB565,
+    };
+}
+
+export fn default_ctx() RenderCtx {
+    return RenderCtx{
+        fb: empty_framebuffer(),
+        clip: RECT_ZERO,
+        clear_color: TRANSPARENT,
+    };
+}

@@ -1,0 +1,24 @@
+use core.color.BLACK;
+use core.color.Color;
+use core.color.TRANSPARENT;
+use core.color.WHITE;
+
+export struct Style {
+    background: Color,
+    foreground: Color,
+    border: Color,
+    border_width: u8,
+    radius: u8,
+    opacity: u8,
+}
+
+export fn style_default() Style {
+    return Style{
+        background: Color{ r: 0, g: 0, b: 0, a: 0 },
+        foreground: Color{ r: 0, g: 0, b: 0, a: 255 },
+        border: Color{ r: 255, g: 255, b: 255, a: 255 },
+        border_width: 0,
+        radius: 0,
+        opacity: 255,
+    };
+}
