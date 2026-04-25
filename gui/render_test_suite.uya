@@ -1,0 +1,10 @@
+use tests.test_render_assets;
+use tests.test_render_ctx;
+use tests.test_render_pipeline;
+
+test "render suite loads" {
+    const sentinel: i32 = TEST_RENDER_ASSETS_MODULE
+        + TEST_RENDER_CTX_MODULE
+        + TEST_RENDER_PIPELINE_MODULE;
+    _ = sentinel;
+}

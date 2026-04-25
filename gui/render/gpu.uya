@@ -1,0 +1,61 @@
+use core.color.Color;
+use core.rect.Rect;
+use render.batch.DrawCmd;
+use render.batch.DrawCmdKind;
+use render.ctx.RenderCtx;
+use render.img.draw_image;
+use render.img.draw_image_clipped;
+
+export interface IGpuCtx {
+    fn draw_rects(self: &Self, rects: &Rect, colors: &Color, count: i32) void;
+    fn draw_images(self: &Self, cmds: &DrawCmd, count: i32) void;
+    fn fill_rects(self: &Self, rects: &Rect, colors: &Color, count: i32) void;
+    fn sync(self: &Self) void;
+}
+
+export struct SoftwareGpuCtx : IGpuCtx {
+    ctx: &RenderCtx,
+    sync_count: u32,
+
+    fn draw_rects(self: &Self, rects: &Rect, colors: &Color, count: i32) void {
+        var i: i32 = 0;
+        while i < count {
+            self.ctx.draw_rect(rects[i as usize], colors[i as usize], 1);
+            i = i + 1;
+        }
+    }
+
+    fn draw_images(self: &Self, cmds: &DrawCmd, count: i32) void {
+        var i: i32 = 0;
+        while i < count {
+            const cmd: DrawCmd = cmds[i as usize];
+            if cmd.kind == DrawCmdKind.Image {
+                if cmd.has_src {
+                    draw_image_clipped(self.ctx, cmd.rect, &cmd.image, cmd.src_rect);
+                } else {
+                    draw_image(self.ctx, cmd.rect.x, cmd.rect.y, &cmd.image);
+                }
+            }
+            i = i + 1;
+        }
+    }
+
+    fn fill_rects(self: &Self, rects: &Rect, colors: &Color, count: i32) void {
+        var i: i32 = 0;
+        while i < count {
+            self.ctx.fill_rect(rects[i as usize], colors[i as usize]);
+            i = i + 1;
+        }
+    }
+
+    fn sync(self: &Self) void {
+        self.sync_count = self.sync_count + 1u32;
+    }
+}
+
+export fn software_gpu_new(ctx: &RenderCtx) SoftwareGpuCtx {
+    return SoftwareGpuCtx{
+        ctx: ctx,
+        sync_count: 0u32,
+    };
+}

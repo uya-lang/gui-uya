@@ -1,0 +1,52 @@
+use core.color.BLUE;
+use core.color.Color;
+use core.color.GREEN;
+use core.color.RED;
+use core.color.WHITE;
+use core.rect.Rect;
+use platform.disp.FrameBuffer;
+use platform.disp.PixelFormat;
+use platform.disp.framebuffer_get_pixel;
+use platform.disp.framebuffer_new;
+use render.ctx.RenderCtx;
+use render.ctx.ctx_pixel;
+use render.ctx.render_ctx_new;
+use std.testing.assert_eq_bool;
+use std.testing.assert_eq_i32;
+
+export const TEST_RENDER_CTX_MODULE: i32 = 1;
+
+fn render_ctx_color_eq(a: Color, b: Color) bool {
+    return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
+}
+
+test "render ctx draws pixels and clips rects" {
+    var bytes: [byte: 64] = [];
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 4, 4, 8, PixelFormat.RGB565));
+    const green0: Color = Color{ r: 0, g: 255, b: 0, a: 255 };
+    const green1: Color = Color{ r: 0, g: 255, b: 0, a: 255 };
+
+    ctx.draw_pixel(1, 1, RED);
+    try assert_eq_bool(render_ctx_color_eq(ctx_pixel(&ctx, 1, 1), RED), true);
+
+    ctx.push_clip(Rect{ x: 0, y: 0, w: 2, h: 2 });
+    ctx.fill_rect(Rect{ x: 0, y: 0, w: 4, h: 4 }, green0);
+    ctx.pop_clip();
+
+    try assert_eq_bool(render_ctx_color_eq(ctx_pixel(&ctx, 0, 0), green1), true);
+    try assert_eq_bool(render_ctx_color_eq(ctx_pixel(&ctx, 3, 3), Color{ r: 0, g: 0, b: 0, a: 255 }), true);
+}
+
+test "render ctx draws line circle and arc" {
+    var bytes: [byte: 256] = [];
+    const fb: FrameBuffer = framebuffer_new(&bytes[0], 8, 8, 32, PixelFormat.ARGB8888);
+    var ctx: RenderCtx = render_ctx_new(fb);
+
+    ctx.draw_line(0, 0, 7, 7, BLUE, 1);
+    ctx.draw_circle(4, 4, 2, WHITE);
+    ctx.fill_arc(4, 4, 2, 0, 90, GREEN);
+
+    try assert_eq_bool(render_ctx_color_eq(ctx_pixel(&ctx, 0, 0), BLUE), true);
+    try assert_eq_bool(ctx.stats.line_ops >= 1u32, true);
+    try assert_eq_bool(ctx.stats.circle_ops >= 1u32, true);
+}

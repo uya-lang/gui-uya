@@ -1,0 +1,67 @@
+use core.color.BLUE;
+use core.color.Color;
+use core.color.GREEN;
+use core.color.RED;
+use core.rect.Rect;
+use platform.disp.DisplayCtx;
+use platform.disp.FrameBuffer;
+use platform.disp.PixelFormat;
+use platform.disp.display_ctx_new;
+use platform.disp.framebuffer_new;
+use render.batch.DrawBatch;
+use render.batch.draw_batch_new;
+use render.ctx.RenderCtx;
+use render.ctx.ctx_pixel;
+use render.ctx.render_ctx_new;
+use render.gpu.SoftwareGpuCtx;
+use render.gpu.software_gpu_new;
+use render.zerocopy.ZeroCopyCtx;
+use render.zerocopy.zerocopy_ctx_new;
+use std.testing.assert_eq_bool;
+use std.testing.assert_eq_i32;
+
+export const TEST_RENDER_PIPELINE_MODULE: i32 = 1;
+
+fn render_pipeline_color_eq(a: Color, b: Color) bool {
+    return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
+}
+
+test "batch optimize merges adjacent rects and executes" {
+    var bytes: [byte: 256] = [];
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 8, 8, 16, PixelFormat.RGB565));
+    var batch: DrawBatch = draw_batch_new();
+    const red0: Color = Color{ r: 255, g: 0, b: 0, a: 255 };
+    const red1: Color = Color{ r: 255, g: 0, b: 0, a: 255 };
+    const red2: Color = Color{ r: 255, g: 0, b: 0, a: 255 };
+
+    batch.push_fill_rect(Rect{ x: 0, y: 0, w: 2, h: 2 }, red0);
+    batch.push_fill_rect(Rect{ x: 2, y: 0, w: 2, h: 2 }, red1);
+    batch.optimize();
+    try assert_eq_i32(batch.count as i32, 1);
+    batch.execute(&ctx);
+
+    try assert_eq_bool(render_pipeline_color_eq(ctx_pixel(&ctx, 3, 0), red2), true);
+    try assert_eq_i32(ctx.stats.batch_flushes as i32, 1);
+}
+
+test "software gpu and zerocopy present rendered content" {
+    var front_bytes: [byte: 256] = [];
+    var back_bytes: [byte: 256] = [];
+    const front: FrameBuffer = framebuffer_new(&front_bytes[0], 8, 8, 32, PixelFormat.ARGB8888);
+    const back: FrameBuffer = framebuffer_new(&back_bytes[0], 8, 8, 32, PixelFormat.ARGB8888);
+    var display: DisplayCtx = display_ctx_new(front, back);
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&back_bytes[0], 8, 8, 32, PixelFormat.ARGB8888));
+    var gpu: SoftwareGpuCtx = software_gpu_new(&ctx);
+    var zc: ZeroCopyCtx = zerocopy_ctx_new(&display);
+    var rects: [Rect: 1] = [Rect{ x: 0, y: 0, w: 2, h: 2 }];
+    var colors: [Color: 1] = [GREEN];
+
+    gpu.fill_rects(&rects[0], &colors[0], 1);
+    gpu.draw_rects(&rects[0], &colors[0], 1);
+    gpu.sync();
+    zc.present(Rect{ x: 0, y: 0, w: 2, h: 2 });
+
+    try assert_eq_i32(display.frame_id as i32, 1);
+    try assert_eq_bool(render_pipeline_color_eq(ctx_pixel(&ctx, 0, 0), GREEN), true);
+    try assert_eq_i32(gpu.sync_count as i32, 1);
+}

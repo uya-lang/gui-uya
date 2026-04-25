@@ -1,0 +1,149 @@
+use core.color.Color;
+use core.rect.Rect;
+use core.size.SIZE_ZERO;
+use core.size.Size;
+use libc.cos;
+use libc.sin;
+use platform.disp.FrameBuffer;
+use platform.disp.PixelFormat;
+use platform.disp.framebuffer_get_pixel;
+use platform.disp.framebuffer_new;
+use render.ctx.RenderCtx;
+
+fn image_framebuffer(img: &ImageData) FrameBuffer {
+    return framebuffer_new(img.pixels, img.size.w, img.size.h, img.stride, img.format);
+}
+
+fn image_sample(img: &ImageData, x: i32, y: i32) Color {
+    const fb: FrameBuffer = image_framebuffer(img);
+    return framebuffer_get_pixel(&fb, x, y);
+}
+
+fn radians_from_degrees(deg: i16) f64 {
+    return (deg as f64) * 3.141592653589793 / 180.0;
+}
+
+export struct ImageData {
+    pixels: &byte,
+    size: Size,
+    stride: u16,
+    format: PixelFormat,
+    ref_count: u16,
+}
+
+export fn image_data_new(pixels: &byte, w: u16, h: u16, stride: u16, format: PixelFormat) ImageData {
+    return ImageData{
+        pixels: pixels,
+        size: Size{ w: w, h: h },
+        stride: stride,
+        format: format,
+        ref_count: 1,
+    };
+}
+
+export fn empty_image() ImageData {
+    return ImageData{
+        pixels: null,
+        size: SIZE_ZERO,
+        stride: 0,
+        format: PixelFormat.RGB565,
+        ref_count: 0,
+    };
+}
+
+export fn image_size_bytes(img: &ImageData) u32 {
+    if img.format == PixelFormat.I1 {
+        return ((img.size.w as u32 + 7u32) / 8u32) * img.size.h as u32;
+    }
+    if img.format == PixelFormat.I4 {
+        return ((img.size.w as u32 + 1u32) / 2u32) * img.size.h as u32;
+    }
+    return img.stride as u32 * img.size.h as u32;
+}
+
+export fn image_retain(img: &ImageData) void {
+    img.ref_count = img.ref_count + 1;
+}
+
+export fn image_release(img: &ImageData) void {
+    if img.ref_count > 0 {
+        img.ref_count = img.ref_count - 1;
+    }
+}
+
+export fn draw_image(ctx: &RenderCtx, x: i16, y: i16, img: &ImageData) void {
+    if img == null || img.pixels == null {
+        return;
+    }
+    var sy: i32 = 0;
+    while sy < img.size.h as i32 {
+        var sx: i32 = 0;
+        while sx < img.size.w as i32 {
+            ctx.draw_pixel((x as i32 + sx) as i16, (y as i32 + sy) as i16, image_sample(img, sx, sy));
+            sx = sx + 1;
+        }
+        sy = sy + 1;
+    }
+    ctx.stats.image_ops = ctx.stats.image_ops + 1u32;
+}
+
+export fn draw_image_scaled(ctx: &RenderCtx, rect: Rect, img: &ImageData) void {
+    if rect.is_empty() || img == null || img.pixels == null {
+        return;
+    }
+    var dy: i32 = 0;
+    while dy < rect.h as i32 {
+        var dx: i32 = 0;
+        while dx < rect.w as i32 {
+            const sx: i32 = (dx * img.size.w as i32) / rect.w as i32;
+            const sy: i32 = (dy * img.size.h as i32) / rect.h as i32;
+            ctx.draw_pixel((rect.x as i32 + dx) as i16, (rect.y as i32 + dy) as i16, image_sample(img, sx, sy));
+            dx = dx + 1;
+        }
+        dy = dy + 1;
+    }
+    ctx.stats.image_ops = ctx.stats.image_ops + 1u32;
+}
+
+export fn draw_image_clipped(ctx: &RenderCtx, dst_rect: Rect, img: &ImageData, src_rect: Rect) void {
+    if dst_rect.is_empty() || src_rect.is_empty() || img == null || img.pixels == null {
+        return;
+    }
+    var dy: i32 = 0;
+    while dy < dst_rect.h as i32 {
+        var dx: i32 = 0;
+        while dx < dst_rect.w as i32 {
+            const sx: i32 = src_rect.x as i32 + (dx * src_rect.w as i32) / dst_rect.w as i32;
+            const sy: i32 = src_rect.y as i32 + (dy * src_rect.h as i32) / dst_rect.h as i32;
+            ctx.draw_pixel((dst_rect.x as i32 + dx) as i16, (dst_rect.y as i32 + dy) as i16, image_sample(img, sx, sy));
+            dx = dx + 1;
+        }
+        dy = dy + 1;
+    }
+    ctx.stats.image_ops = ctx.stats.image_ops + 1u32;
+}
+
+export fn draw_image_rotated(ctx: &RenderCtx, x: i16, y: i16, img: &ImageData, angle_deg: i16) void {
+    if img == null || img.pixels == null {
+        return;
+    }
+    const rad: f64 = radians_from_degrees(angle_deg);
+    const cos_v: f64 = cos(rad);
+    const sin_v: f64 = sin(rad);
+    const cx: f64 = img.size.w as f64 / 2.0;
+    const cy: f64 = img.size.h as f64 / 2.0;
+    var sy: i32 = 0;
+    while sy < img.size.h as i32 {
+        var sx: i32 = 0;
+        while sx < img.size.w as i32 {
+            const rel_x: f64 = sx as f64 - cx;
+            const rel_y: f64 = sy as f64 - cy;
+            const rx: i16 = (x as f64 + cx + rel_x * cos_v - rel_y * sin_v) as i16;
+            const ry: i16 = (y as f64 + cy + rel_x * sin_v + rel_y * cos_v) as i16;
+            ctx.draw_pixel(rx, ry, image_sample(img, sx, sy));
+            sx = sx + 1;
+        }
+        sy = sy + 1;
+    }
+    ctx.stats.image_ops = ctx.stats.image_ops + 1u32;
+}

@@ -1,0 +1,104 @@
+use core.color.Color;
+use core.rect.Rect;
+use render.ctx.RenderCtx;
+
+export enum TextAlign {
+    Start,
+    Center,
+    End,
+}
+
+export struct Glyph {
+    code: u8,
+    width: u8,
+    height: u8,
+    advance: u8,
+    offset_x: i8,
+    offset_y: i8,
+    bitmap: &byte,
+}
+
+export struct Font {
+    height: u8,
+    baseline: u8,
+    line_height: u8,
+    glyph_width: u8,
+    glyph_height: u8,
+    tracking: i8,
+}
+
+fn draw_glyph(ctx: &RenderCtx, x: i16, y: i16, glyph: &Glyph, color: &Color) void {
+    if glyph.code == 32u8 {
+        return;
+    }
+    var w: u16 = glyph.width as u16;
+    var h: u16 = glyph.height as u16;
+    if glyph.width > 1 {
+        w = (glyph.width - 1) as u16;
+    }
+    if glyph.height > 1 {
+        h = (glyph.height - 1) as u16;
+    }
+    const outline: Color = Color{ r: color.r, g: color.g, b: color.b, a: color.a };
+    ctx.draw_rect(Rect{ x: x, y: y, w: w, h: h }, outline, 1);
+    if glyph.width > 2 && glyph.height > 2 {
+        const mid: Color = Color{ r: color.r, g: color.g, b: color.b, a: color.a };
+        ctx.draw_line(x + 1, y + glyph.height as i16 / 2, x + glyph.width as i16 - 2, y + glyph.height as i16 / 2, mid, 1);
+    }
+}
+
+export fn font_default() Font {
+    return Font{
+        height: 8,
+        baseline: 7,
+        line_height: 10,
+        glyph_width: 6,
+        glyph_height: 8,
+        tracking: 1,
+    };
+}
+
+export fn glyph_for_char(font: &Font, code: u8) Glyph {
+    return Glyph{
+        code: code,
+        width: font.glyph_width,
+        height: font.glyph_height,
+        advance: (font.glyph_width as i32 + font.tracking as i32) as u8,
+        offset_x: 0,
+        offset_y: 0,
+        bitmap: null,
+    };
+}
+
+export fn text_width(text: &const byte, len: usize, font: &Font) i16 {
+    _ = text;
+    if len == 0 {
+        return 0;
+    }
+    return ((font.glyph_width as i32 + font.tracking as i32) * len as i32 - font.tracking as i32) as i16;
+}
+
+export fn draw_text(ctx: &RenderCtx, x: i16, y: i16, text: &const byte, len: usize, font: &Font, color: Color) void {
+    var cursor: i16 = x;
+    var i: usize = 0;
+    while i < len {
+        const glyph: Glyph = glyph_for_char(font, text[i]);
+        const advance: i16 = glyph.advance as i16;
+        draw_glyph(ctx, cursor, y, &glyph, &color);
+        cursor = cursor + advance;
+        i = i + 1;
+    }
+    ctx.stats.text_ops = ctx.stats.text_ops + 1u32;
+}
+
+export fn draw_text_aligned(ctx: &RenderCtx, rect: Rect, text: &const byte, len: usize, font: &Font, color: Color, align: TextAlign) void {
+    const width: i16 = text_width(text, len, font);
+    var x: i16 = rect.x;
+    if align == TextAlign.Center {
+        x = rect.x + ((rect.w as i32 - width as i32) / 2) as i16;
+    } else if align == TextAlign.End {
+        x = rect.x + rect.w as i16 - width;
+    }
+    const y: i16 = rect.y + ((rect.h as i32 - font.glyph_height as i32) / 2) as i16;
+    draw_text(ctx, x, y, text, len, font, color);
+}

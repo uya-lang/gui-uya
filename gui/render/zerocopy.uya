@@ -1,0 +1,52 @@
+use core.rect.RECT_ZERO;
+use core.rect.Rect;
+use platform.disp.DisplayCtx;
+use platform.disp.FrameBuffer;
+
+export struct ZeroCopyTransfer {
+    region: Rect,
+    bytes: u32,
+    active: bool,
+}
+
+export struct ZeroCopyCtx {
+    display: &DisplayCtx,
+    pending: ZeroCopyTransfer,
+    completed: u32,
+
+    fn begin_frame(self: &Self) &FrameBuffer {
+        return self.display.get_back_buffer();
+    }
+
+    fn transfer_region(self: &Self, rect: Rect) void {
+        self.pending.region = rect;
+        self.pending.bytes = rect.w as u32 * rect.h as u32;
+        self.pending.active = true;
+    }
+
+    fn flush(self: &Self) void {
+        if !self.pending.active {
+            return;
+        }
+        self.display.swap_buffers();
+        self.pending.active = false;
+        self.completed = self.completed + 1u32;
+    }
+
+    fn present(self: &Self, rect: Rect) void {
+        self.transfer_region(rect);
+        self.flush();
+    }
+}
+
+export fn zerocopy_ctx_new(display: &DisplayCtx) ZeroCopyCtx {
+    return ZeroCopyCtx{
+        display: display,
+        pending: ZeroCopyTransfer{
+            region: RECT_ZERO,
+            bytes: 0u32,
+            active: false,
+        },
+        completed: 0u32,
+    };
+}

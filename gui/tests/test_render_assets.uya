@@ -1,0 +1,68 @@
+use core.color.Color;
+use core.color.RED;
+use core.color.WHITE;
+use core.rect.Rect;
+use platform.disp.FrameBuffer;
+use platform.disp.PixelFormat;
+use platform.disp.framebuffer_new;
+use render.ctx.RenderCtx;
+use render.ctx.ctx_pixel;
+use render.ctx.render_ctx_new;
+use render.font.Font;
+use render.font.TextAlign;
+use render.font.draw_text;
+use render.font.draw_text_aligned;
+use render.font.font_default;
+use render.font.text_width;
+use render.img.ImageData;
+use render.img.draw_image;
+use render.img.draw_image_clipped;
+use render.img.draw_image_scaled;
+use render.img.image_data_new;
+use res.cache.ImageCache;
+use res.cache.image_cache_new;
+use std.testing.assert_eq_bool;
+use std.testing.assert_eq_i32;
+
+export const TEST_RENDER_ASSETS_MODULE: i32 = 1;
+
+fn render_assets_color_eq(a: Color, b: Color) bool {
+    return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
+}
+
+test "image draw and cache get work" {
+    var dst_bytes: [byte: 256] = [];
+    var img_bytes: [byte: 12] = [255, 0, 0,   0, 255, 0,   0, 0, 255,   255, 255, 255];
+    const fb: FrameBuffer = framebuffer_new(&dst_bytes[0], 6, 6, 18, PixelFormat.RGB888);
+    var ctx: RenderCtx = render_ctx_new(fb);
+    const img: ImageData = image_data_new(&img_bytes[0], 2, 2, 6, PixelFormat.RGB888);
+
+    draw_image(&ctx, 0, 0, &img);
+    draw_image_scaled(&ctx, Rect{ x: 2, y: 0, w: 2, h: 2 }, &img);
+    draw_image_clipped(&ctx, Rect{ x: 0, y: 2, w: 2, h: 2 }, &img, Rect{ x: 1, y: 0, w: 1, h: 2 });
+
+    try assert_eq_bool(render_assets_color_eq(ctx_pixel(&ctx, 0, 0), RED), true);
+    try assert_eq_bool(render_assets_color_eq(ctx_pixel(&ctx, 3, 0), Color{ r: 0, g: 255, b: 0, a: 255 }), true);
+
+    var cache: ImageCache = image_cache_new(4, 64u32);
+    var out: ImageData = image_data_new(&img_bytes[0], 2, 2, 6, PixelFormat.RGB888);
+    cache.put(7u32, image_data_new(&img_bytes[0], 2, 2, 6, PixelFormat.RGB888));
+    try assert_eq_bool(cache.get(7u32, &out), true);
+    try assert_eq_i32(out.size.w as i32, 2);
+}
+
+test "font draws and measures text" {
+    var bytes: [byte: 512] = [];
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 16, 16, 64, PixelFormat.ARGB8888));
+    const font: Font = font_default();
+    const white0: Color = Color{ r: 255, g: 255, b: 255, a: 255 };
+    const white1: Color = Color{ r: 255, g: 255, b: 255, a: 255 };
+    const white2: Color = Color{ r: 255, g: 255, b: 255, a: 255 };
+
+    try assert_eq_i32(text_width("OK", 2usize, &font) as i32, 13);
+    draw_text(&ctx, 0, 0, "OK", 2usize, &font, white0);
+    draw_text_aligned(&ctx, Rect{ x: 0, y: 8, w: 16, h: 8 }, "A", 1usize, &font, white1, TextAlign.Center);
+
+    try assert_eq_bool(ctx.stats.text_ops >= 2u32, true);
+    try assert_eq_bool(render_assets_color_eq(ctx_pixel(&ctx, 0, 0), white2), true);
+}

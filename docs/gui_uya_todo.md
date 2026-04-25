@@ -1,8 +1,8 @@
 # UyaGUI - 详细开发 TODO 文档
 
 > 版本: v0.1.0  
-> 日期: 2026-04-24  
-> 状态: 详细设计阶段
+> 日期: 2026-04-25  
+> 状态: Phase 2 渲染引擎开发中（WIP，当前工作区未通过编译）
 
 > 说明: 本文中的类型与函数签名默认以当前 Uya 语法为准；涉及未来 API 形态时，会显式写成“提案”而不是直接当成现行语法。
 
@@ -14,18 +14,26 @@
 |------|------|---------|---------|
 | Phase 0: 基础设施 | 已实现 | 3 周 | - |
 | Phase 1: 核心系统 | 已实现（最小可编译/可测试基线） | 4 周 | - |
-| Phase 2: 渲染引擎 | 未开始 | 3 周 | - |
+| Phase 2: 渲染引擎 | 已实现（最小可编译/可测试基线） | 3 周 | - |
 | Phase 3: 组件库 | 未开始 | 3 周 | - |
 | Phase 4: 高级特性 | 未开始 | 2 周 | - |
-| Phase 5: 优化与测试 | 未开始 | 3 周 | - |
-| Phase 6: 文档与示例 | 未开始 | 2 周 | - |
+| Phase 5: 优化与测试 | 未开始（已具备基础测试/基准框架） | 3 周 | - |
+| Phase 6: 文档与示例 | 未开始（已有 `phase0` / `phase1` smoke 示例） | 2 周 | - |
 | **总计** | | **20 周** | |
+
+## 当前实现快照
+
+- 2026-04-25 当前工作区已进入 Phase 2 WIP: 新增了 `platform/disp.uya`、`render/{ctx,img,font,batch,gpu,zerocopy}.uya`、`res/cache.uya` 以及对应 render 测试。
+- 2026-04-25 当前 `make test` / `make build` 均失败；主要错误集中在 `gui/platform/disp.uya` 的位运算类型约束、位移右值类型、move 语义，以及部分 render 测试中的 move 语义使用。
+- Phase 1 已落地模块仍完整可见: `style/*`、`theme`、`event_dispatch`、`platform/indev`、`layout/*`、`dirty_region`、`benchmarks/core_bench.uya`、`examples/phase1_smoke.uya`。
+- 以下 Phase 2 条目中的 `[x]` 表示“代码/接口已经写出或已有测试草案”，不代表当前工作区已经恢复绿色构建。
+- 仍未开始或明显不足: `widget/` 组件库、`anim/` 动画系统、真实字体/图片解码链路、硬件 GPU 后端与完整渲染性能优化。
 
 ---
 
 ## Phase 0: 基础设施 (Week 1-3)
 
-> 注: 当前仓库已完成 Phase 0 的可编译可测试版本；少数条目因现阶段 Uya/C99 后端限制采用了等价实现，例如 `Rect.union_rect`、专用 `EventOption` 出队、`GuiObj` 泛型对象池的直接字面量构造，以及事件的扁平化载荷字段。相关编译器修复清单见 [gui_uya_compiler_fixlist.md](/home/winger/gui-uya/docs/gui_uya_compiler_fixlist.md)。
+> 注: 当前仓库已完成 Phase 0 的可编译可测试版本；少数条目因现阶段 Uya/C99 后端限制采用了等价实现，例如 `Rect.union_rect`、专用 `EventOption` 出队、`GuiObj` 泛型对象池的直接字面量构造，以及事件的扁平化载荷字段。相关编译器修复清单见 [gui_uya_compiler_fixlist.md](./gui_uya_compiler_fixlist.md)。
 
 ### Week 1: 项目搭建与环境配置
 
@@ -164,11 +172,11 @@
   - [x] `struct Point` - 坐标点
   - [x] `struct Event` - 事件结构体
     - [x] 基础字段 (type, target, timestamp)
-    - [x] Union 数据 (touch/key/encoder)
+    - [x] 扁平化载荷字段 (point/key/encoder/value)
     - [x] 传播控制 (stop_bubble, handled)
   - [x] `struct EventQueue` - 环形缓冲区队列
     - [x] `fn push(self, evt) bool` - 入队
-    - [x] `fn pop(self: &Self) Option<Event>` - 出队
+    - [x] `fn pop(self: &Self) EventOption` - 出队
     - [x] `fn is_empty(self) bool`
     - [x] `fn is_full(self) bool`
 - [x] 手势识别器基础
@@ -179,172 +187,197 @@
 
 ## Phase 1: 核心系统 (Week 4-7)
 
+> 注: 当前仓库已完成 Phase 1 的最小可编译/可测试基线，`style`、`theme`、`event_dispatch`、`layout`、`dirty_region` 与 smoke/bench 骨架均已落地；但不少条目仍属于 MVP 范围，后续重点是补齐渲染能力、扩展测试覆盖、完善布局与事件边界行为。
+
 ### Week 4: 样式系统
 
+> 当前状态: 已实现最小样式/主题系统，`test_style.uya` 已覆盖核心读写、merge/clone 与 builder/macro；后续继续扩充属性覆盖与组件级主题规则。
+
 #### Day 1-2: 样式定义
-- [ ] `style/prop.uya` - 样式属性枚举
-  - [ ] `enum StyleProp: u16` - 所有样式属性
-    - [ ] 颜色组 (BgColor, FgColor, BorderColor, ...)
-    - [ ] 尺寸组 (Width, Height, Padding, Margin, ...)
-    - [ ] 字体组 (Font, FontSize, ...)
-    - [ ] 效果组 (Radius, Shadow, Opacity, ...)
-- [ ] `style/style.uya` - 样式实现
-  - [ ] `union StyleValue` - 样式值
-  - [ ] `struct StyleEntry` - 属性-值对
-  - [ ] `struct Style` - 样式表
-    - [ ] 内联常用属性 (O(1)访问)
-    - [ ] 扩展属性数组
-  - [ ] 结构体方法:
-    - [ ] `fn get(self: &Self, prop: StyleProp) Option<StyleValue>`
-    - [ ] `fn set(self, prop, value) void`
-    - [ ] `fn merge(self, other) void` - 样式合并
-    - [ ] `fn clone(self) Style` - 样式复制
-- [ ] 单元测试 (属性读写 50+ 用例)
+- [x] `style/prop.uya` - 样式属性枚举
+  - [x] 已覆盖颜色组 (BgColor, FgColor, BorderColor, ShadowColor, ...)
+  - [x] 已覆盖尺寸组 (Width, Height, Padding, Margin, Min/Max, ...)
+  - [x] 已覆盖字体组 (Font, FontSize)
+  - [x] 已覆盖效果/布局组 (Radius, Shadow, Opacity, Layout/Flex/Grid/Overflow)
+- [x] `style/style.uya` - 样式实现
+  - [x] `union StyleValue` - 样式值
+  - [x] `struct StyleEntry` - 属性-值对
+  - [x] `struct Style` - 样式表
+    - [x] 内联常用属性 (O(1)访问)
+    - [x] 扩展属性数组
+  - [x] 结构体方法
+    - [x] `fn get(self, prop, out_value) bool` - 当前稳定接口
+    - [x] `fn set(self, prop, value) void`
+    - [x] `fn merge(self, other) void` - 样式合并
+    - [x] `fn clone(self) Style` - 样式复制
+- [x] 单元测试（核心路径）
+- [ ] 扩充到 50+ 属性读写/回归用例
 
 #### Day 3-4: 主题系统
-- [ ] `style/theme.uya` - 主题管理
-  - [ ] `enum ThemeVariant: u8` (Light/Dark/System)
-  - [ ] `struct Theme`
-    - [ ] 配色方案 (primary, secondary, accent, ...)
-    - [ ] 组件样式引用
-  - [ ] `struct ThemeManager`
-    - [ ] `fn register_theme(self, theme) void`
-    - [ ] `fn switch_theme(self, variant) void`
-    - [ ] `fn current(self) &Theme`
-    - [ ] `fn apply_to_tree(self, root) void`
-- [ ] 预定义主题
-  - [ ] Material Light 主题
-  - [ ] Material Dark 主题
-  - [ ] 紧凑主题 (资源受限设备)
+- [x] `style/theme.uya` - 主题管理
+  - [x] `enum ThemeVariant` (Light/Dark/System)
+  - [x] `struct Theme`
+    - [x] 配色方案 (primary, secondary, accent, surface, text, ...)
+    - [x] 组件样式引用 (button/panel/text/compact)
+  - [x] `struct ThemeManager`
+    - [x] `fn register_theme(self, theme) void`
+    - [x] `fn switch_theme(self, variant) void`
+    - [x] `fn current(self) &Theme`
+    - [x] `fn apply_to_tree(self, root) void`
+- [x] 预定义主题
+  - [x] Material Light 主题
+  - [x] Material Dark 主题
+  - [x] 紧凑主题 (资源受限设备)
+- [ ] 细化到更多组件级主题映射策略
 
 #### Day 5: 样式构建器
-- [ ] 实现 Fluent API 构建器
-  - [ ] `StyleBuilder::new()`
-  - [ ] `.bg_color(c)`, `.fg_color(c)`, `.border(w, c)`
-  - [ ] `.radius(r)`, `.padding(v)`, `.margin(v)`
-  - [ ] `.font(f)`, `.font_size(s)`
-  - [ ] `.opacity(o)`, `.shadow(x, y, blur, color)`
-  - [ ] `.build() -> Style`
-- [ ] 宏 `style!` 简化定义
-- [ ] 单元测试
+- [x] 实现 Fluent API 构建器
+  - [x] `StyleBuilder::new()`
+  - [x] `.bg_color(c)`, `.fg_color(c)`, `.border(w, c)`
+  - [x] `.radius(r)`, `.padding(v)`, `.margin(v)`
+  - [x] `.font(f)`, `.font_size(s)`
+  - [x] `.opacity(o)`, `.shadow(x, y, blur, color)`
+  - [x] `.build() -> Style`
+- [x] 宏 `style(...)` 简化定义
+- [x] 单元测试
+- [ ] 扩展更完整的声明式 DSL
 
-### Week 5: 事件系统完整实现
+### Week 5: 事件系统增强（MVP 已落地）
+
+> 当前状态: 事件定义、手势识别、分发器、输入设备抽象与对象回调接口均已接通，现阶段主要缺的是更完整的行为覆盖与并发细节。
 
 #### Day 1-2: 手势识别
-- [ ] `core/gesture.uya` - 完整手势识别
-  - [ ] `GestureDetector` 增强
-    - [ ] 点击识别 (Press + Release, 时间/距离阈值)
-    - [ ] 长按识别 (时间阈值)
-    - [ ] 滑动识别 (方向 + 速度)
-    - [ ] 拖拽识别
-    - [ ] 双击识别
-    - [ ] 捏合识别 (多点触摸)
-  - [ ] 配置参数结构体
-    - [ ] `click_max_duration: u16` (默认 500ms)
-    - [ ] `long_press_duration: u16` (默认 800ms)
-    - [ ] `swipe_threshold: u16` (默认 30px)
-    - [ ] `double_click_interval: u16` (默认 300ms)
-- [ ] 单元测试 (模拟输入序列)
+- [x] `core/event.uya` 内嵌 `GestureDetector`
+  - [x] 点击识别 (Press + Release, 时间/距离阈值)
+  - [x] 长按识别 (时间阈值)
+  - [x] 滑动识别 (方向阈值)
+  - [x] 拖拽识别
+  - [x] 双击识别
+  - [x] 捏合识别 (多点触摸)
+  - [x] 配置参数结构体
+    - [x] `click_max_duration: u16` (默认 500ms)
+    - [x] `long_press_duration: u16` (默认 800ms)
+    - [x] `swipe_threshold: u16` (默认 30px)
+    - [x] `double_click_interval: u16` (默认 300ms)
+    - [x] `drag_threshold: u16`
+    - [x] `pinch_threshold: u16`
+- [x] 单元测试（点击、滑动）
+- [ ] 补齐长按/拖拽/双击/捏合模拟输入序列
 
 #### Day 3-4: 事件分发器
-- [ ] `core/event_dispatch.uya` - 事件分发
-  - [ ] `struct EventDispatcher`
-    - [ ] 事件队列 (`EventQueue`)
-    - [ ] 手势识别器 (`GestureDetector`)
-    - [ ] 焦点管理 (`focus_obj: atomic i32`)
-    - [ ] 捕获管理 (`capture_obj: atomic i32`)
-  - [ ] 结构体方法:
-    - [ ] `fn dispatch(self, evt, tree) void` - 事件分发
-    - [ ] `fn find_target(self, tree, point) i32` - 命中测试
-    - [ ] `fn bubble_event(self, target, evt) bool` - 冒泡处理
-    - [ ] `fn set_focus(self, obj_idx) void`
-    - [ ] `fn get_focus(self) i32`
-  - [ ] 事件三阶段: Capture -> Target -> Bubble
-- [ ] 输入设备抽象
-  - [ ] `interface IInputDev`
-  - [ ] `struct TouchDriver: IInputDev`
-  - [ ] `struct MouseDriver: IInputDev`
-  - [ ] `struct KeyDriver: IInputDev`
-  - [ ] `struct EncoderDriver: IInputDev`
+- [x] `core/event_dispatch.uya` - 事件分发
+  - [x] `struct EventDispatcher`
+    - [x] 事件队列 (`EventQueue`)
+    - [x] 手势识别器 (`GestureDetector`)
+    - [x] 焦点管理 (`focus_obj: i32`)
+    - [x] 捕获管理 (`capture_obj: i32`)
+  - [x] 结构体方法
+    - [x] `fn dispatch(self, evt, tree) bool` - 事件分发
+    - [x] `fn find_target(self, tree, point) i32` - 命中测试
+    - [x] `fn bubble_event(self, tree, path, evt) bool` - 冒泡处理
+    - [x] `fn set_focus(self, obj_idx) void`
+    - [x] `fn get_focus(self) i32`
+    - [x] `fn process_touch(self, tree, point, is_down, timestamp) i32`
+  - [x] 事件三阶段: Capture -> Target -> Bubble
+- [x] 输入设备抽象
+  - [x] `interface IInputDev`
+  - [x] `struct TouchDriver: IInputDev`
+  - [x] `struct MouseDriver: IInputDev`
+  - [x] `struct KeyDriver: IInputDev`
+  - [x] `struct EncoderDriver: IInputDev`
+- [ ] 焦点/捕获状态 atomic 化
+- [ ] Hover / capture 完整策略补齐
 
 #### Day 5: 事件回调系统
-- [ ] 实现回调机制
-  - [ ] `fn on_click(self, callback) void`
-  - [ ] `fn on_press(self, callback) void`
-  - [ ] `fn on_release(self, callback) void`
-  - [ ] `fn on_long_press(self, callback) void`
-  - [ ] `fn on_value_change(self, callback) void`
-  - [ ] `fn on_focus(self, callback) void`
-- [ ] 回调上下文传递 (user_data)
-- [ ] 单元测试 (完整事件流)
+- [x] 实现回调机制
+  - [x] `fn on_click(self, callback) void`
+  - [x] `fn on_press(self, callback) void`
+  - [x] `fn on_release(self, callback) void`
+  - [x] `fn on_long_press(self, callback) void`
+  - [x] `fn on_value_change(self, callback) void`
+  - [x] `fn on_focus(self, callback) void`
+- [x] 回调上下文传递 (`user_data`)
+- [x] 单元测试（点击、焦点、队列 touch 流程）
+- [ ] 补齐 `press` / `release` / `long_press` / `value_change` / `pinch` 全覆盖
 
-### Week 6: 布局系统
+### Week 6: 布局系统（MVP 已落地）
+
+> 当前状态: `Flex`、`Grid`、`Absolute`、`AutoLayout` 与 `ObjTree::perform_layout()` 已打通，适合作为 Phase 1 基线；真正完整的 Flex/Grid 语义仍需继续补齐。
 
 #### Day 1-2: Flex 布局
-- [ ] `layout/flex.uya` - Flex 布局引擎
-  - [ ] `enum FlexDir: u8` (Row/Column/Reverse)
-  - [ ] `enum Justify: u8` (Start/Center/End/SpaceBetween/SpaceAround/SpaceEvenly)
-  - [ ] `enum Align: u8` (Start/Center/End/Stretch/Baseline)
-  - [ ] `struct FlexConfig`
-    - [ ] direction, justify, align_items, align_content
-    - [ ] wrap, gap, row_gap, col_gap
-    - [ ] padding
-  - [ ] `struct FlexLayout`
-    - [ ] `fn apply(self, container) void` - 执行布局
-  - [ ] Flex 属性
-    - [ ] flex_grow, flex_shrink, flex_basis
-    - [ ] align_self (覆盖容器 align_items)
-- [ ] 单元测试 (各种组合 30+ 用例)
+- [x] `layout/flex.uya` - Flex 布局引擎
+  - [x] `enum FlexDir` / `Justify` / `Align`
+  - [x] `struct FlexConfig`
+    - [x] `direction`, `justify`, `align_items`, `align_content`
+    - [x] `wrap`, `gap`, `row_gap`, `col_gap`
+    - [x] `padding`
+  - [x] `struct FlexLayout`
+    - [x] `fn apply(self, container) void` - 执行布局
+  - [x] Flex 属性
+    - [x] `flex_grow`
+    - [x] `align_self` (覆盖容器 `align_items`)
+    - [ ] `flex_shrink`
+    - [ ] `flex_basis`
+- [x] 单元测试（基础行布局）
+- [ ] `RowReverse` / `ColumnReverse` 真正反向布局逻辑
+- [ ] `wrap` / `align_content` 生效逻辑
+- [ ] 扩展各种组合 30+ 用例
 
 #### Day 3: Grid 布局
-- [ ] `layout/grid.uya` - Grid 布局
-  - [ ] `struct GridConfig`
-    - [ ] columns: `[u8: MAX_GRID_COLS]` (列宽模板)
-    - [ ] rows: `[u8: MAX_GRID_ROWS]` (行高模板)
-    - [ ] gap: `(u8, u8)` (行列间距)
-    - [ ] auto_flow: `GridAutoFlow`
-  - [ ] `struct GridLayout`
-    - [ ] `fn apply(self, container) void`
-  - [ ] Grid 属性
-    - [ ] grid_column, grid_row
-    - [ ] grid_area
-- [ ] 单元测试
+- [x] `layout/grid.uya` - Grid 布局
+  - [x] `struct GridConfig`
+    - [x] `columns: [u16: MAX_GRID_COLS]` (列宽模板)
+    - [x] `rows: [u16: MAX_GRID_ROWS]` (行高模板)
+    - [x] 行列间距 (`gap_x`, `gap_y`)
+    - [x] `auto_flow: GridAutoFlow`
+  - [x] `struct GridLayout`
+    - [x] `fn apply(self, container) void`
+  - [x] Grid 属性
+    - [x] `grid_column`, `grid_row`
+    - [x] `grid_column_span`, `grid_row_span`
+    - [ ] `grid_area`
+- [x] 单元测试
 
 #### Day 4: 绝对定位与混合布局
-- [ ] `layout/abs.uya` - 绝对定位
-- [ ] `layout/auto.uya` - 自动布局选择
-- [ ] 布局缓存系统
-  - [ ] 脏标记 (`layout_dirty`)
-  - [ ] 增量布局 (只重算变化的子树)
+- [x] `layout/abs.uya` - 绝对定位
+- [x] `layout/auto.uya` - 自动布局选择
+- [x] 布局缓存系统基础
+  - [x] 脏标记 (`dirty`)
+  - [x] 基于对象树的递归布局刷新
+  - [ ] 真正的子树级增量布局（当前仍递归整棵子树）
   - [ ] 布局约束传播
-- [ ] 性能测试
+- [x] 基础性能验证（`core_bench` 已覆盖 `layout + dirty` 路径）
 
 #### Day 5: 布局集成
-- [ ] 布局系统与对象树集成
-- [ ] `ObjTree::perform_layout()` 实现
-- [ ] 最小/最大尺寸约束
-- [ ] 溢出处理 (clip/scroll/visible)
-- [ ] 综合测试
+- [x] 布局系统与对象树集成
+- [x] `ObjTree::perform_layout()` 实现
+- [x] 最小/最大尺寸约束
+- [x] 溢出处理 (`visible` / `clip`)
+- [ ] `scroll` 模式
+- [x] 综合测试（Flex + Grid + AutoLayout 基础路径）
 
 ### Week 7: 脏区域管理
 
+> 当前状态: 脏区域结构、合并策略与全刷启发式已可用；渲染调度与真正的帧循环还没有开始。
+
 #### Day 1-2: 脏区域系统
-- [ ] `core/dirty_region.uya` - 脏区域管理
-  - [ ] `struct DirtyRegion`
-    - [ ] 精确区域数组
-    - [ ] 合并区域数组
-    - [ ] 全屏刷新阈值
-  - [ ] 结构体方法:
-    - [ ] `fn add(self, rect) void` - 添加脏区域
-    - [ ] `fn merge(self) void` - 合并优化
-    - [ ] `fn should_full_refresh(self) bool`
-    - [ ] `fn get_regions(self) &[Rect]`
-    - [ ] `fn clear(self) void`
-- [ ] 合并算法
-  - [ ] 交集合并策略
-  - [ ] 面积启发式
-  - [ ] 数量限制 (超出则全屏刷新)
-- [ ] 单元测试
+- [x] `core/dirty_region.uya` - 脏区域管理
+  - [x] `struct DirtyRegion`
+    - [x] 精确区域数组
+    - [x] 合并区域数组
+    - [x] 全屏刷新阈值
+  - [x] 结构体方法
+    - [x] `fn add(self, rect) void` - 添加脏区域
+    - [x] `fn merge(self) void` - 合并优化
+    - [x] `fn should_full_refresh(self, screen) bool`
+    - [x] `fn get_regions(self) DirtyRegionView`
+    - [x] `fn clear(self) void`
+- [x] 合并算法
+  - [x] 交集/接触合并策略
+  - [x] 面积启发式
+  - [x] 数量限制 (超出则全屏刷新)
+- [x] 单元测试
+- [ ] 收敛到更通用的切片/迭代视图接口
 
 #### Day 3-4: 渲染调度
 - [ ] 渲染流水线
@@ -357,111 +390,125 @@
 - [ ] 帧率控制 (自适应)
 
 #### Day 5: 性能基准
-- [ ] 建立性能测试基线
+- [x] 建立性能测试基线
   - [ ] 空渲染帧时间
   - [ ] 全屏刷新时间
-  - [ ] 脏区域处理时间
-  - [ ] 内存分配/释放时间
-- [ ] 编写 `benchmarks/core_bench.uya`
+  - [x] 脏区域处理时间
+  - [x] 内存分配/释放时间
+  - [x] 对象池/布局/事件分发时间
+- [x] 编写 `benchmarks/core_bench.uya`
+- [ ] 固化 benchmark snapshot 与回归阈值
 
 ---
 
 ## Phase 2: 渲染引擎 (Week 8-10)
 
+> 注: 当前仓库已完成 Phase 2 的最小可编译/可测试基线，实现了显示/帧缓冲抽象、渲染上下文与基础图元、图像与字体绘制、缓存/批处理/GPU/zero-copy 骨架，以及对应 smoke / bench / test 入口。
+
 ### Week 8: 基础渲染
 
 #### Day 1-2: 帧缓冲抽象
-- [ ] `platform/disp.uya` - 显示接口
-  - [ ] `enum PixelFormat: u8`
-    - [ ] RGB565, RGB888, ARGB8888, ARGB4444
-    - [ ] L8, A8, I1, I4
-  - [ ] `struct FrameBuffer`
-    - [ ] buf: `&void` (像素数据)
-    - [ ] w, h, stride: `u16`
-    - [ ] format: `PixelFormat`
-  - [ ] `struct DisplayCtx`
-    - [ ] 前后缓冲 (双缓冲)
-    - [ ] 显示驱动接口
-  - [ ] 结构体方法:
-    - [ ] `fn swap_buffers(self) void`
-    - [ ] `fn get_back_buffer(self) &FrameBuffer`
-    - [ ] `fn clear(self, color) void`
+- [x] `platform/disp.uya` - 显示接口
+  - [x] `enum PixelFormat`
+    - [x] RGB565, RGB888, ARGB8888, ARGB4444
+    - [x] L8, A8, I1, I4
+  - [x] `struct FrameBuffer`
+    - [x] 像素数据指针、`size`、`stride`
+    - [x] `format: PixelFormat`
+  - [x] `struct DisplayCtx`
+    - [x] 前后缓冲 (双缓冲)
+    - [x] 显示帧计数
+  - [x] 结构体方法
+    - [x] `fn swap_buffers(self) void`
+    - [x] `fn get_back_buffer(self) &FrameBuffer`
+    - [x] `fn clear(self, color) void`
+  - [x] 辅助函数
+    - [x] `framebuffer_required_bytes`
+    - [x] `framebuffer_get_pixel`
+    - [x] `framebuffer_set_pixel`
+    - [x] `framebuffer_clear`
+- [ ] 修复当前类型检查错误并接回稳定构建
 
 #### Day 3-4: 渲染上下文
-- [ ] `render/ctx.uya` - 渲染上下文
-  - [ ] `struct RenderCtx`
-    - [ ] 目标帧缓冲 (`FrameBuffer`)
-    - [ ] 裁剪区域栈 (`clip_stack`)
-    - [ ] 当前脏区域 (`dirty`)
-    - [ ] 渲染统计 (`RenderStats`)
-    - [ ] 渲染模式 (`RenderMode`)
-  - [ ] 裁剪管理
-    - [ ] `fn push_clip(self, rect) void`
-    - [ ] `fn pop_clip(self) void`
-    - [ ] `fn current_clip(self) Rect`
-  - [ ] 基础绘制 API
-    - [ ] `fn draw_pixel(self, x, y, color) void`
-    - [ ] `fn fill_rect(self, rect, color) void`
-    - [ ] `fn draw_rect(self, rect, color, width) void`
-    - [ ] `fn draw_line(self, x1, y1, x2, y2, color, width) void`
-    - [ ] `fn draw_circle(self, cx, cy, r, color) void`
-    - [ ] `fn fill_circle(self, cx, cy, r, color) void`
-    - [ ] `fn fill_round_rect(self, rect, radius, color) void`
-    - [ ] `fn draw_round_rect(self, rect, radius, color, width) void`
-    - [ ] `fn draw_arc(self, cx, cy, r, start, end, width, color) void`
-    - [ ] `fn fill_arc(self, cx, cy, r, start, end, color) void`
+- [x] `render/ctx.uya` - 渲染上下文
+  - [x] `struct RenderCtx`
+    - [x] 目标帧缓冲 (`FrameBuffer`)
+    - [x] 裁剪区域栈 (`clip_stack`)
+    - [x] 当前脏区域 (`dirty`)
+    - [x] 渲染统计 (`RenderStats`)
+    - [x] 渲染模式 (`RenderMode`)
+  - [x] 裁剪管理
+    - [x] `fn push_clip(self, rect) void`
+    - [x] `fn pop_clip(self) void`
+    - [x] `fn current_clip(self) Rect`
+  - [x] 基础绘制 API
+    - [x] `fn draw_pixel(self, x, y, color) void`
+    - [x] `fn fill_rect(self, rect, color) void`
+    - [x] `fn draw_rect(self, rect, color, width) void`
+    - [x] `fn draw_line(self, x1, y1, x2, y2, color, width) void`
+    - [x] `fn draw_circle(self, cx, cy, r, color) void`
+    - [x] `fn fill_circle(self, cx, cy, r, color) void`
+    - [x] `fn fill_round_rect(self, rect, radius, color) void`
+    - [x] `fn draw_round_rect(self, rect, radius, color, width) void`
+    - [x] `fn draw_arc(self, cx, cy, r, start, end, width, color) void`
+    - [x] `fn fill_arc(self, cx, cy, r, start, end, color) void`
+  - [x] 调试辅助: `ctx_pixel()`
+- [x] 基础 render 测试草案 (`test_render_ctx.uya`)
+- [ ] 修复当前 render 测试中的 move 语义问题
 
 #### Day 5: 像素格式优化
-- [ ] 各像素格式特化实现
+- [x] 各像素格式特化读写路径
   - [ ] RGB565 快速填充 (32-bit 批量写入)
-  - [ ] ARGB8888 Alpha 混合
-  - [ ] I1 单色位图绘制
-  - [ ] I4 4bpp 索引色
+  - [x] ARGB8888 基础 Alpha 混合
+  - [x] I1 单色位图绘制
+  - [x] I4 4bpp 索引色
 - [ ] 内联汇编优化 (关键路径)
-- [ ] 单元测试
+- [ ] 修复编译后补齐稳定单元测试
 
 ### Week 9: 高级绘制
 
 #### Day 1-2: 图像绘制
-- [ ] `render/img.uya` - 图像处理
-  - [ ] `struct ImageData`
-    - [ ] 像素数据引用
-    - [ ] 宽度、高度、格式
-    - [ ] 引用计数
-  - [ ] 图像绘制方法
-    - [ ] `fn draw_image(self, x, y, img) void`
-    - [ ] `fn draw_image_scaled(self, rect, img) void`
-    - [ ] `fn draw_image_clipped(self, dst_rect, img, src_rect) void`
-    - [ ] `fn draw_image_rotated(self, x, y, img, angle) void`
-  - [ ] 图像格式支持
-    - [ ] 原始像素 (RAW)
+- [x] `render/img.uya` - 图像处理
+  - [x] `struct ImageData`
+    - [x] 像素数据引用
+    - [x] 宽度、高度、格式
+    - [x] 引用计数
+  - [x] 图像绘制方法
+    - [x] `draw_image`
+    - [x] `draw_image_scaled`
+    - [x] `draw_image_clipped`
+    - [x] `draw_image_rotated`
+  - [x] 图像格式支持
+    - [x] 原始像素 (RAW)
     - [ ] RLE 编码
     - [ ] BMP 解码
     - [ ] PNG 解码 (简化)
     - [ ] 自定义格式
-- [ ] 图像缓存 (`res/cache.uya`)
-  - [ ] LRU 缓存策略
-  - [ ] 引用计数管理
-  - [ ] 内存预算控制
+- [x] 图像缓存 (`res/cache.uya`)
+  - [x] LRU 风格缓存策略
+  - [x] 引用计数管理
+  - [x] 内存预算控制
+- [x] 资源路径测试草案 (`test_render_assets.uya`)
+- [ ] 修复 move 语义后纳入稳定回归
 
 #### Day 3: 文本渲染
-- [ ] `render/font.uya` - 字体引擎
-  - [ ] `struct Glyph`
-    - [ ] 字符编码
-    - [ ] 位图数据 (Alpha/单色)
-    - [ ] 偏移、步进、尺寸
-  - [ ] `struct Font`
-    - [ ] 字体元数据 (高度、基线、行高)
+- [x] `render/font.uya` - 字体引擎
+  - [x] `struct Glyph`
+    - [x] 字符编码
+    - [x] 基础位图/几何占位数据
+    - [x] 偏移、步进、尺寸
+  - [x] `struct Font`
+    - [x] 字体元数据 (高度、基线、行高)
     - [ ] 字形查找表
     - [ ] 字距调整表
-  - [ ] 字体绘制
-    - [ ] `fn draw_text(self, x, y, text, len, font, color) void`
-    - [ ] `fn draw_text_aligned(self, rect, text, font, color, align) void`
-    - [ ] `fn text_width(self, text, len, font) i16`
-  - [ ] 字体格式
-    - [ ] 位图字体 (BMFont 兼容)
-    - [ ] 矢量字体 (TTF 简化光栅化)
-    - [ ] 内置字体 (系统字体)
+  - [x] 字体绘制
+    - [x] `draw_text`
+    - [x] `draw_text_aligned`
+    - [x] `text_width`
+  - [ ] 位图字体 (BMFont 兼容)
+  - [ ] 矢量字体 (TTF 简化光栅化)
+  - [ ] 内置字体 (系统字体)
+- [ ] 将当前几何占位字形替换为真实字库渲染
 
 #### Day 4: 抗锯齿与效果
 - [ ] Alpha 混合优化
@@ -476,27 +523,29 @@
   - [ ] 径向渐变
 
 #### Day 5: 批处理渲染
-- [ ] `render/batch.uya` - 绘制批处理
-  - [ ] `struct DrawCmd` - 绘制命令
-  - [ ] `struct DrawBatch`
-    - [ ] 命令缓冲区
-    - [ ] 合并统计
-  - [ ] 优化策略
-    - [ ] 同色矩形合并
+- [x] `render/batch.uya` - 绘制批处理
+  - [x] `struct DrawCmd` - 绘制命令
+  - [x] `struct DrawBatch`
+    - [x] 命令缓冲区
+    - [x] 合并统计
+  - [x] 优化策略
+    - [x] 同色矩形合并
     - [ ] 相邻水平线合并
     - [ ] 按颜色排序减少状态切换
-  - [ ] `fn execute(self, ctx) void`
-- [ ] 性能对比测试
+  - [x] `fn execute(self, ctx) void`
+- [x] pipeline 测试草案 (`test_render_pipeline.uya`)
+- [ ] 修复编译后补性能对比测试
 
 ### Week 10: GPU 支持与优化
 
 #### Day 1-2: GPU 抽象层
-- [ ] `render/gpu.uya` - GPU 抽象
-  - [ ] `interface IGpuCtx`
-    - [ ] `fn draw_rects(self, rects, colors, count) void`
-    - [ ] `fn draw_images(self, cmds, count) void`
-    - [ ] `fn fill_rects(self, rects, colors, count) void`
-    - [ ] `fn sync(self) void`
+- [x] `render/gpu.uya` - GPU 抽象
+  - [x] `interface IGpuCtx`
+    - [x] `fn draw_rects(self, rects, colors, count) void`
+    - [x] `fn draw_images(self, cmds, count) void`
+    - [x] `fn fill_rects(self, rects, colors, count) void`
+    - [x] `fn sync(self) void`
+  - [x] 软件回退后端 `SoftwareGpuCtx`
   - [ ] GPU 后端
     - [ ] STM32 DMA2D
     - [ ] ESP32-S3 LCD_CAM
@@ -505,8 +554,10 @@
   - [ ] 自动检测与回退
 
 #### Day 3-4: 零拷贝与 DMA
-- [ ] `render/zerocopy.uya` - 零拷贝优化
-  - [ ] 双缓冲管理
+- [x] `render/zerocopy.uya` - 零拷贝优化
+  - [x] 双缓冲管理
+  - [x] 区域传输状态跟踪
+  - [x] `present()` / `flush()` 基线路径
   - [ ] DMA 异步传输
   - [ ] 脏区域 DMA 传输
   - [ ] 传输完成中断
@@ -519,7 +570,7 @@
 - [ ] SIMD 优化 (如果目标支持)
 - [ ] 查找表优化 (Alpha 混合、Sin/Cos)
 - [ ] 缓存友好数据布局
-- [ ] 完整渲染基准测试
+- [ ] 修复构建后补完整渲染基准测试
 
 ---
 

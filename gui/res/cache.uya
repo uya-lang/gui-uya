@@ -1,0 +1,126 @@
+use render.img.ImageData;
+use render.img.empty_image;
+use render.img.image_retain;
+use render.img.image_release;
+use render.img.image_size_bytes;
+
+export const IMAGE_CACHE_CAPACITY: i32 = 16;
+
+export struct CacheEntry {
+    key: u32,
+    image: ImageData,
+    age: u32,
+    bytes: u32,
+    used: bool,
+}
+
+export struct ImageCache {
+    entries: [CacheEntry: 16],
+    capacity: u8,
+    used_count: u8,
+    budget_bytes: u32,
+    used_bytes: u32,
+    tick: u32,
+
+    fn get(self: &Self, key: u32, out: &ImageData) bool {
+        var i: i32 = 0;
+        while i < self.capacity as i32 {
+            if self.entries[i].used && self.entries[i].key == key {
+                self.tick = self.tick + 1u32;
+                self.entries[i].age = self.tick;
+                out[0] = self.entries[i].image;
+                return true;
+            }
+            i = i + 1;
+        }
+        return false;
+    }
+
+    fn put(self: &Self, key: u32, image: ImageData) void {
+        var slot: i32 = -1;
+        var oldest_idx: i32 = -1;
+        var oldest_age: u32 = 0u32;
+        var i: i32 = 0;
+        while i < self.capacity as i32 {
+            if self.entries[i].used && self.entries[i].key == key {
+                self.used_bytes = self.used_bytes - self.entries[i].bytes;
+                image_release(&self.entries[i].image);
+                slot = i;
+                break;
+            }
+            if !self.entries[i].used && slot < 0 {
+                slot = i;
+            }
+            if self.entries[i].used && (oldest_idx < 0 || self.entries[i].age < oldest_age) {
+                oldest_idx = i;
+                oldest_age = self.entries[i].age;
+            }
+            i = i + 1;
+        }
+
+        const bytes: u32 = image_size_bytes(&image);
+        while self.used_bytes + bytes > self.budget_bytes && self.used_count > 0 {
+            self.evict_oldest();
+        }
+
+        if slot < 0 {
+            slot = oldest_idx;
+            if slot >= 0 {
+                self.used_bytes = self.used_bytes - self.entries[slot].bytes;
+                image_release(&self.entries[slot].image);
+            }
+        }
+        if slot < 0 {
+            return;
+        }
+
+        self.tick = self.tick + 1u32;
+        var stored: ImageData = image;
+        image_retain(&stored);
+        self.entries[slot] = CacheEntry{
+            key: key,
+            image: stored,
+            age: self.tick,
+            bytes: bytes,
+            used: true,
+        };
+        self.used_bytes = self.used_bytes + bytes;
+        if self.used_count < self.capacity {
+            self.used_count = self.used_count + 1;
+        }
+    }
+
+    fn evict_oldest(self: &Self) void {
+        var oldest_idx: i32 = -1;
+        var oldest_age: u32 = 0u32;
+        var i: i32 = 0;
+        while i < self.capacity as i32 {
+            if self.entries[i].used && (oldest_idx < 0 || self.entries[i].age < oldest_age) {
+                oldest_idx = i;
+                oldest_age = self.entries[i].age;
+            }
+            i = i + 1;
+        }
+        if oldest_idx < 0 {
+            return;
+        }
+        self.used_bytes = self.used_bytes - self.entries[oldest_idx].bytes;
+        image_release(&self.entries[oldest_idx].image);
+        self.entries[oldest_idx].used = false;
+        self.entries[oldest_idx].image = empty_image();
+        if self.used_count > 0 {
+            self.used_count = self.used_count - 1;
+        }
+    }
+}
+
+export fn image_cache_new(capacity: u8, budget_bytes: u32) ImageCache {
+    return ImageCache{
+        entries: [],
+        capacity: capacity,
+        used_count: 0,
+        budget_bytes: budget_bytes,
+        used_bytes: 0u32,
+        tick: 0u32,
+    };
+}

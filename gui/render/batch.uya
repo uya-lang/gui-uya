@@ -1,0 +1,170 @@
+use core.color.BLACK;
+use core.color.Color;
+use core.rect.RECT_ZERO;
+use core.rect.Rect;
+use render.ctx.RenderCtx;
+use render.img.ImageData;
+use render.img.draw_image;
+use render.img.draw_image_clipped;
+use render.img.empty_image;
+
+export const DRAW_BATCH_CAPACITY: i32 = 64;
+
+export enum DrawCmdKind {
+    FillRect,
+    DrawRect,
+    Line,
+    Image,
+}
+
+export struct DrawCmd {
+    kind: DrawCmdKind,
+    rect: Rect,
+    color: Color,
+    width: u8,
+    x1: i16,
+    y1: i16,
+    x2: i16,
+    y2: i16,
+    image: ImageData,
+    src_rect: Rect,
+    has_src: bool,
+}
+
+fn draw_cmd_default() DrawCmd {
+    return DrawCmd{
+        kind: DrawCmdKind.FillRect,
+        rect: RECT_ZERO,
+        color: BLACK,
+        width: 1,
+        x1: 0,
+        y1: 0,
+        x2: 0,
+        y2: 0,
+        image: empty_image(),
+        src_rect: RECT_ZERO,
+        has_src: false,
+    };
+}
+
+fn draw_cmd_color_eq(a: Color, b: Color) bool {
+    return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
+}
+
+export struct DrawBatch {
+    cmds: [DrawCmd: 64],
+    count: u16,
+    merge_count: u16,
+
+    fn push_fill_rect(self: &Self, rect: Rect, color: Color) void {
+        if self.count >= DRAW_BATCH_CAPACITY as u16 {
+            return;
+        }
+        const idx: usize = (self.count as! usize).value;
+        self.cmds[idx] = draw_cmd_default();
+        self.cmds[idx].kind = DrawCmdKind.FillRect;
+        self.cmds[idx].rect = rect;
+        self.cmds[idx].color = color;
+        self.count = self.count + 1;
+    }
+
+    fn push_draw_rect(self: &Self, rect: Rect, color: Color, width: u8) void {
+        if self.count >= DRAW_BATCH_CAPACITY as u16 {
+            return;
+        }
+        const idx: usize = (self.count as! usize).value;
+        self.cmds[idx] = draw_cmd_default();
+        self.cmds[idx].kind = DrawCmdKind.DrawRect;
+        self.cmds[idx].rect = rect;
+        self.cmds[idx].color = color;
+        self.cmds[idx].width = width;
+        self.count = self.count + 1;
+    }
+
+    fn push_line(self: &Self, x1: i16, y1: i16, x2: i16, y2: i16, color: Color, width: u8) void {
+        if self.count >= DRAW_BATCH_CAPACITY as u16 {
+            return;
+        }
+        const idx: usize = (self.count as! usize).value;
+        self.cmds[idx] = draw_cmd_default();
+        self.cmds[idx].kind = DrawCmdKind.Line;
+        self.cmds[idx].color = color;
+        self.cmds[idx].width = width;
+        self.cmds[idx].x1 = x1;
+        self.cmds[idx].y1 = y1;
+        self.cmds[idx].x2 = x2;
+        self.cmds[idx].y2 = y2;
+        self.count = self.count + 1;
+    }
+
+    fn push_image(self: &Self, rect: Rect, image: ImageData, src_rect: Rect, has_src: bool) void {
+        if self.count >= DRAW_BATCH_CAPACITY as u16 {
+            return;
+        }
+        const idx: usize = (self.count as! usize).value;
+        self.cmds[idx] = draw_cmd_default();
+        self.cmds[idx].kind = DrawCmdKind.Image;
+        self.cmds[idx].rect = rect;
+        self.cmds[idx].image = image;
+        self.cmds[idx].src_rect = src_rect;
+        self.cmds[idx].has_src = has_src;
+        self.count = self.count + 1;
+    }
+
+    fn optimize(self: &Self) void {
+        var i: i32 = 0;
+        while i + 1 < self.count as i32 {
+            if self.cmds[i].kind == DrawCmdKind.FillRect
+                && self.cmds[i + 1].kind == DrawCmdKind.FillRect
+                && self.cmds[i].rect.y == self.cmds[i + 1].rect.y
+                && self.cmds[i].rect.h == self.cmds[i + 1].rect.h
+                && self.cmds[i].rect.x + self.cmds[i].rect.w as i16 == self.cmds[i + 1].rect.x
+                && draw_cmd_color_eq(self.cmds[i].color, self.cmds[i + 1].color) {
+                self.cmds[i].rect.w = self.cmds[i].rect.w + self.cmds[i + 1].rect.w;
+                self.remove_at(i + 1);
+                self.merge_count = self.merge_count + 1;
+            } else {
+                i = i + 1;
+            }
+        }
+    }
+
+    fn remove_at(self: &Self, idx: i32) void {
+        var i: i32 = idx;
+        while i + 1 < self.count as i32 {
+            self.cmds[i] = self.cmds[i + 1];
+            i = i + 1;
+        }
+        self.count = self.count - 1;
+    }
+
+    fn execute(self: &Self, ctx: &RenderCtx) void {
+        var i: i32 = 0;
+        while i < self.count as i32 {
+            const cmd: DrawCmd = self.cmds[i];
+            if cmd.kind == DrawCmdKind.FillRect {
+                ctx.fill_rect(cmd.rect, cmd.color);
+            } else if cmd.kind == DrawCmdKind.DrawRect {
+                ctx.draw_rect(cmd.rect, cmd.color, cmd.width);
+            } else if cmd.kind == DrawCmdKind.Line {
+                ctx.draw_line(cmd.x1, cmd.y1, cmd.x2, cmd.y2, cmd.color, cmd.width);
+            } else if cmd.kind == DrawCmdKind.Image {
+                if cmd.has_src {
+                    draw_image_clipped(ctx, cmd.rect, &cmd.image, cmd.src_rect);
+                } else {
+                    draw_image(ctx, cmd.rect.x, cmd.rect.y, &cmd.image);
+                }
+            }
+            i = i + 1;
+        }
+        ctx.stats.batch_flushes = ctx.stats.batch_flushes + 1u32;
+    }
+}
+
+export fn draw_batch_new() DrawBatch {
+    return DrawBatch{
+        cmds: [],
+        count: 0,
+        merge_count: 0,
+    };
+}

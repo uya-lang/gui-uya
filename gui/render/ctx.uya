@@ -1,41 +1,335 @@
+use core.color.BLACK;
 use core.color.Color;
 use core.color.TRANSPARENT;
+use core.dirty_region.DirtyRegion;
+use core.dirty_region.dirty_region_new;
 use core.rect.RECT_ZERO;
 use core.rect.Rect;
-use core.size.SIZE_ZERO;
-use core.size.Size;
+use libc.cos;
+use libc.sin;
+use libc.sqrt;
+use platform.disp.FrameBuffer;
+use platform.disp.PixelFormat;
+use platform.disp.empty_framebuffer;
+use platform.disp.framebuffer_clear;
+use platform.disp.framebuffer_get_pixel;
+use platform.disp.framebuffer_rect;
+use platform.disp.framebuffer_set_pixel;
 
-export enum PixelFormat {
-    RGB565,
-    ARGB8888,
+export const MAX_CLIP_STACK: i32 = 16;
+
+fn render_full_rect(fb: &FrameBuffer) Rect {
+    return framebuffer_rect(fb);
 }
 
-export struct FrameBuffer {
-    pixels: &byte,
-    size: Size,
-    stride: u16,
-    format: PixelFormat,
+fn clamp_i32(v: i32, min: i32, max: i32) i32 {
+    if v < min {
+        return min;
+    }
+    if v > max {
+        return max;
+    }
+    return v;
+}
+
+fn degrees_to_radians(deg: i16) f64 {
+    return (deg as f64) * 3.141592653589793 / 180.0;
+}
+
+export enum RenderMode {
+    Immediate,
+    Batch,
+    DirtyOnly,
+}
+
+export struct RenderStats {
+    pixel_ops: u32,
+    rect_ops: u32,
+    line_ops: u32,
+    circle_ops: u32,
+    image_ops: u32,
+    text_ops: u32,
+    batch_flushes: u32,
 }
 
 export struct RenderCtx {
     fb: FrameBuffer,
-    clip: Rect,
+    clip_stack: [Rect: 16],
+    clip_len: i32,
+    dirty: DirtyRegion,
+    stats: RenderStats,
+    mode: RenderMode,
     clear_color: Color,
+
+    fn push_clip(self: &Self, rect: Rect) void {
+        if self.clip_len >= MAX_CLIP_STACK {
+            return;
+        }
+        const parent: Rect = self.current_clip();
+        self.clip_stack[self.clip_len as usize] = parent.intersect(rect);
+        self.clip_len = self.clip_len + 1;
+    }
+
+    fn pop_clip(self: &Self) void {
+        if self.clip_len > 1 {
+            self.clip_len = self.clip_len - 1;
+        }
+    }
+
+    fn current_clip(self: &Self) Rect {
+        if self.clip_len <= 0 {
+            return RECT_ZERO;
+        }
+        return self.clip_stack[(self.clip_len - 1) as usize];
+    }
+
+    fn clear(self: &Self, color: Color) void {
+        self.clear_color = color;
+        framebuffer_clear(&self.fb, color);
+        self.dirty.add(render_full_rect(&self.fb));
+    }
+
+    fn draw_pixel(self: &Self, x: i16, y: i16, color: Color) void {
+        const clip: Rect = self.current_clip();
+        const point_rect: Rect = Rect{ x: x, y: y, w: 1, h: 1 };
+        const visible: Rect = clip.intersect(point_rect);
+        if visible.is_empty() {
+            return;
+        }
+        framebuffer_set_pixel(&self.fb, x as i32, y as i32, &color);
+        self.stats.pixel_ops = self.stats.pixel_ops + 1u32;
+        self.dirty.add(point_rect);
+    }
+
+    fn fill_rect(self: &Self, rect: Rect, color: Color) void {
+        const clip: Rect = self.current_clip();
+        const draw_rect: Rect = clip.intersect(rect);
+        if draw_rect.is_empty() {
+            return;
+        }
+        var y: i32 = draw_rect.y as i32;
+        while y < draw_rect.y as i32 + draw_rect.h as i32 {
+            var x: i32 = draw_rect.x as i32;
+            while x < draw_rect.x as i32 + draw_rect.w as i32 {
+                framebuffer_set_pixel(&self.fb, x, y, &color);
+                self.stats.pixel_ops = self.stats.pixel_ops + 1u32;
+                x = x + 1;
+            }
+            y = y + 1;
+        }
+        self.stats.rect_ops = self.stats.rect_ops + 1u32;
+        self.dirty.add(draw_rect);
+    }
+
+    fn draw_rect(self: &Self, rect: Rect, color: Color, width: u8) void {
+        if rect.is_empty() || width == 0 {
+            return;
+        }
+        var i: i32 = 0;
+        while i < width as i32 {
+            const inset: Rect = Rect{
+                x: rect.x + i as i16,
+                y: rect.y + i as i16,
+                w: (rect.w as i32 - i * 2) as u16,
+                h: (rect.h as i32 - i * 2) as u16,
+            };
+            if inset.is_empty() {
+                break;
+            }
+            self.fill_rect(Rect{ x: inset.x, y: inset.y, w: inset.w, h: 1 }, color);
+            if inset.h > 1 {
+                self.fill_rect(Rect{ x: inset.x, y: inset.y + inset.h as i16 - 1, w: inset.w, h: 1 }, color);
+            }
+            if inset.w > 1 {
+                self.fill_rect(Rect{ x: inset.x, y: inset.y, w: 1, h: inset.h }, color);
+                self.fill_rect(Rect{ x: inset.x + inset.w as i16 - 1, y: inset.y, w: 1, h: inset.h }, color);
+            }
+            i = i + 1;
+        }
+    }
+
+    fn draw_line(self: &Self, x1: i16, y1: i16, x2: i16, y2: i16, color: Color, width: u8) void {
+        var x0: i32 = x1 as i32;
+        var y0: i32 = y1 as i32;
+        const tx: i32 = x2 as i32;
+        const ty: i32 = y2 as i32;
+        var dx: i32 = x0 - tx;
+        if dx < 0 {
+            dx = 0 - dx;
+        }
+        var sx: i32 = -1;
+        if x0 < tx {
+            sx = 1;
+        }
+        var dy_abs: i32 = y0 - ty;
+        if dy_abs < 0 {
+            dy_abs = 0 - dy_abs;
+        }
+        var sy: i32 = -1;
+        if y0 < ty {
+            sy = 1;
+        }
+        var err: i32 = dx - dy_abs;
+
+        while true {
+            const half: i32 = width as i32 / 2;
+            self.fill_rect(Rect{ x: (x0 - half) as i16, y: (y0 - half) as i16, w: width as u16, h: width as u16 }, color);
+            if x0 == tx && y0 == ty {
+                break;
+            }
+            const err2: i32 = err * 2;
+            if err2 > 0 - dy_abs {
+                err = err - dy_abs;
+                x0 = x0 + sx;
+            }
+            if err2 < dx {
+                err = err + dx;
+                y0 = y0 + sy;
+            }
+        }
+        self.stats.line_ops = self.stats.line_ops + 1u32;
+    }
+
+    fn draw_circle(self: &Self, cx: i16, cy: i16, r: i16, color: Color) void {
+        if r <= 0 {
+            return;
+        }
+        var x: i32 = r as i32;
+        var y: i32 = 0;
+        var err: i32 = 1 - x;
+        while x >= y {
+            self.draw_pixel((cx as i32 + x) as i16, (cy as i32 + y) as i16, color);
+            self.draw_pixel((cx as i32 + y) as i16, (cy as i32 + x) as i16, color);
+            self.draw_pixel((cx as i32 - y) as i16, (cy as i32 + x) as i16, color);
+            self.draw_pixel((cx as i32 - x) as i16, (cy as i32 + y) as i16, color);
+            self.draw_pixel((cx as i32 - x) as i16, (cy as i32 - y) as i16, color);
+            self.draw_pixel((cx as i32 - y) as i16, (cy as i32 - x) as i16, color);
+            self.draw_pixel((cx as i32 + y) as i16, (cy as i32 - x) as i16, color);
+            self.draw_pixel((cx as i32 + x) as i16, (cy as i32 - y) as i16, color);
+            y = y + 1;
+            if err < 0 {
+                err = err + 2 * y + 1;
+            } else {
+                x = x - 1;
+                err = err + 2 * (y - x) + 1;
+            }
+        }
+        self.stats.circle_ops = self.stats.circle_ops + 1u32;
+    }
+
+    fn fill_circle(self: &Self, cx: i16, cy: i16, r: i16, color: Color) void {
+        if r <= 0 {
+            return;
+        }
+        var y: i32 = 0 - r as i32;
+        while y <= r as i32 {
+            const row_radius: i32 = clamp_i32(sqrt((r as i32 * r as i32 - y * y) as f64) as i32, 0, r as i32);
+            self.fill_rect(Rect{
+                x: (cx as i32 - row_radius) as i16,
+                y: (cy as i32 + y) as i16,
+                w: (row_radius * 2 + 1) as u16,
+                h: 1,
+            }, color);
+            y = y + 1;
+        }
+        self.stats.circle_ops = self.stats.circle_ops + 1u32;
+    }
+
+    fn fill_round_rect(self: &Self, rect: Rect, radius: u8, color: Color) void {
+        if radius == 0 {
+            self.fill_rect(rect, color);
+            return;
+        }
+        const r: i32 = radius as i32;
+        self.fill_rect(Rect{ x: rect.x + radius as i16, y: rect.y, w: rect.w - radius as u16 * 2, h: rect.h }, color);
+        self.fill_rect(Rect{ x: rect.x, y: rect.y + radius as i16, w: radius as u16, h: rect.h - radius as u16 * 2 }, color);
+        self.fill_rect(Rect{ x: rect.x + rect.w as i16 - radius as i16, y: rect.y + radius as i16, w: radius as u16, h: rect.h - radius as u16 * 2 }, color);
+
+        var y: i32 = 0;
+        while y < r {
+            var x: i32 = 0;
+            while x < r {
+                if (x - r + 1) * (x - r + 1) + (y - r + 1) * (y - r + 1) <= r * r {
+                    self.draw_pixel((rect.x as i32 + x) as i16, (rect.y as i32 + y) as i16, color);
+                    self.draw_pixel((rect.x as i32 + rect.w as i32 - 1 - x) as i16, (rect.y as i32 + y) as i16, color);
+                    self.draw_pixel((rect.x as i32 + x) as i16, (rect.y as i32 + rect.h as i32 - 1 - y) as i16, color);
+                    self.draw_pixel((rect.x as i32 + rect.w as i32 - 1 - x) as i16, (rect.y as i32 + rect.h as i32 - 1 - y) as i16, color);
+                }
+                x = x + 1;
+            }
+            y = y + 1;
+        }
+    }
+
+    fn draw_round_rect(self: &Self, rect: Rect, radius: u8, color: Color, width: u8) void {
+        if radius == 0 {
+            self.draw_rect(rect, color, width);
+            return;
+        }
+        self.draw_rect(Rect{ x: rect.x + radius as i16, y: rect.y, w: rect.w - radius as u16 * 2, h: rect.h }, color, width);
+        self.draw_rect(Rect{ x: rect.x, y: rect.y + radius as i16, w: rect.w, h: rect.h - radius as u16 * 2 }, color, width);
+        self.draw_circle((rect.x as i32 + radius as i32) as i16, (rect.y as i32 + radius as i32) as i16, radius as i16, color);
+        self.draw_circle((rect.x as i32 + rect.w as i32 - radius as i32 - 1) as i16, (rect.y as i32 + radius as i32) as i16, radius as i16, color);
+        self.draw_circle((rect.x as i32 + radius as i32) as i16, (rect.y as i32 + rect.h as i32 - radius as i32 - 1) as i16, radius as i16, color);
+        self.draw_circle((rect.x as i32 + rect.w as i32 - radius as i32 - 1) as i16, (rect.y as i32 + rect.h as i32 - radius as i32 - 1) as i16, radius as i16, color);
+    }
+
+    fn draw_arc(self: &Self, cx: i16, cy: i16, r: i16, start_deg: i16, end_deg: i16, width: u8, color: Color) void {
+        var angle: i16 = start_deg;
+        while angle <= end_deg {
+            const rad: f64 = degrees_to_radians(angle);
+            const px: i16 = (cx as f64 + cos(rad) * r as f64) as i16;
+            const py: i16 = (cy as f64 + sin(rad) * r as f64) as i16;
+            self.fill_rect(Rect{ x: px - width as i16 / 2, y: py - width as i16 / 2, w: width as u16, h: width as u16 }, color);
+            angle = angle + 2;
+        }
+    }
+
+    fn fill_arc(self: &Self, cx: i16, cy: i16, r: i16, start_deg: i16, end_deg: i16, color: Color) void {
+        var angle: i16 = start_deg;
+        while angle <= end_deg {
+            const rad: f64 = degrees_to_radians(angle);
+            const px: i16 = (cx as f64 + cos(rad) * r as f64) as i16;
+            const py: i16 = (cy as f64 + sin(rad) * r as f64) as i16;
+            self.draw_line(cx, cy, px, py, color, 1);
+            angle = angle + 3;
+        }
+    }
 }
 
-export fn empty_framebuffer() FrameBuffer {
-    return FrameBuffer{
-        pixels: null,
-        size: SIZE_ZERO,
-        stride: 0,
-        format: PixelFormat.RGB565,
+export fn empty_framebuffer_color() Color {
+    return TRANSPARENT;
+}
+
+export fn render_ctx_new(fb: FrameBuffer) RenderCtx {
+    const clip: Rect = render_full_rect(&fb);
+    return RenderCtx{
+        fb: fb,
+        clip_stack: [clip, RECT_ZERO, RECT_ZERO, RECT_ZERO, RECT_ZERO, RECT_ZERO, RECT_ZERO, RECT_ZERO, RECT_ZERO, RECT_ZERO, RECT_ZERO, RECT_ZERO, RECT_ZERO, RECT_ZERO, RECT_ZERO, RECT_ZERO],
+        clip_len: 1,
+        dirty: dirty_region_new(),
+        stats: RenderStats{
+            pixel_ops: 0u32,
+            rect_ops: 0u32,
+            line_ops: 0u32,
+            circle_ops: 0u32,
+            image_ops: 0u32,
+            text_ops: 0u32,
+            batch_flushes: 0u32,
+        },
+        mode: RenderMode.Immediate,
+        clear_color: empty_framebuffer_color(),
     };
+}
+
+export fn empty_render_ctx() RenderCtx {
+    return render_ctx_new(empty_framebuffer());
 }
 
 export fn default_ctx() RenderCtx {
-    return RenderCtx{
-        fb: empty_framebuffer(),
-        clip: RECT_ZERO,
-        clear_color: TRANSPARENT,
-    };
+    return empty_render_ctx();
+}
+
+export fn ctx_pixel(ctx: &RenderCtx, x: i16, y: i16) Color {
+    return framebuffer_get_pixel(&ctx.fb, x as i32, y as i32);
 }

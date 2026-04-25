@@ -1,0 +1,322 @@
+use core.color.BLACK;
+use core.color.Color;
+use core.rect.Rect;
+use core.size.SIZE_ZERO;
+use core.size.Size;
+
+fn copy_color(color: &Color) Color {
+    return Color{
+        r: color.r,
+        g: color.g,
+        b: color.b,
+        a: color.a,
+    };
+}
+
+fn grayscale(color: &Color) u8 {
+    return (((color.r as u32) * 30u32 + (color.g as u32) * 59u32 + (color.b as u32) * 11u32) / 100u32) as u8;
+}
+
+fn pack_argb4444(color: &Color) u16 {
+    const a: u16 = ((color.a as u32 >> 4) as! u16).value;
+    const r: u16 = ((color.r as u32 >> 4) as! u16).value;
+    const g: u16 = ((color.g as u32 >> 4) as! u16).value;
+    const b: u16 = ((color.b as u32 >> 4) as! u16).value;
+    return (a << 12) | (r << 8) | (g << 4) | b;
+}
+
+fn unpack_argb4444(bits: u16) Color {
+    const a4: u16 = (bits >> 12) & 0x000Fu16;
+    const r4: u16 = (bits >> 8) & 0x000Fu16;
+    const g4: u16 = (bits >> 4) & 0x000Fu16;
+    const b4: u16 = bits & 0x000Fu16;
+    return Color{
+        a: ((a4 * 17u16) as! u8).value,
+        r: ((r4 * 17u16) as! u8).value,
+        g: ((g4 * 17u16) as! u8).value,
+        b: ((b4 * 17u16) as! u8).value,
+    };
+}
+
+fn unpack_rgb565(bits: u16) Color {
+    const r5: u16 = (bits >> 11) & 0x001Fu16;
+    const g6: u16 = (bits >> 5) & 0x003Fu16;
+    const b5: u16 = bits & 0x001Fu16;
+    return Color{
+        r: (((r5 << 3) | (r5 >> 2)) as! u8).value,
+        g: (((g6 << 2) | (g6 >> 4)) as! u8).value,
+        b: (((b5 << 3) | (b5 >> 2)) as! u8).value,
+        a: 255,
+    };
+}
+
+fn pixel_byte_offset(fb: &FrameBuffer, x: i32, y: i32) usize {
+    const row: usize = (y as! usize).value * fb.stride as usize;
+    if fb.format == PixelFormat.RGB565 || fb.format == PixelFormat.ARGB4444 {
+        return row + (x as! usize).value * 2usize;
+    }
+    if fb.format == PixelFormat.RGB888 {
+        return row + (x as! usize).value * 3usize;
+    }
+    if fb.format == PixelFormat.ARGB8888 {
+        return row + (x as! usize).value * 4usize;
+    }
+    if fb.format == PixelFormat.L8 || fb.format == PixelFormat.A8 {
+        return row + (x as! usize).value;
+    }
+    if fb.format == PixelFormat.I1 {
+        return row + ((x as! usize).value / 8usize);
+    }
+    return row + ((x as! usize).value / 2usize);
+}
+
+export enum PixelFormat {
+    RGB565,
+    RGB888,
+    ARGB8888,
+    ARGB4444,
+    L8,
+    A8,
+    I1,
+    I4,
+}
+
+export struct FrameBuffer {
+    pixels: &byte,
+    size: Size,
+    stride: u16,
+    format: PixelFormat,
+}
+
+export struct DisplayCtx {
+    front: FrameBuffer,
+    back: FrameBuffer,
+    frame_id: u32,
+
+    fn swap_buffers(self: &Self) void {
+        const tmp: FrameBuffer = self.front;
+        self.front = self.back;
+        self.back = tmp;
+        self.frame_id = self.frame_id + 1u32;
+    }
+
+    fn get_back_buffer(self: &Self) &FrameBuffer {
+        return &self.back;
+    }
+
+    fn get_front_buffer(self: &Self) &FrameBuffer {
+        return &self.front;
+    }
+
+    fn clear(self: &Self, color: Color) void {
+        framebuffer_clear(&self.back, color);
+    }
+}
+
+export fn bytes_per_pixel(format: PixelFormat) u8 {
+    if format == PixelFormat.RGB565 || format == PixelFormat.ARGB4444 {
+        return 2;
+    }
+    if format == PixelFormat.RGB888 {
+        return 3;
+    }
+    if format == PixelFormat.ARGB8888 {
+        return 4;
+    }
+    if format == PixelFormat.L8 || format == PixelFormat.A8 {
+        return 1;
+    }
+    return 1;
+}
+
+export fn framebuffer_required_bytes(w: u16, h: u16, format: PixelFormat) usize {
+    if format == PixelFormat.I1 {
+        return (w as usize + 7usize) / 8usize * h as usize;
+    }
+    if format == PixelFormat.I4 {
+        return (w as usize + 1usize) / 2usize * h as usize;
+    }
+    return w as usize * h as usize * bytes_per_pixel(format) as usize;
+}
+
+export fn framebuffer_rect(fb: &FrameBuffer) Rect {
+    return Rect{ x: 0, y: 0, w: fb.size.w, h: fb.size.h };
+}
+
+export fn framebuffer_new(pixels: &byte, w: u16, h: u16, stride: u16, format: PixelFormat) FrameBuffer {
+    return FrameBuffer{
+        pixels: pixels,
+        size: Size{ w: w, h: h },
+        stride: stride,
+        format: format,
+    };
+}
+
+export fn empty_framebuffer() FrameBuffer {
+    return FrameBuffer{
+        pixels: null,
+        size: SIZE_ZERO,
+        stride: 0,
+        format: PixelFormat.RGB565,
+    };
+}
+
+export fn display_ctx_new(front: FrameBuffer, back: FrameBuffer) DisplayCtx {
+    return DisplayCtx{
+        front: front,
+        back: back,
+        frame_id: 0u32,
+    };
+}
+
+export fn framebuffer_inside(fb: &FrameBuffer, x: i32, y: i32) bool {
+    return x >= 0 && y >= 0 && x < fb.size.w as i32 && y < fb.size.h as i32;
+}
+
+export fn framebuffer_get_pixel(fb: &FrameBuffer, x: i32, y: i32) Color {
+    if fb == null || fb.pixels == null || !framebuffer_inside(fb, x, y) {
+        return BLACK;
+    }
+
+    const offset: usize = pixel_byte_offset(fb, x, y);
+    if fb.format == PixelFormat.RGB565 {
+        const bits: u16 = fb.pixels[offset] as u16 | ((fb.pixels[offset + 1usize] as u16) << 8);
+        return unpack_rgb565(bits);
+    }
+    if fb.format == PixelFormat.RGB888 {
+        return Color{
+            r: fb.pixels[offset],
+            g: fb.pixels[offset + 1usize],
+            b: fb.pixels[offset + 2usize],
+            a: 255,
+        };
+    }
+    if fb.format == PixelFormat.ARGB8888 {
+        return Color{
+            a: fb.pixels[offset],
+            r: fb.pixels[offset + 1usize],
+            g: fb.pixels[offset + 2usize],
+            b: fb.pixels[offset + 3usize],
+        };
+    }
+    if fb.format == PixelFormat.ARGB4444 {
+        const bits: u16 = fb.pixels[offset] as u16 | ((fb.pixels[offset + 1usize] as u16) << 8);
+        return unpack_argb4444(bits);
+    }
+    if fb.format == PixelFormat.L8 {
+        const l: u8 = fb.pixels[offset];
+        return Color{ r: l, g: l, b: l, a: 255 };
+    }
+    if fb.format == PixelFormat.A8 {
+        const a: u8 = fb.pixels[offset];
+        return Color{ r: 255, g: 255, b: 255, a: a };
+    }
+    if fb.format == PixelFormat.I1 {
+        const bit: i32 = 7 - (x % 8);
+        const mask: u8 = 1u8 << bit;
+        const byte_value: u8 = fb.pixels[offset];
+        const on: bool = (byte_value & mask) != 0u8;
+        if on {
+            return Color{ r: 255, g: 255, b: 255, a: 255 };
+        }
+        return BLACK;
+    }
+
+    const packed: u8 = fb.pixels[offset];
+    var nibble: u8 = packed & 0x0Fu8;
+    if (x % 2) == 0 {
+        nibble = (packed >> 4) & 0x0Fu8;
+    }
+    const value: u8 = ((((nibble as u16) << 4) | nibble as u16) as! u8).value;
+    return Color{ r: value, g: value, b: value, a: 255 };
+}
+
+export fn framebuffer_set_pixel(fb: &FrameBuffer, x: i32, y: i32, color: &Color) void {
+    if fb == null || fb.pixels == null || !framebuffer_inside(fb, x, y) {
+        return;
+    }
+
+    const alpha: u8 = color.a;
+    var write: Color = copy_color(color);
+    if alpha < 255 && fb.format != PixelFormat.A8 && fb.format != PixelFormat.I1 && fb.format != PixelFormat.I4 {
+        const dst: Color = framebuffer_get_pixel(fb, x, y);
+        const src_copy: Color = copy_color(color);
+        write = dst.blend(src_copy);
+    }
+
+    const offset: usize = pixel_byte_offset(fb, x, y);
+    if fb.format == PixelFormat.RGB565 {
+        const bits: u16 = write.to_rgb565();
+        fb.pixels[offset] = ((bits & 0x00FFu16) as! u8).value;
+        fb.pixels[offset + 1usize] = ((bits >> 8) as! u8).value;
+        return;
+    }
+    if fb.format == PixelFormat.RGB888 {
+        fb.pixels[offset] = write.r;
+        fb.pixels[offset + 1usize] = write.g;
+        fb.pixels[offset + 2usize] = write.b;
+        return;
+    }
+    if fb.format == PixelFormat.ARGB8888 {
+        fb.pixels[offset] = write.a;
+        fb.pixels[offset + 1usize] = write.r;
+        fb.pixels[offset + 2usize] = write.g;
+        fb.pixels[offset + 3usize] = write.b;
+        return;
+    }
+    if fb.format == PixelFormat.ARGB4444 {
+        const bits: u16 = pack_argb4444(&write);
+        fb.pixels[offset] = ((bits & 0x00FFu16) as! u8).value;
+        fb.pixels[offset + 1usize] = ((bits >> 8) as! u8).value;
+        return;
+    }
+    if fb.format == PixelFormat.L8 {
+        fb.pixels[offset] = grayscale(&write);
+        return;
+    }
+    if fb.format == PixelFormat.A8 {
+        fb.pixels[offset] = write.a;
+        return;
+    }
+    if fb.format == PixelFormat.I1 {
+        const bit: i32 = 7 - (x % 8);
+        const mask: u8 = 1u8 << bit;
+        const gray: u8 = grayscale(&write);
+        const current: u8 = fb.pixels[offset];
+        if gray >= 128 {
+            fb.pixels[offset] = current | mask;
+        } else {
+            fb.pixels[offset] = current & (0xFFu8 ^ mask);
+        }
+        return;
+    }
+
+    const gray4: u8 = grayscale(&write) >> 4;
+    const current: u8 = fb.pixels[offset];
+    if (x % 2) == 0 {
+        fb.pixels[offset] = (current & 0x0Fu8) | (gray4 << 4);
+    } else {
+        fb.pixels[offset] = (current & 0xF0u8) | gray4;
+    }
+}
+
+export fn framebuffer_clear(fb: &FrameBuffer, color: Color) void {
+    if fb == null || fb.pixels == null {
+        return;
+    }
+    var target: FrameBuffer = FrameBuffer{
+        pixels: fb.pixels,
+        size: fb.size,
+        stride: fb.stride,
+        format: fb.format,
+    };
+    var y: i32 = 0;
+    while y < fb.size.h as i32 {
+        var x: i32 = 0;
+        while x < fb.size.w as i32 {
+            framebuffer_set_pixel(&target, x, y, &color);
+            x = x + 1;
+        }
+        y = y + 1;
+    }
+}

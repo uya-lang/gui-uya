@@ -11,7 +11,7 @@ use tests.test_rect;
 use tests.test_style;
 use tests.test_dirty_region;
 
-test "phase0 suite loads" {
+test "phase1 suite loads" {
     const sentinel: i32 = TEST_BITMAP_MODULE
         + TEST_COLOR_MODULE
         + TEST_CORE_TYPES_MODULE
