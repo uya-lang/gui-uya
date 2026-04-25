@@ -17,10 +17,10 @@ use std.testing.expect;
 export const TEST_EVENT_MODULE: i32 = 1;
 
 fn unwrap_event(opt: EventOption) !Event {
-    match opt {
-        .Some(evt) => { return evt; },
-        .None(_) => { return error.AssertionFailed; },
-    };
+    if !opt.has_value {
+        return error.AssertionFailed;
+    }
+    return opt.value;
 }
 
 test "event queue push pop order" {
@@ -102,13 +102,13 @@ test "gesture detector drag sequence" {
     try expect(evt.event_type == EventType.Press);
     evt = try unwrap_event(queue.pop());
     try expect(evt.event_type == EventType.DragStart);
-    try assert_eq_i32(evt.point.x as i32, 0);
+    try assert_eq_i32(evt.point().x as i32, 0);
     evt = try unwrap_event(queue.pop());
     try expect(evt.event_type == EventType.Drag);
-    try assert_eq_i32(evt.point.x as i32, 20);
+    try assert_eq_i32(evt.point().x as i32, 20);
     evt = try unwrap_event(queue.pop());
     try expect(evt.event_type == EventType.Drag);
-    try assert_eq_i32(evt.point.x as i32, 30);
+    try assert_eq_i32(evt.point().x as i32, 30);
     evt = try unwrap_event(queue.pop());
     try expect(evt.event_type == EventType.Release);
     evt = try unwrap_event(queue.pop());
@@ -150,20 +150,20 @@ test "gesture detector pinch sequence" {
 
     var evt: Event = try unwrap_event(queue.pop());
     try expect(evt.event_type == EventType.PinchStart);
-    try assert_eq_i32(evt.point.x as i32, 5);
-    try assert_eq_i32(evt.value, 100);
+    try assert_eq_i32(evt.point().x as i32, 5);
+    try assert_eq_i32(evt.value(), 100);
     evt = try unwrap_event(queue.pop());
     try expect(evt.event_type == EventType.Pinch);
-    try assert_eq_i32(evt.point.x as i32, 15);
-    try assert_eq_i32(evt.value, 900);
+    try assert_eq_i32(evt.point().x as i32, 15);
+    try assert_eq_i32(evt.value(), 900);
     evt = try unwrap_event(queue.pop());
     try expect(evt.event_type == EventType.PinchEnd);
-    try assert_eq_i32(evt.value, 900);
+    try assert_eq_i32(evt.value(), 900);
     try assert_eq_bool(queue.is_empty(), true);
 }
 
 test "event carries point payload" {
     const evt: Event = event_point(EventType.Press, InputDev.Touch, 2, 42, Point{ x: 9, y: 11 });
-    try assert_eq_i32(evt.point.x as i32, 9);
-    try assert_eq_i32(evt.point.y as i32, 11);
+    try assert_eq_i32(evt.point().x as i32, 9);
+    try assert_eq_i32(evt.point().y as i32, 11);
 }

@@ -3,8 +3,8 @@ use core.event.EventPhase;
 use core.event.EventType;
 use core.rect.Rect;
 use render.ctx.RenderCtx;
+use style.DEFAULT_STYLE;
 use style.Style;
-use style.style_default;
 
 export const GUI_OBJ_REGISTRY_CAPACITY: i32 = 256;
 
@@ -455,7 +455,7 @@ export fn gui_obj_default() GuiObj {
         w: 0,
         h: 0,
         flags: obj_flags_default(),
-        style: style_default(),
+        style: DEFAULT_STYLE,
         user_data: null,
         render_cb: null,
         layout_cb: null,

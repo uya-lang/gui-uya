@@ -126,6 +126,8 @@ fn page_max_i32(a: i32, b: i32) i32 {
 
 struct PageRenderAdapter : IGuiRenderCallback {}
 
+var PAGE_RENDER_ADAPTER: IGuiRenderCallback = PageRenderAdapter{};
+
 export struct Page : IContainer {
     widget: Widget,
     scrollable: bool,
@@ -167,7 +169,7 @@ Page {
     }
 
     fn obj(self: &Self) &GuiObj {
-        return widget_bind_callbacks(&self.widget.base, null, null, self as &void);
+        return widget_bind_callbacks(&self.widget.base, &PAGE_RENDER_ADAPTER, null, self as &void);
     }
 
     fn recalc_content_size(self: &Self) void {
@@ -241,7 +243,7 @@ Page {
                 child.x = orig_x - self.scroll_x;
                 child.y = orig_y - self.scroll_y;
             }
-            page_render_obj(child, ctx);
+            child.render(ctx);
             child.x = orig_x;
             child.y = orig_y;
             child = child.sibling_next;

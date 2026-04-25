@@ -22,6 +22,8 @@ export enum ChartType {
 
 struct ChartRenderAdapter : IGuiRenderCallback {}
 
+var CHART_RENDER_ADAPTER: IGuiRenderCallback = ChartRenderAdapter{};
+
 fn chart_color_palette(index: i32) Color {
     if index % 5 == 0 {
         return Color{ r: 37, g: 99, b: 235, a: 255 };
@@ -82,7 +84,7 @@ Chart {
     }
 
     fn obj(self: &Self) &GuiObj {
-        return widget_bind_callbacks(&self.widget.base, null, null, self as &void);
+        return widget_bind_callbacks(&self.widget.base, &CHART_RENDER_ADAPTER, null, self as &void);
     }
 
     fn add_point(self: &Self, value: i32) &Chart {

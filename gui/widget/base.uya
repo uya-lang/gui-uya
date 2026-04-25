@@ -13,10 +13,10 @@ use libc.strlen;
 use render.ctx.RenderCtx;
 use render.font.Font;
 use render.font.font_default;
+use style.DEFAULT_STYLE;
 use style.Style;
 use style.StyleProp;
 use style.StyleValue;
-use style.style_default;
 use style.theme.Theme;
 
 export const WIDGET_TYPE_WIDGET: u32 = 0x1000u32;
@@ -308,7 +308,7 @@ export fn widget_new(name_ptr: &const byte, type_tag: u32, clickable: bool, focu
     base.name_ptr = name_ptr;
     base.flags.clickable = clickable;
     base.flags.focusable = focusable;
-    base.style = style_default();
+    base.style = DEFAULT_STYLE;
     return Widget{
         base: base,
         state: WidgetState.Normal,

@@ -94,3 +94,11 @@ export struct ObjPool<T: IGuiObj> {
         return OBJ_POOL_CAPACITY;
     }
 }
+
+export fn obj_pool_new<T: IGuiObj>() ObjPool<T> {
+    return ObjPool<T>{
+        storage: [],
+        states: [],
+        live_count: 0,
+    };
+}

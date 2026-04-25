@@ -44,6 +44,9 @@ export enum BtnVariant {
 struct ButtonRenderAdapter : IGuiRenderCallback {}
 struct ButtonInputAdapter : IGuiInputCallback {}
 
+var BUTTON_RENDER_ADAPTER: IGuiRenderCallback = ButtonRenderAdapter{};
+var BUTTON_INPUT_ADAPTER: IGuiInputCallback = ButtonInputAdapter{};
+
 export struct Button {
     widget: Widget,
     variant: BtnVariant,
@@ -146,7 +149,7 @@ Button {
     }
 
     fn obj(self: &Self) &GuiObj {
-        return widget_bind_callbacks(&self.widget.base, null, null, self as &void);
+        return widget_bind_callbacks(&self.widget.base, &BUTTON_RENDER_ADAPTER, &BUTTON_INPUT_ADAPTER, self as &void);
     }
 
     fn on_click(self: &Self, callback: &IWidgetEventCallback, user_data: &void) &Button {

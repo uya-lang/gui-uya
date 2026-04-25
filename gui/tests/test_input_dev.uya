@@ -41,5 +41,5 @@ test "mouse key and encoder drivers read pending event" {
 
     encoder.feed(3, 3, 4);
     try assert_eq_bool(encoder.read(&evt), true);
-    try assert_eq_i32(evt.value, 4);
+    try assert_eq_i32(evt.value(), 4);
 }

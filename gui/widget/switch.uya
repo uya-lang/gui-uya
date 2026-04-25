@@ -18,6 +18,9 @@ use widget.base.widget_new;
 struct SwitchRenderAdapter : IGuiRenderCallback {}
 struct SwitchInputAdapter : IGuiInputCallback {}
 
+var SWITCH_RENDER_ADAPTER: IGuiRenderCallback = SwitchRenderAdapter{};
+var SWITCH_INPUT_ADAPTER: IGuiInputCallback = SwitchInputAdapter{};
+
 export struct Switch {
     widget: Widget,
     checked: bool,
@@ -68,7 +71,7 @@ Switch {
     }
 
     fn obj(self: &Self) &GuiObj {
-        return widget_bind_callbacks(&self.widget.base, null, null, self as &void);
+        return widget_bind_callbacks(&self.widget.base, &SWITCH_RENDER_ADAPTER, &SWITCH_INPUT_ADAPTER, self as &void);
     }
 
     fn on_change(self: &Self, callback: &IWidgetValueCallback, user_data: &void) &Switch {

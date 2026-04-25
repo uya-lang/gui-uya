@@ -58,6 +58,8 @@ export const MAX_GRID_ITEMS: i32 = 128;
 
 struct GridViewRenderAdapter : IGuiRenderCallback {}
 
+var GRID_VIEW_RENDER_ADAPTER: IGuiRenderCallback = GridViewRenderAdapter{};
+
 export struct GridView : IContainer {
     widget: Widget,
     columns: u8,
@@ -101,7 +103,7 @@ GridView {
     }
 
     fn obj(self: &Self) &GuiObj {
-        return widget_bind_callbacks(&self.widget.base, null, null, self as &void);
+        return widget_bind_callbacks(&self.widget.base, &GRID_VIEW_RENDER_ADAPTER, null, self as &void);
     }
 
     fn scroll_to(self: &Self, y: i16) void {
@@ -141,7 +143,7 @@ GridView {
                 child.y = cell.y - self.widget.base.y;
                 child.w = cell.w;
                 child.h = cell.h;
-                grid_render_obj(child, ctx);
+                child.render(ctx);
             }
             idx = idx + 1;
         }

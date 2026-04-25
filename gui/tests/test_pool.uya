@@ -3,6 +3,7 @@ use core.obj.gui_obj_default;
 use core.obj_pool.OBJ_POOL_CAPACITY;
 use core.obj_pool.ObjPool;
 use core.obj_pool.ObjPoolIndices;
+use core.obj_pool.obj_pool_new;
 use res.buf.Buffer;
 use res.buf.Slice;
 use res.buf.buffer_new;
@@ -67,7 +68,7 @@ test "buffer resize append clear" {
 
 test "slice generic helper" {
     var values: [i32: 3] = [7, 8, 9];
-    const view: Slice<i32> = Slice<i32>{ ptr: &values[0], len: 3usize };
+    const view: Slice<i32> = slice_from_ptr<i32>(&values[0], 3usize);
     try assert_eq_u64(view.len as u64, 3u64);
     try assert_eq_i32(view.ptr[0], 7);
     try assert_eq_i32(view.ptr[2], 9);
@@ -97,11 +98,7 @@ test "mem pool fragmentation reuse" {
 }
 
 test "obj pool lifecycle" {
-    var pool: ObjPool<GuiObj> = ObjPool<GuiObj>{
-        storage: [],
-        states: [],
-        live_count: 0,
-    };
+    var pool: ObjPool<GuiObj> = obj_pool_new<GuiObj>();
     const first: &GuiObj = pool.alloc_obj();
     const second: &GuiObj = pool.alloc_obj();
 

@@ -21,6 +21,8 @@ use widget.base.widget_new;
 
 struct CanvasRenderAdapter : IGuiRenderCallback {}
 
+var CANVAS_RENDER_ADAPTER: IGuiRenderCallback = CanvasRenderAdapter{};
+
 export struct Canvas {
     widget: Widget,
     draw_buffer: FrameBuffer,
@@ -62,7 +64,7 @@ Canvas {
     }
 
     fn obj(self: &Self) &GuiObj {
-        return widget_bind_callbacks(&self.widget.base, null, null, self as &void);
+        return widget_bind_callbacks(&self.widget.base, &CANVAS_RENDER_ADAPTER, null, self as &void);
     }
 
     fn attach_buffer(self: &Self, pixels: &byte, w: u16, h: u16, stride: u16, format: PixelFormat) void {

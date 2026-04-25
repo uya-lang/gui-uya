@@ -33,7 +33,7 @@
 
 ## Phase 0: 基础设施 (Week 1-3)
 
-> 注: 当前仓库已完成 Phase 0 的可编译可测试版本；少数条目因现阶段 Uya/C99 后端限制采用了等价实现，例如 `Rect.union_rect`、专用 `EventOption` 出队、`GuiObj` 泛型对象池的直接字面量构造，以及事件的扁平化载荷字段。相关编译器修复清单见 [gui_uya_compiler_fixlist.md](./gui_uya_compiler_fixlist.md)。
+> 注: 当前仓库已完成 Phase 0 的可编译可测试版本；除 `Rect.union_rect` 这类仍受语言关键字限制的命名点外，大部分编译器相关历史绕法已同步撤销，例如 `EventData` union 载荷、`obj_pool_new<T>()`、接口回调绑定、直接结构体比较与相对 `-o` 输出路径。少量组合路径在真实 GUI 构建里仍保留兼容层，例如 `EventOption` 出队、`ByteSlice` 返回值与 `Chart.add_point()` 的逐句调用。相关编译器修复清单见 [gui_uya_compiler_fixlist.md](./gui_uya_compiler_fixlist.md)。
 
 ### Week 1: 项目搭建与环境配置
 
@@ -172,7 +172,7 @@
   - [x] `struct Point` - 坐标点
   - [x] `struct Event` - 事件结构体
     - [x] 基础字段 (type, target, timestamp)
-    - [x] 扁平化载荷字段 (point/key/encoder/value)
+    - [x] `union EventData` 载荷字段 (point/key/value)
     - [x] 传播控制 (stop_bubble, handled)
   - [x] `struct EventQueue` - 环形缓冲区队列
     - [x] `fn push(self, evt) bool` - 入队
@@ -614,7 +614,7 @@
 
 #### Day 3: 标签
 - [x] `widget/lbl.uya` - 标签组件
-  - [x] 文本对齐枚举（已以 `LabelAlign` 形式落地，覆盖 9 种对齐）
+  - [x] 文本对齐枚举（已恢复 `TextAlign` 命名，覆盖 9 种对齐）
   - [x] `enum TextOverflow: u8` (Clip/Ellipsis/Wrap/Scroll)
   - [x] `struct Label`
     - [x] `widget: Widget`

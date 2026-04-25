@@ -15,19 +15,15 @@ fn expect_near(actual: f64, expected: f64, epsilon: f64) !void {
     try expect(fabs(actual - expected) <= epsilon);
 }
 
-fn point_eq(a: Point, b: Point) bool {
-    return a.x == b.x && a.y == b.y;
-}
-
 test "point arithmetic and lerp" {
     const a: Point = Point{ x: 2, y: 3 };
     const b: Point = Point{ x: 5, y: -1 };
 
-    try expect(point_eq(a.add(b), Point{ x: 7, y: 2 }));
-    try expect(point_eq(a.sub(b), Point{ x: -3, y: 4 }));
-    try expect(point_eq(a.scale(2), Point{ x: 4, y: 6 }));
-    try expect(point_eq(POINT_ZERO.add(POINT_ONE), POINT_ONE));
-    try expect(point_eq(a.lerp(b, 0.5), Point{ x: 4, y: 1 }));
+    try expect(a.add(b) == Point{ x: 7, y: 2 });
+    try expect(a.sub(b) == Point{ x: -3, y: 4 });
+    try expect(a.scale(2) == Point{ x: 4, y: 6 });
+    try expect(POINT_ZERO.add(POINT_ONE) == POINT_ONE);
+    try expect(a.lerp(b, 0.5) == Point{ x: 4, y: 1 });
 }
 
 test "point distance" {

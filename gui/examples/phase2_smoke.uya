@@ -23,10 +23,6 @@ use render.img.image_data_new;
 use render.zerocopy.ZeroCopyCtx;
 use render.zerocopy.zerocopy_ctx_new;
 
-fn color_eq(a: Color, b: Color) bool {
-    return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
-}
-
 export fn run_phase2_smoke() i32 {
     var front_bytes: [byte: 1024] = [];
     var back_bytes: [byte: 1024] = [];
@@ -58,10 +54,10 @@ export fn run_phase2_smoke() i32 {
     if display.frame_id != 1u32 {
         return 1;
     }
-    if !color_eq(ctx_pixel(&ctx, 2, 2), Color{ r: 255, g: 0, b: 0, a: 255 }) {
+    if ctx_pixel(&ctx, 2, 2) != Color{ r: 255, g: 0, b: 0, a: 255 } {
         return 2;
     }
-    if !color_eq(ctx_pixel(&ctx, 13, 13), Color{ r: 0, g: 255, b: 0, a: 255 }) {
+    if ctx_pixel(&ctx, 13, 13) != Color{ r: 0, g: 255, b: 0, a: 255 } {
         return 3;
     }
     return 0;

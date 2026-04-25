@@ -26,6 +26,9 @@ export const MAX_LIST_ITEMS: i32 = 1024;
 struct ListRenderAdapter : IGuiRenderCallback {}
 struct ListInputAdapter : IGuiInputCallback {}
 
+var LIST_RENDER_ADAPTER: IGuiRenderCallback = ListRenderAdapter{};
+var LIST_INPUT_ADAPTER: IGuiInputCallback = ListInputAdapter{};
+
 struct ListItem {
     text: &const byte,
     len: usize,
@@ -90,7 +93,7 @@ ListView {
     }
 
     fn obj(self: &Self) &GuiObj {
-        return widget_bind_callbacks(&self.widget.base, null, null, self as &void);
+        return widget_bind_callbacks(&self.widget.base, &LIST_RENDER_ADAPTER, &LIST_INPUT_ADAPTER, self as &void);
     }
 
     fn add_item(self: &Self, text: &const byte) void {
@@ -205,17 +208,17 @@ ListView {
     fn handle_event(self: &Self, evt: &Event) bool {
         _ = self.widget.handle_input(evt);
         if evt.event_type == EventType.Press {
-            self.drag_anchor_y = evt.point.y;
+            self.drag_anchor_y = evt.point().y;
             return true;
         }
         if evt.event_type == EventType.Drag {
-            const dy: i16 = self.drag_anchor_y - evt.point.y;
-            self.drag_anchor_y = evt.point.y;
+            const dy: i16 = self.drag_anchor_y - evt.point().y;
+            self.drag_anchor_y = evt.point().y;
             self.scroll_by(0, dy);
             return true;
         }
         if evt.event_type == EventType.Click {
-            const local_y: i32 = evt.point.y as i32 - self.widget.base.screen_area().y as i32 + self.scroll_y as i32;
+            const local_y: i32 = evt.point().y as i32 - self.widget.base.screen_area().y as i32 + self.scroll_y as i32;
             const idx: i32 = local_y / self.item_height as i32;
             self.select(idx);
             return true;

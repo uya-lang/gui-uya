@@ -10,7 +10,7 @@
 - 修复后应补的编译器回归测试
 
 > 2026-04-26 之后，这份文档已经主要转为“历史问题 + 当前回归状态”记录。
-> 除 `#7` 外，其余条目已在编译器 / driver 侧修复；GUI 仓库是否立即撤销绕法，取决于组件侧重构节奏。
+> 除 `#7` 外，其余条目已在编译器 / driver 侧修复；GUI 仓库已同步撤销大部分历史绕法，但经过真实 `make test` / `make build` 验证，`#1/#3/#9` 仍保留少量兼容层。
 
 ## 优先级
 
@@ -42,17 +42,17 @@
 
 | 编号 | 问题 | 当前状态 | 对当前仓库影响 | 当前仓库处理方式 |
 |------|------|----------|----------------|------------------|
-| 1 | 泛型 `union` / `Option<T>` C99 代码生成 | 已修复（编译器） | 低 | 历史绕法，可回撤 `EventOption` |
-| 2 | `union` 作为结构体字段的 C99 代码生成 | 已修复（编译器） | 低 | 历史绕法，可恢复真正 `union` 字段 |
-| 3 | 泛型构造器 / 泛型返回值实例化 | 已修复（编译器） | 低 | 历史绕法，可回到通用工厂 / 返回类型 |
-| 4 | 结构体比较表达式 C99 代码生成 | 已修复（编译器） | 低 | 历史绕法，可移除字段级 helper |
-| 5 | 全局结构体常量依赖其他全局结构体常量 | 已修复（编译器） | 低 | 历史绕法，可回到全局组合常量 |
-| 6 | const receiver 限定传播 | 已修复（编译器） | 低 | 历史绕法，可去掉局部规避 |
+| 1 | 泛型 `union` / `Option<T>` C99 代码生成 | 已修复（编译器） | 低 | `Option<MyStruct>` 已验证；GUI 中 `EventQueue.pop()` 仍暂保留 `EventOption` |
+| 2 | `union` 作为结构体字段的 C99 代码生成 | 已修复（编译器） | 低 | 已恢复 `EventData` union 载荷 |
+| 3 | 泛型构造器 / 泛型返回值实例化 | 已修复（编译器） | 低 | 已恢复 `obj_pool_new<T>()`；`Buffer.as_slice()` 仍暂保留 `ByteSlice` |
+| 4 | 结构体比较表达式 C99 代码生成 | 已修复（编译器） | 低 | 已切回直接结构体比较 |
+| 5 | 全局结构体常量依赖其他全局结构体常量 | 已修复（编译器） | 低 | 已恢复 `DEFAULT_STYLE` 全局常量 |
+| 6 | const receiver 限定传播 | 已修复（编译器） | 低 | 已恢复直接 const receiver 调用 |
 | 7 | 关键字与方法名冲突 | 语言限制（当前不支持） | 低 | 使用 `union_rect` 等替代命名 |
-| 8 | `interface` 值的全局 / 字段初始化 | 已修复（编译器） | 低 | 历史绕法，可回到接口对象字段 / 全局绑定 |
-| 9 | `&Self` 返回值链式方法 lowering | 已修复（编译器） | 低 | 历史绕法，可恢复 Fluent API |
-| 10 | 跨模块同名 `enum` 的 C99 命名空间冲突 | 已修复（编译器） | 低 | 历史绕法，可恢复原始枚举命名 |
-| 11 | split-C 下相对 `-o` 路径解析 | 已修复（driver 层） | 低 | 历史绕法，可直接使用相对 `-o` |
+| 8 | `interface` 值的全局 / 字段初始化 | 已修复（编译器） | 低 | 已恢复接口回调对象绑定 |
+| 9 | `&Self` 返回值链式方法 lowering | 已修复（编译器） | 低 | 普通链式已验证；`Chart.add_point()` 仍保留逐句调用 |
+| 10 | 跨模块同名 `enum` 的 C99 命名空间冲突 | 已修复（编译器） | 低 | 已恢复 `TextAlign` 命名 |
+| 11 | split-C 下相对 `-o` 路径解析 | 已修复（driver 层） | 低 | 已切回相对 `-o` |
 
 ## 1. 泛型 `union` / `Option<T>` 的 C99 代码生成
 
@@ -68,7 +68,7 @@
 ### GUI 侧复现点
 
 - [event.uya](/home/winger/gui-uya/gui/core/event.uya)
-- 当前实现保留了专用 `EventOption`，见 [event.uya](/home/winger/gui-uya/gui/core/event.uya#L57)
+- 当前代码已恢复 `EventData` union 载荷，但 `EventQueue.pop()` 仍保留专用 `EventOption`，见 [event.uya](/home/winger/uya/gui-uya/gui/core/event.uya)
 
 ### 当时的失败表现
 
@@ -109,7 +109,7 @@
 ### GUI 侧复现点
 
 - 目标形态原本是 `Event { data: EventData, ... }`
-- 当前稳定实现退回到扁平字段，见 [event.uya](/home/winger/gui-uya/gui/core/event.uya#L44)
+- 当前代码已恢复 `Event { data: EventData, ... }` 形态，见 [event.uya](/home/winger/uya/gui-uya/gui/core/event.uya)
 
 ### 当时的失败表现
 
@@ -147,9 +147,8 @@
 
 ### GUI 侧复现点
 
-- `ObjPool<T: IGuiObj>` 本体保留下来了，见 [obj_pool.uya](/home/winger/gui-uya/gui/core/obj_pool.uya#L16)
-- 但没有保留通用 `obj_pool_new<T>()` 工厂函数
-- 使用点改为直接字面量初始化，见 [test_pool.uya](/home/winger/gui-uya/gui/tests/test_pool.uya#L99) 和 [core_bench.uya](/home/winger/gui-uya/gui/benchmarks/core_bench.uya#L14)
+- `ObjPool<T: IGuiObj>` 与 `obj_pool_new<T>()` 已一并恢复，见 [obj_pool.uya](/home/winger/uya/gui-uya/gui/core/obj_pool.uya)
+- 使用点已回到工厂初始化，见 [test_pool.uya](/home/winger/uya/gui-uya/gui/tests/test_pool.uya) 和 [core_bench.uya](/home/winger/uya/gui-uya/gui/benchmarks/core_bench.uya)
 
 ### 相关表现
 
@@ -160,7 +159,7 @@
 
 - `ObjPool<T>` 直接字面量初始化
 - `Slice<T>` 直接字面量初始化
-- `Buffer.as_slice()` 仍返回专用 `ByteSlice`，见 [buf.uya](/home/winger/gui-uya/gui/res/buf.uya#L63)
+- `Buffer.as_slice()` 在独立场景可表达为 `Slice<byte>`，但当前 GUI 仓库仍保留 `ByteSlice` 以规避真实构建回归，见 [buf.uya](/home/winger/uya/gui-uya/gui/res/buf.uya)
 
 ### 修复结果
 
@@ -195,7 +194,7 @@
 
 ### 历史绕法
 
-- 全部改成字段级比较 helper：`color_eq`、`rect_eq`、`point_eq`
+- 当前测试 / 示例已恢复直接结构体比较
 
 ### 修复结果
 
@@ -224,7 +223,7 @@
 ### GUI 侧复现点
 
 - [style.uya](/home/winger/gui-uya/gui/style/style.uya)
-- 当前用 `style_default()` 返回默认样式，而不是 `DEFAULT_STYLE = { background: TRANSPARENT, ... }`
+- 当前已恢复 `DEFAULT_STYLE = { background: TRANSPARENT, ... }` 这类全局默认样式常量
 
 ### 历史绕法
 
@@ -323,11 +322,15 @@
 ### 历史绕法
 
 - 不在全局或结构体字段里保存接口对象
-- `GuiObj` 的 `render_cb` / `input_cb` 统一置空
-- 容器层改为 `type_tag + user_data` 的显式分发，见：
-  - [panel.uya](/home/winger/uya/gui-uya/gui/widget/panel.uya)
-  - [page.uya](/home/winger/uya/gui-uya/gui/widget/page.uya)
-  - [grid_view.uya](/home/winger/uya/gui-uya/gui/widget/grid_view.uya)
+- 当时 `GuiObj` 的 `render_cb` / `input_cb` 统一置空
+- 容器层退回到 `type_tag + user_data` 的显式分发，见：
+- [panel.uya](/home/winger/uya/gui-uya/gui/widget/panel.uya)
+- [page.uya](/home/winger/uya/gui-uya/gui/widget/page.uya)
+- [grid_view.uya](/home/winger/uya/gui-uya/gui/widget/grid_view.uya)
+
+### GUI 侧同步状态
+
+- 当前代码已恢复 `widget/*` 的接口对象驱动回调绑定；容器渲染重新通过 `child.render(ctx)` 走接口分发
 
 ### 修复结果
 
@@ -364,7 +367,7 @@
 _ = chart.add_point(2).add_point(6).add_point(3).add_point(8);
 ```
 
-- 当前已拆成逐句调用，见：
+- 当前单独编译器测试已覆盖链式调用；GUI 仓库里的 `Chart.add_point()` 仍保留逐句调用，见：
   - [test_widgets.uya](/home/winger/uya/gui-uya/gui/tests/test_widgets.uya)
   - [phase3_smoke.uya](/home/winger/uya/gui-uya/gui/examples/phase3_smoke.uya)
 
@@ -411,7 +414,7 @@ _ = chart.add_point(6);
 
 - `render/font.uya` 已有 `TextAlign`
 - `widget/lbl.uya` 初版也定义了 `TextAlign`
-- 当前稳定实现已把组件侧枚举改名为 `LabelAlign`，见 [lbl.uya](/home/winger/uya/gui-uya/gui/widget/lbl.uya)
+- 当前代码已恢复组件侧 `TextAlign` 命名，见 [lbl.uya](/home/winger/uya/gui-uya/gui/widget/lbl.uya)
 
 ### 当时的失败表现
 
@@ -423,7 +426,7 @@ _ = chart.add_point(6);
 ### 历史绕法
 
 - 避免跨模块使用同名 `enum`
-- 组件侧显式改名为 `LabelAlign`
+- 组件侧曾临时改名为 `LabelAlign`
 
 ### 修复结果
 
@@ -452,7 +455,7 @@ _ = chart.add_point(6);
 ### GUI 侧复现点
 
 - `Phase 3` 默认 smoke 切换到 [Makefile](/home/winger/uya/gui-uya/Makefile)
-- 本次显式使用绝对路径 `$(ABS_BUILD_DIR)` 规避
+- 当时通过显式绝对路径 `$(ABS_BUILD_DIR)` 规避
 
 ### 当时的失败表现
 
@@ -462,7 +465,7 @@ _ = chart.add_point(6);
 ### 历史绕法
 
 - 对 split-C 输出统一传绝对路径
-- 当前 Makefile 已使用 `ABS_BUILD_DIR`
+- 当前 Makefile 已切回相对 `$(BUILD_DIR)` 输出
 
 ### 修复结果
 
@@ -494,16 +497,18 @@ _ = chart.add_point(6);
 
 ## 当前验收结论
 
-以下目标中，除 `#7` 关联的关键字命名策略外，其余项在编译器侧都已经具备撤销 GUI 绕法的条件。
+以下目标中，除 `#7` 关联的关键字命名策略外，GUI 仓库已完成大部分同步：
 
-- GUI 仓库可以把这些绕法撤掉：
-  - `EventOption` 改回通用 `Option<Event>`
-  - `Event` 改回真正的 union 负载字段
-  - `Buffer.as_slice()` 改回 `Slice<byte>`
-  - `obj_pool_new<T>()` 恢复为普通泛型工厂函数
-  - 测试里移除 `color_eq` / `rect_eq` / `point_eq` 这类字段级比较 helper
-  - `Style` 默认值可安全回到全局结构体常量
-  - `widget/*` 可恢复接口对象驱动的组件回调绑定，而不是 `type_tag + user_data` 分发
-  - `Chart.add_point(...).add_point(...)` 这类 Fluent API 可以直接恢复
-  - `widget/lbl.uya` 可安全使用 `TextAlign` 这类与其他模块同名的枚举名
-  - `uya build ... -o build/app` 在 split-C 模式下可以稳定输出到项目根的 `build/`
+- `EventData` union 载荷
+- `obj_pool_new<T>()` 泛型工厂函数
+- 测试 / 示例里的直接结构体比较
+- `DEFAULT_STYLE` 全局默认样式常量
+- `widget/*` 的接口对象回调绑定
+- `widget/lbl.uya` 的 `TextAlign` 命名
+- `uya build ... -o build/app` 的相对输出路径
+
+以下组合路径经真实 GUI 构建验证后，当前仍保留兼容层：
+
+- `EventQueue.pop()` 继续使用 `EventOption`
+- `Buffer.as_slice()` 继续返回 `ByteSlice`
+- `Chart.add_point()` 继续拆成逐句调用

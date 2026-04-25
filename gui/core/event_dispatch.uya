@@ -44,7 +44,7 @@ export struct EventDispatcher {
         if event_uses_capture(working) && self.capture_obj >= 0 {
             working.target = self.capture_obj;
         } else if working.target < 0 {
-            working.target = self.find_target(tree, working.point);
+            working.target = self.find_target(tree, working.point());
         }
 
         if working.target < 0 {
@@ -218,13 +218,12 @@ export struct EventDispatcher {
     fn pump(self: &Self, tree: &ObjTree) i32 {
         var dispatched: i32 = 0;
         while true {
-            match self.queue.pop() {
-                .Some(evt) => {
-                    _ = self.dispatch(evt, tree);
-                    dispatched = dispatched + 1;
-                },
-                .None(_) => { break; },
-            };
+            const next: EventOption = self.queue.pop();
+            if !next.has_value {
+                break;
+            }
+            _ = self.dispatch(next.value, tree);
+            dispatched = dispatched + 1;
         }
         return dispatched;
     }

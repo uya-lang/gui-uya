@@ -786,39 +786,41 @@ export fn style_builder_new() StyleBuilder {
     return StyleBuilder{ style: style_default() };
 }
 
+export const DEFAULT_STYLE: Style = Style{
+    background: Color{ r: 0, g: 0, b: 0, a: 0 },
+    foreground: Color{ r: 0, g: 0, b: 0, a: 255 },
+    border: Color{ r: 255, g: 255, b: 255, a: 255 },
+    shadow_color: Color{ r: 0, g: 0, b: 0, a: 0 },
+    width: 0,
+    height: 0,
+    min_width: 0,
+    min_height: 0,
+    max_width: 0,
+    max_height: 0,
+    border_width: 0,
+    radius: 0,
+    padding_top: 0,
+    padding_right: 0,
+    padding_bottom: 0,
+    padding_left: 0,
+    margin_top: 0,
+    margin_right: 0,
+    margin_bottom: 0,
+    margin_left: 0,
+    font_size: 14,
+    opacity: 255,
+    font: null,
+    inline_mask: 0u64,
+    ext_count: 0,
+    ext_props: [],
+};
+
 export fn style_empty() Style {
-    return Style{
-        background: TRANSPARENT,
-        foreground: BLACK,
-        border: WHITE,
-        shadow_color: TRANSPARENT,
-        width: 0,
-        height: 0,
-        min_width: 0,
-        min_height: 0,
-        max_width: 0,
-        max_height: 0,
-        border_width: 0,
-        radius: 0,
-        padding_top: 0,
-        padding_right: 0,
-        padding_bottom: 0,
-        padding_left: 0,
-        margin_top: 0,
-        margin_right: 0,
-        margin_bottom: 0,
-        margin_left: 0,
-        font_size: 14,
-        opacity: 255,
-        font: null,
-        inline_mask: 0u64,
-        ext_count: 0,
-        ext_props: [],
-    };
+    return DEFAULT_STYLE;
 }
 
 export fn style_default() Style {
-    return style_empty();
+    return DEFAULT_STYLE;
 }
 
 export fn style_make(bg: Color, fg: Color, border_width: u8, border_color: Color, radius: u8, opacity: u8) Style {

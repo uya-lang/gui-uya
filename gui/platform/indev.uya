@@ -2,6 +2,8 @@ use core.event.Event;
 use core.event.EventOption;
 use core.event.EventType;
 use core.event.InputDev;
+use core.event.event_option_none;
+use core.event.event_option_some;
 use core.event.event_key;
 use core.event.event_none;
 use core.event.event_point;
@@ -21,18 +23,15 @@ export struct TouchDriver : IInputDev {
         if is_down {
             event_type = EventType.Press;
         }
-        self.pending = EventOption.Some(event_point(event_type, InputDev.Touch, target, timestamp, point));
+        self.pending = event_option_some(event_point(event_type, InputDev.Touch, target, timestamp, point));
     }
 
     fn read(self: &Self, out_evt: &Event) bool {
-        match self.pending {
-            .Some(evt) => {
-                out_evt[0] = evt;
-                self.pending = EventOption.None();
-                return true;
-            },
-            .None(_) => {},
-        };
+        if self.pending.has_value {
+            out_evt[0] = self.pending.value;
+            self.pending = event_option_none();
+            return true;
+        }
         return false;
     }
 
@@ -50,18 +49,15 @@ export struct MouseDriver : IInputDev {
         if pressed {
             event_type = EventType.Press;
         }
-        self.pending = EventOption.Some(event_point(event_type, InputDev.Mouse, target, timestamp, point));
+        self.pending = event_option_some(event_point(event_type, InputDev.Mouse, target, timestamp, point));
     }
 
     fn read(self: &Self, out_evt: &Event) bool {
-        match self.pending {
-            .Some(evt) => {
-                out_evt[0] = evt;
-                self.pending = EventOption.None();
-                return true;
-            },
-            .None(_) => {},
-        };
+        if self.pending.has_value {
+            out_evt[0] = self.pending.value;
+            self.pending = event_option_none();
+            return true;
+        }
         return false;
     }
 
@@ -79,18 +75,15 @@ export struct KeyDriver : IInputDev {
         if pressed {
             event_type = EventType.KeyDown;
         }
-        self.pending = EventOption.Some(event_key(event_type, InputDev.Keypad, target, timestamp, key_code));
+        self.pending = event_option_some(event_key(event_type, InputDev.Keypad, target, timestamp, key_code));
     }
 
     fn read(self: &Self, out_evt: &Event) bool {
-        match self.pending {
-            .Some(evt) => {
-                out_evt[0] = evt;
-                self.pending = EventOption.None();
-                return true;
-            },
-            .None(_) => {},
-        };
+        if self.pending.has_value {
+            out_evt[0] = self.pending.value;
+            self.pending = event_option_none();
+            return true;
+        }
         return false;
     }
 
@@ -104,18 +97,15 @@ export struct EncoderDriver : IInputDev {
     pending: EventOption,
 
     fn feed(self: &Self, target: i32, timestamp: u32, delta: i16) void {
-        self.pending = EventOption.Some(event_value(EventType.ValueChange, InputDev.Encoder, target, timestamp, delta as i32));
+        self.pending = event_option_some(event_value(EventType.ValueChange, InputDev.Encoder, target, timestamp, delta as i32));
     }
 
     fn read(self: &Self, out_evt: &Event) bool {
-        match self.pending {
-            .Some(evt) => {
-                out_evt[0] = evt;
-                self.pending = EventOption.None();
-                return true;
-            },
-            .None(_) => {},
-        };
+        if self.pending.has_value {
+            out_evt[0] = self.pending.value;
+            self.pending = event_option_none();
+            return true;
+        }
         return false;
     }
 
@@ -126,17 +116,17 @@ export struct EncoderDriver : IInputDev {
 }
 
 export fn touch_driver_new() TouchDriver {
-    return TouchDriver{ pending: EventOption.None() };
+    return TouchDriver{ pending: event_option_none() };
 }
 
 export fn mouse_driver_new() MouseDriver {
-    return MouseDriver{ pending: EventOption.None() };
+    return MouseDriver{ pending: event_option_none() };
 }
 
 export fn key_driver_new() KeyDriver {
-    return KeyDriver{ pending: EventOption.None() };
+    return KeyDriver{ pending: event_option_none() };
 }
 
 export fn encoder_driver_new() EncoderDriver {
-    return EncoderDriver{ pending: EventOption.None() };
+    return EncoderDriver{ pending: event_option_none() };
 }

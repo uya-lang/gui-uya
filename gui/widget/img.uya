@@ -32,6 +32,8 @@ export enum ImageScale {
 
 struct ImageRenderAdapter : IGuiRenderCallback {}
 
+var IMAGE_RENDER_ADAPTER: IGuiRenderCallback = ImageRenderAdapter{};
+
 export struct Image {
     widget: Widget,
     src: &ImageData,
@@ -112,7 +114,7 @@ Image {
     }
 
     fn obj(self: &Self) &GuiObj {
-        return widget_bind_callbacks(&self.widget.base, null, null, self as &void);
+        return widget_bind_callbacks(&self.widget.base, &IMAGE_RENDER_ADAPTER, null, self as &void);
     }
 
     fn set_source(self: &Self, src: &ImageData) &Image {

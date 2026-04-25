@@ -19,7 +19,7 @@ use widget.base.widget_text_len;
 
 export const MAX_LABEL_LINES: i32 = 8;
 
-export enum LabelAlign {
+export enum TextAlign {
     Left,
     Center,
     Right,
@@ -40,6 +40,8 @@ export enum TextOverflow {
 
 struct LabelRenderAdapter : IGuiRenderCallback {}
 
+var LABEL_RENDER_ADAPTER: IGuiRenderCallback = LabelRenderAdapter{};
+
 struct TextLine {
     start: usize,
     len: usize,
@@ -50,7 +52,7 @@ export struct Label {
     widget: Widget,
     text: &const byte,
     text_len: usize,
-    align: LabelAlign,
+    align: TextAlign,
     overflow: TextOverflow,
     lines: [TextLine: 8],
     line_count: u8,
@@ -74,20 +76,20 @@ LabelRenderAdapter {
 fn label_line_start_y(label: &Label, area: Rect, font: &Font) i16 {
     const line_height: i16 = font.line_height as i16;
     const total_h: i16 = label.line_count as i16 * line_height;
-    if label.align == LabelAlign.BottomLeft || label.align == LabelAlign.BottomCenter || label.align == LabelAlign.BottomRight {
+    if label.align == TextAlign.BottomLeft || label.align == TextAlign.BottomCenter || label.align == TextAlign.BottomRight {
         return area.y + area.h as i16 - total_h;
     }
-    if label.align == LabelAlign.Center || label.align == LabelAlign.Left || label.align == LabelAlign.Right {
+    if label.align == TextAlign.Center || label.align == TextAlign.Left || label.align == TextAlign.Right {
         return area.y + ((area.h as i32 - total_h as i32) / 2) as i16;
     }
     return area.y;
 }
 
 fn label_line_x(label: &Label, area: Rect, line_w: i16) i16 {
-    if label.align == LabelAlign.Center || label.align == LabelAlign.TopCenter || label.align == LabelAlign.BottomCenter {
+    if label.align == TextAlign.Center || label.align == TextAlign.TopCenter || label.align == TextAlign.BottomCenter {
         return area.x + ((area.w as i32 - line_w as i32) / 2) as i16;
     }
-    if label.align == LabelAlign.Right || label.align == LabelAlign.TopRight || label.align == LabelAlign.BottomRight {
+    if label.align == TextAlign.Right || label.align == TextAlign.TopRight || label.align == TextAlign.BottomRight {
         return area.x + area.w as i16 - line_w;
     }
     return area.x;
@@ -104,7 +106,7 @@ Label {
             widget: widget,
             text: text,
             text_len: widget_text_len(text),
-            align: LabelAlign.Left,
+            align: TextAlign.Left,
             overflow: TextOverflow.Clip,
             lines: [],
             line_count: 0,
@@ -116,7 +118,7 @@ Label {
     }
 
     fn obj(self: &Self) &GuiObj {
-        return widget_bind_callbacks(&self.widget.base, null, null, self as &void);
+        return widget_bind_callbacks(&self.widget.base, &LABEL_RENDER_ADAPTER, null, self as &void);
     }
 
     fn set_text(self: &Self, text: &const byte) &Label {
@@ -127,7 +129,7 @@ Label {
         return self;
     }
 
-    fn set_align(self: &Self, align: LabelAlign) &Label {
+    fn set_align(self: &Self, align: TextAlign) &Label {
         self.align = align;
         self.widget.base.invalidate();
         return self;

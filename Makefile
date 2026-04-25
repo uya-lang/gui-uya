@@ -7,22 +7,21 @@ SMOKE_APP ?= gui/phase3_smoke.uya
 BENCH_APP ?= gui/bench_suite.uya
 TEST_ENTRY ?= gui/test_suite.uya
 RENDER_TEST_ENTRY ?= gui/render_test_suite.uya
-ABS_BUILD_DIR := $(abspath $(BUILD_DIR))
 MODE ?= debug
 UYA_OPT := $(if $(filter release,$(MODE)),-O3,-O0)
 
 .PHONY: build test bench clean hooks build-arm build-riscv build-esp32
 
 build:
-	@mkdir -p $(ABS_BUILD_DIR)
-	$(UYA) build $(SMOKE_APP) $(UYA_OPT) -o $(ABS_BUILD_DIR)/phase3_smoke
+	@mkdir -p $(BUILD_DIR)
+	$(UYA) build $(SMOKE_APP) $(UYA_OPT) -o $(BUILD_DIR)/phase3_smoke
 
 test:
 	$(UYA) test $(TEST_ENTRY) $(UYA_OPT)
 	$(UYA) test $(RENDER_TEST_ENTRY) $(UYA_OPT)
 
 bench:
-	@mkdir -p $(ABS_BUILD_DIR)
+	@mkdir -p $(BUILD_DIR)
 	$(UYA) run $(BENCH_APP) $(UYA_OPT)
 
 clean:
@@ -33,13 +32,13 @@ hooks:
 
 # ARM Cortex-M 当前以 C99 代码生成为交叉编译交接点。
 build-arm:
-	@mkdir -p $(ABS_BUILD_DIR)/c99
-	TARGET_ARCH=arm TARGET_OS=none $(UYA) build --c99 $(SMOKE_APP) $(UYA_OPT) -o $(ABS_BUILD_DIR)/c99/phase3_smoke_arm.c
+	@mkdir -p $(BUILD_DIR)/c99
+	TARGET_ARCH=arm TARGET_OS=none $(UYA) build --c99 $(SMOKE_APP) $(UYA_OPT) -o $(BUILD_DIR)/c99/phase3_smoke_arm.c
 
 build-riscv:
-	@mkdir -p $(ABS_BUILD_DIR)/microapp
-	$(UYA) build --app microapp --microapp-profile rv32_baremetal_softvm $(SMOKE_APP) $(UYA_OPT) -o $(ABS_BUILD_DIR)/microapp/phase3_smoke_rv32.pobj
+	@mkdir -p $(BUILD_DIR)/microapp
+	$(UYA) build --app microapp --microapp-profile rv32_baremetal_softvm $(SMOKE_APP) $(UYA_OPT) -o $(BUILD_DIR)/microapp/phase3_smoke_rv32.pobj
 
 build-esp32:
-	@mkdir -p $(ABS_BUILD_DIR)/microapp
-	$(UYA) build --app microapp --microapp-profile xtensa_baremetal_softvm $(SMOKE_APP) $(UYA_OPT) -o $(ABS_BUILD_DIR)/microapp/phase3_smoke_xtensa.pobj
+	@mkdir -p $(BUILD_DIR)/microapp
+	$(UYA) build --app microapp --microapp-profile xtensa_baremetal_softvm $(SMOKE_APP) $(UYA_OPT) -o $(BUILD_DIR)/microapp/phase3_smoke_xtensa.pobj

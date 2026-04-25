@@ -26,10 +26,6 @@ use std.testing.assert_eq_i32;
 
 export const TEST_RENDER_ASSETS_MODULE: i32 = 1;
 
-fn render_assets_color_eq(a: Color, b: Color) bool {
-    return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
-}
-
 test "image draw and cache get work" {
     var dst_bytes: [byte: 256] = [];
     var img_bytes: [byte: 12] = [255, 0, 0,   0, 255, 0,   0, 0, 255,   255, 255, 255];
@@ -41,8 +37,8 @@ test "image draw and cache get work" {
     draw_image_scaled(&ctx, Rect{ x: 2, y: 0, w: 2, h: 2 }, &img);
     draw_image_clipped(&ctx, Rect{ x: 0, y: 2, w: 2, h: 2 }, &img, Rect{ x: 1, y: 0, w: 1, h: 2 });
 
-    try assert_eq_bool(render_assets_color_eq(ctx_pixel(&ctx, 0, 0), RED), true);
-    try assert_eq_bool(render_assets_color_eq(ctx_pixel(&ctx, 3, 0), Color{ r: 0, g: 255, b: 0, a: 255 }), true);
+    try assert_eq_bool(ctx_pixel(&ctx, 0, 0) == RED, true);
+    try assert_eq_bool(ctx_pixel(&ctx, 3, 0) == Color{ r: 0, g: 255, b: 0, a: 255 }, true);
 
     var cache: ImageCache = image_cache_new(4, 64u32);
     var out: ImageData = image_data_new(&img_bytes[0], 2, 2, 6, PixelFormat.RGB888);
@@ -64,5 +60,5 @@ test "font draws and measures text" {
     draw_text_aligned(&ctx, Rect{ x: 0, y: 8, w: 16, h: 8 }, "A", 1usize, &font, white1, TextAlign.Center);
 
     try assert_eq_bool(ctx.stats.text_ops >= 2u32, true);
-    try assert_eq_bool(render_assets_color_eq(ctx_pixel(&ctx, 0, 0), white2), true);
+    try assert_eq_bool(ctx_pixel(&ctx, 0, 0) == white2, true);
 }

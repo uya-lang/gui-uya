@@ -35,10 +35,6 @@ use widget.switch.Switch;
 
 export const TEST_WIDGET_MODULE: i32 = 1;
 
-fn widget_test_color_eq(a: Color, b: Color) bool {
-    return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
-}
-
 struct CountingWidgetEvent : IWidgetEventCallback {
     count_ref: &i32,
 }
@@ -102,7 +98,7 @@ test "panel renders child button and label through gui tree" {
     panel.add(label.obj());
     panel.render(&ctx);
 
-    try assert_eq_bool(widget_test_color_eq(ctx_pixel(&ctx, 16, 13), Color{ r: 33, g: 126, b: 227, a: 255 }), true);
+    try assert_eq_bool(ctx_pixel(&ctx, 16, 13) == Color{ r: 33, g: 126, b: 227, a: 255 }, true);
 }
 
 test "image widget scales source into target area" {
@@ -179,7 +175,7 @@ test "chart and canvas render content" {
     canvas.end_draw();
     canvas.render(&ctx);
 
-    try assert_eq_bool(widget_test_color_eq(ctx_pixel(&ctx, 28, 4), Color{ r: 0, g: 255, b: 0, a: 255 }), true);
+    try assert_eq_bool(ctx_pixel(&ctx, 28, 4) == Color{ r: 0, g: 255, b: 0, a: 255 }, true);
 }
 
 test "page can render nested widgets" {
@@ -209,5 +205,5 @@ test "page can render nested widgets" {
     panel.add(button.obj());
     page.render(&ctx);
 
-    try assert_eq_bool(widget_test_color_eq(ctx_pixel(&ctx, 14, 12), Color{ r: 33, g: 126, b: 227, a: 255 }), true);
+    try assert_eq_bool(ctx_pixel(&ctx, 14, 12) == Color{ r: 33, g: 126, b: 227, a: 255 }, true);
 }

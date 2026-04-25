@@ -23,10 +23,6 @@ use std.testing.expect;
 
 export const TEST_STYLE_MODULE: i32 = 1;
 
-fn style_color_eq(a: Color, b: Color) bool {
-    return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
-}
-
 fn hex_color(hex: u32) Color {
     return Color{
         r: ((hex >> 16) & 0xFFu32) as u8,
@@ -37,7 +33,7 @@ fn hex_color(hex: u32) Color {
 }
 
 fn assert_style_color(st: &Style, prop: StyleProp, expected: Color) !void {
-    try assert_eq_bool(style_color_eq(st.get_color_or(prop, BLACK), expected), true);
+    try assert_eq_bool(st.get_color_or(prop, BLACK) == expected, true);
 }
 
 fn assert_style_u32(st: &Style, prop: StyleProp, expected: u32) !void {
@@ -94,7 +90,7 @@ test "style merge and clone keep overridden values" {
     try expect(base.get_color_or(StyleProp.BgColor, BLACK).r == 0x10);
     try assert_eq_i32(base.get_u32_or(StyleProp.PaddingLeft, 0u32) as i32, 12);
     try assert_eq_i32(cloned.get_u32_or(StyleProp.PaddingLeft, 0u32) as i32, 12);
-    try assert_eq_bool(style_color_eq(cloned.get_color_or(StyleProp.FgColor, BLACK), WHITE), true);
+    try assert_eq_bool(cloned.get_color_or(StyleProp.FgColor, BLACK) == WHITE, true);
 }
 
 test "style builder and macro create expected values" {
@@ -115,7 +111,7 @@ test "style builder and macro create expected values" {
     try assert_eq_i32(built.get_u32_or(StyleProp.PaddingTop, 0u32) as i32, 6);
     try assert_eq_i32(built.get_u32_or(StyleProp.MarginLeft, 0u32) as i32, 4);
     try assert_eq_i32(macro_style.get_u32_or(StyleProp.Opacity, 0u32) as i32, 220);
-    try assert_eq_bool(style_color_eq(macro_style.get_color_or(StyleProp.FgColor, BLACK), WHITE), true);
+    try assert_eq_bool(macro_style.get_color_or(StyleProp.FgColor, BLACK) == WHITE, true);
 }
 
 test "style property coverage matrix spans inline and ext props" {

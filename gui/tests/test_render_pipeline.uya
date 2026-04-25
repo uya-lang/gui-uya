@@ -22,10 +22,6 @@ use std.testing.assert_eq_i32;
 
 export const TEST_RENDER_PIPELINE_MODULE: i32 = 1;
 
-fn render_pipeline_color_eq(a: Color, b: Color) bool {
-    return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
-}
-
 test "batch optimize merges adjacent rects and executes" {
     var bytes: [byte: 256] = [];
     var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 8, 8, 16, PixelFormat.RGB565));
@@ -40,7 +36,7 @@ test "batch optimize merges adjacent rects and executes" {
     try assert_eq_i32(batch.count as i32, 1);
     batch.execute(&ctx);
 
-    try assert_eq_bool(render_pipeline_color_eq(ctx_pixel(&ctx, 3, 0), red2), true);
+    try assert_eq_bool(ctx_pixel(&ctx, 3, 0) == red2, true);
     try assert_eq_i32(ctx.stats.batch_flushes as i32, 1);
 }
 
@@ -53,8 +49,9 @@ test "software gpu and zerocopy present rendered content" {
     var ctx: RenderCtx = render_ctx_new(framebuffer_new(&back_bytes[0], 8, 8, 32, PixelFormat.ARGB8888));
     var gpu: SoftwareGpuCtx = software_gpu_new(&ctx);
     var zc: ZeroCopyCtx = zerocopy_ctx_new(&display);
+    const green1: Color = Color{ r: 0, g: 255, b: 0, a: 255 };
     var rects: [Rect: 1] = [Rect{ x: 0, y: 0, w: 2, h: 2 }];
-    var colors: [Color: 1] = [GREEN];
+    var colors: [Color: 1] = [Color{ r: 0, g: 255, b: 0, a: 255 }];
 
     gpu.fill_rects(&rects[0], &colors[0], 1);
     gpu.draw_rects(&rects[0], &colors[0], 1);
@@ -62,6 +59,6 @@ test "software gpu and zerocopy present rendered content" {
     zc.present(Rect{ x: 0, y: 0, w: 2, h: 2 });
 
     try assert_eq_i32(display.frame_id as i32, 1);
-    try assert_eq_bool(render_pipeline_color_eq(ctx_pixel(&ctx, 0, 0), GREEN), true);
+    try assert_eq_bool(ctx_pixel(&ctx, 0, 0) == green1, true);
     try assert_eq_i32(gpu.sync_count as i32, 1);
 }

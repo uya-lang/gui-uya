@@ -61,24 +61,59 @@ export enum InputDev {
     Button,
 }
 
+export struct EventPointValue {
+    point: Point,
+    value: i32,
+}
+
+export union EventData {
+    None: void,
+    Point: Point,
+    KeyCode: u16,
+    Value: i32,
+    PointValue: EventPointValue,
+}
+
 export struct Event {
     event_type: EventType,
     phase: EventPhase,
     dev_type: InputDev,
     target: i32,
     timestamp: u32,
-    point: Point,
-    secondary_point: Point,
-    key_code: u16,
-    encoder_diff: i16,
-    value: i32,
+    data: EventData,
     stop_bubble: bool,
     handled: bool,
+    
+    fn point(self: &Self) Point {
+        match self.data {
+            .Point(v) => { return v; },
+            .PointValue(v) => { return v.point; },
+            else => {},
+        };
+        return POINT_ZERO;
+    }
+
+    fn value(self: &Self) i32 {
+        match self.data {
+            .Value(v) => { return v; },
+            .PointValue(v) => { return v.value; },
+            else => {},
+        };
+        return 0;
+    }
+
+    fn key_code(self: &Self) u16 {
+        match self.data {
+            .KeyCode(v) => { return v; },
+            else => {},
+        };
+        return 0;
+    }
 }
 
-export union EventOption {
-    Some: Event,
-    None: void,
+export struct EventOption {
+    has_value: bool,
+    value: Event,
 }
 
 export struct EventQueue {
@@ -102,13 +137,13 @@ export struct EventQueue {
 
     fn pop(self: &Self) EventOption {
         if self.is_empty() {
-            return EventOption.None();
+            return event_option_none();
         }
 
         const evt: Event = self.buffer[self.tail as usize];
         self.tail = (self.tail + 1) % EVENT_QUEUE_SIZE;
         self.count = self.count - 1;
-        return EventOption.Some(evt);
+        return event_option_some(evt);
     }
 
     fn is_empty(self: &Self) bool {
@@ -298,11 +333,10 @@ export fn event_point_value(kind: EventType, dev: InputDev, target: i32, timesta
         dev_type: dev,
         target: target,
         timestamp: timestamp,
-        point: point,
-        secondary_point: POINT_ZERO,
-        key_code: 0,
-        encoder_diff: 0,
-        value: value,
+        data: EventData.PointValue(EventPointValue{
+            point: point,
+            value: value,
+        }),
         stop_bubble: false,
         handled: false,
     };
@@ -315,11 +349,7 @@ export fn event_focus(kind: EventType, target: i32, timestamp: u32) Event {
         dev_type: InputDev.Keypad,
         target: target,
         timestamp: timestamp,
-        point: POINT_ZERO,
-        secondary_point: POINT_ZERO,
-        key_code: 0,
-        encoder_diff: 0,
-        value: 0,
+        data: EventData.None(),
         stop_bubble: false,
         handled: false,
     };
@@ -332,13 +362,23 @@ export fn event_none() Event {
         dev_type: InputDev.Touch,
         target: -1,
         timestamp: 0,
-        point: POINT_ZERO,
-        secondary_point: POINT_ZERO,
-        key_code: 0,
-        encoder_diff: 0,
-        value: 0,
+        data: EventData.None(),
         stop_bubble: false,
         handled: false,
+    };
+}
+
+export fn event_option_some(evt: Event) EventOption {
+    return EventOption{
+        has_value: true,
+        value: evt,
+    };
+}
+
+export fn event_option_none() EventOption {
+    return EventOption{
+        has_value: false,
+        value: event_none(),
     };
 }
 
@@ -349,11 +389,7 @@ export fn event_point(kind: EventType, dev: InputDev, target: i32, timestamp: u3
         dev_type: dev,
         target: target,
         timestamp: timestamp,
-        point: point,
-        secondary_point: POINT_ZERO,
-        key_code: 0,
-        encoder_diff: 0,
-        value: 0,
+        data: EventData.Point(point),
         stop_bubble: false,
         handled: false,
     };
@@ -366,11 +402,7 @@ export fn event_key(kind: EventType, dev: InputDev, target: i32, timestamp: u32,
         dev_type: dev,
         target: target,
         timestamp: timestamp,
-        point: POINT_ZERO,
-        secondary_point: POINT_ZERO,
-        key_code: key_code,
-        encoder_diff: 0,
-        value: 0,
+        data: EventData.KeyCode(key_code),
         stop_bubble: false,
         handled: false,
     };
@@ -383,11 +415,7 @@ export fn event_value(kind: EventType, dev: InputDev, target: i32, timestamp: u3
         dev_type: dev,
         target: target,
         timestamp: timestamp,
-        point: POINT_ZERO,
-        secondary_point: POINT_ZERO,
-        key_code: 0,
-        encoder_diff: 0,
-        value: value,
+        data: EventData.Value(value),
         stop_bubble: false,
         handled: false,
     };

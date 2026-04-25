@@ -108,6 +108,8 @@ fn panel_render_obj(obj: &GuiObj, ctx: &RenderCtx) void {
 
 struct PanelRenderAdapter : IGuiRenderCallback {}
 
+var PANEL_RENDER_ADAPTER: IGuiRenderCallback = PanelRenderAdapter{};
+
 export struct Panel : IContainer {
     widget: Widget,
 }
@@ -143,7 +145,7 @@ Panel {
     }
 
     fn obj(self: &Self) &GuiObj {
-        return widget_bind_callbacks(&self.widget.base, null, null, self as &void);
+        return widget_bind_callbacks(&self.widget.base, &PANEL_RENDER_ADAPTER, null, self as &void);
     }
 
     fn add(self: &Self, child: &GuiObj) &GuiObj {
@@ -160,7 +162,7 @@ Panel {
         ctx.push_clip(inner);
         var child: &GuiObj = self.widget.base.child_head;
         while child != null {
-            panel_render_obj(child, ctx);
+            child.render(ctx);
             child = child.sibling_next;
         }
         ctx.pop_clip();
