@@ -1,4 +1,5 @@
 use core.event.Event;
+use core.event.EventPhase;
 use core.event.EventType;
 use core.rect.Rect;
 use render.ctx.RenderCtx;
@@ -25,6 +26,15 @@ export interface IContainer {
     fn remove_child(self: &Self, child: &GuiObj) void;
     fn child_count(self: &Self) i32;
     fn child_at(self: &Self, index: i32) &GuiObj;
+}
+
+export interface IGuiEventCallback {
+    fn invoke(self: &Self, obj: &GuiObj, evt: &Event, user_data: &void) bool;
+}
+
+export struct EventCallbackSlot {
+    callback: &IGuiEventCallback,
+    user_data: &void,
 }
 
 export struct ObjFlags {
@@ -54,10 +64,23 @@ export struct GuiObj : IGuiObj, IContainer {
     flags: ObjFlags,
     style: Style,
     user_data: &void,
+    click_cb: EventCallbackSlot,
+    press_cb: EventCallbackSlot,
+    release_cb: EventCallbackSlot,
+    long_press_cb: EventCallbackSlot,
+    value_change_cb: EventCallbackSlot,
+    focus_cb: EventCallbackSlot,
     name_ptr: &const byte,
 }
 
 var _gui_obj_registry: [&GuiObj: 256] = [];
+
+fn gui_obj_dispatch_slot(obj: &GuiObj, slot: &EventCallbackSlot, evt: &Event) bool {
+    if slot.callback == null {
+        return false;
+    }
+    return slot.callback.invoke(obj, evt, slot.user_data);
+}
 
 export fn obj_flags_default() ObjFlags {
     return ObjFlags{
@@ -69,6 +92,13 @@ export fn obj_flags_default() ObjFlags {
         focusable: false,
         dirty: true,
         reserved: 0,
+    };
+}
+
+export fn event_callback_slot_default() EventCallbackSlot {
+    return EventCallbackSlot{
+        callback: null,
+        user_data: null,
     };
 }
 
@@ -149,12 +179,37 @@ GuiObj {
     }
 
     fn handle_event(self: &Self, evt: &Event) bool {
-        if !self.flags.enabled || evt.target != self.obj_idx {
+        if !self.flags.enabled {
             return false;
         }
-        if evt.event_type == EventType.Click || evt.event_type == EventType.Press || evt.event_type == EventType.Release {
+
+        if evt.phase == EventPhase.Target && evt.target != self.obj_idx {
+            return false;
+        }
+
+        if self.dispatch_callback(evt) {
             evt.handled = true;
             return true;
+        }
+
+        if evt.event_type == EventType.FocusIn || evt.event_type == EventType.FocusOut {
+            if self.flags.focusable {
+                evt.handled = true;
+                return true;
+            }
+            return false;
+        }
+
+        if evt.phase == EventPhase.Target
+            && (evt.event_type == EventType.Click
+                || evt.event_type == EventType.DoubleClick
+                || evt.event_type == EventType.Press
+                || evt.event_type == EventType.Release
+                || evt.event_type == EventType.LongPress) {
+            if self.flags.clickable {
+                evt.handled = true;
+                return true;
+            }
         }
         return false;
     }
@@ -252,6 +307,58 @@ GuiObj {
         self.invalidate();
     }
 
+    fn on_click(self: &Self, callback: &IGuiEventCallback, user_data: &void) void {
+        self.click_cb.callback = callback;
+        self.click_cb.user_data = user_data;
+    }
+
+    fn on_press(self: &Self, callback: &IGuiEventCallback, user_data: &void) void {
+        self.press_cb.callback = callback;
+        self.press_cb.user_data = user_data;
+    }
+
+    fn on_release(self: &Self, callback: &IGuiEventCallback, user_data: &void) void {
+        self.release_cb.callback = callback;
+        self.release_cb.user_data = user_data;
+    }
+
+    fn on_long_press(self: &Self, callback: &IGuiEventCallback, user_data: &void) void {
+        self.long_press_cb.callback = callback;
+        self.long_press_cb.user_data = user_data;
+    }
+
+    fn on_value_change(self: &Self, callback: &IGuiEventCallback, user_data: &void) void {
+        self.value_change_cb.callback = callback;
+        self.value_change_cb.user_data = user_data;
+    }
+
+    fn on_focus(self: &Self, callback: &IGuiEventCallback, user_data: &void) void {
+        self.focus_cb.callback = callback;
+        self.focus_cb.user_data = user_data;
+    }
+
+    fn dispatch_callback(self: &Self, evt: &Event) bool {
+        if evt.event_type == EventType.Click || evt.event_type == EventType.DoubleClick {
+            return gui_obj_dispatch_slot(self, &self.click_cb, evt);
+        }
+        if evt.event_type == EventType.Press {
+            return gui_obj_dispatch_slot(self, &self.press_cb, evt);
+        }
+        if evt.event_type == EventType.Release {
+            return gui_obj_dispatch_slot(self, &self.release_cb, evt);
+        }
+        if evt.event_type == EventType.LongPress {
+            return gui_obj_dispatch_slot(self, &self.long_press_cb, evt);
+        }
+        if evt.event_type == EventType.ValueChange || evt.event_type == EventType.Pinch {
+            return gui_obj_dispatch_slot(self, &self.value_change_cb, evt);
+        }
+        if evt.event_type == EventType.FocusIn || evt.event_type == EventType.FocusOut {
+            return gui_obj_dispatch_slot(self, &self.focus_cb, evt);
+        }
+        return false;
+    }
+
     fn drop(self: GuiObj) void {
         if self.obj_idx < 0 {
             return;
@@ -300,6 +407,12 @@ export fn gui_obj_default() GuiObj {
         flags: obj_flags_default(),
         style: style_default(),
         user_data: null,
+        click_cb: event_callback_slot_default(),
+        press_cb: event_callback_slot_default(),
+        release_cb: event_callback_slot_default(),
+        long_press_cb: event_callback_slot_default(),
+        value_change_cb: event_callback_slot_default(),
+        focus_cb: event_callback_slot_default(),
         name_ptr: "obj",
     };
 }

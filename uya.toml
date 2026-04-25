@@ -12,4 +12,4 @@ example_dir = "gui/examples"
 
 [tool.make]
 default_target = "test"
-smoke_example = "gui/phase0_smoke.uya"
+smoke_example = "gui/phase1_smoke.uya"

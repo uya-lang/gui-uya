@@ -1,0 +1,272 @@
+use core.obj.GuiObj;
+use style.StyleProp;
+
+export const MAX_FLEX_CHILDREN: i32 = 64;
+
+export enum FlexDir {
+    Row,
+    RowReverse,
+    Column,
+    ColumnReverse,
+}
+
+export enum Justify {
+    Start,
+    Center,
+    End,
+    SpaceBetween,
+    SpaceAround,
+    SpaceEvenly,
+}
+
+export enum Align {
+    Start,
+    Center,
+    End,
+    Stretch,
+    Baseline,
+}
+
+export struct FlexConfig {
+    direction: FlexDir,
+    justify: Justify,
+    align_items: Align,
+    align_content: Align,
+    wrap: bool,
+    gap: u8,
+    row_gap: u8,
+    col_gap: u8,
+    padding: [u8: 4],
+}
+
+fn flex_gap(config: FlexConfig, is_row: bool) i32 {
+    if is_row {
+        if config.col_gap > 0 {
+            return config.col_gap as i32;
+        }
+    } else if config.row_gap > 0 {
+        return config.row_gap as i32;
+    }
+    return config.gap as i32;
+}
+
+fn flex_child_grow(child: &GuiObj) i32 {
+    return child.style.get_i32_or(StyleProp.FlexGrow, 0);
+}
+
+fn flex_child_align(child: &GuiObj, fallback: Align) Align {
+    const raw: u32 = child.style.get_u32_or(StyleProp.AlignSelf, fallback as u32);
+    if raw == Align.Center as u32 {
+        return Align.Center;
+    }
+    if raw == Align.End as u32 {
+        return Align.End;
+    }
+    if raw == Align.Stretch as u32 {
+        return Align.Stretch;
+    }
+    if raw == Align.Baseline as u32 {
+        return Align.Baseline;
+    }
+    return Align.Start;
+}
+
+fn flex_clamp_child_size(child: &GuiObj) void {
+    const min_w: u32 = child.style.get_u32_or(StyleProp.MinWidth, 0u32);
+    const min_h: u32 = child.style.get_u32_or(StyleProp.MinHeight, 0u32);
+    const max_w: u32 = child.style.get_u32_or(StyleProp.MaxWidth, 0u32);
+    const max_h: u32 = child.style.get_u32_or(StyleProp.MaxHeight, 0u32);
+    const min_w_u16: u16 = (min_w as! u16).value;
+    const min_h_u16: u16 = (min_h as! u16).value;
+    const max_w_u16: u16 = (max_w as! u16).value;
+    const max_h_u16: u16 = (max_h as! u16).value;
+
+    if min_w > 0 && child.w < min_w_u16 {
+        child.w = min_w_u16;
+    }
+    if min_h > 0 && child.h < min_h_u16 {
+        child.h = min_h_u16;
+    }
+    if max_w > 0 && child.w > max_w_u16 {
+        child.w = max_w_u16;
+    }
+    if max_h > 0 && child.h > max_h_u16 {
+        child.h = max_h_u16;
+    }
+}
+
+FlexConfig {
+    fn row() FlexConfig {
+        return FlexConfig{
+            direction: FlexDir.Row,
+            justify: Justify.Start,
+            align_items: Align.Start,
+            align_content: Align.Start,
+            wrap: false,
+            gap: 0,
+            row_gap: 0,
+            col_gap: 0,
+            padding: [0, 0, 0, 0],
+        };
+    }
+
+    fn column() FlexConfig {
+        var cfg: FlexConfig = flex_config_row();
+        cfg.direction = FlexDir.Column;
+        return cfg;
+    }
+}
+
+export fn flex_config_row() FlexConfig {
+    return FlexConfig{
+        direction: FlexDir.Row,
+        justify: Justify.Start,
+        align_items: Align.Start,
+        align_content: Align.Start,
+        wrap: false,
+        gap: 0,
+        row_gap: 0,
+        col_gap: 0,
+        padding: [0, 0, 0, 0],
+    };
+}
+
+export fn flex_config_column() FlexConfig {
+    var cfg: FlexConfig = flex_config_row();
+    cfg.direction = FlexDir.Column;
+    return cfg;
+}
+
+export struct FlexLayout {
+    config: FlexConfig,
+
+    fn apply(self: &Self, container: &GuiObj) void {
+        var children: [&GuiObj: 64] = [];
+        var child_count: i32 = 0;
+        var child: &GuiObj = container.child_head;
+        while child != null && child_count < MAX_FLEX_CHILDREN {
+            if child.visible() {
+                children[child_count] = child;
+                child_count = child_count + 1;
+            }
+            child = child.sibling_next;
+        }
+
+        if child_count == 0 {
+            return;
+        }
+
+        const is_row: bool = self.config.direction == FlexDir.Row || self.config.direction == FlexDir.RowReverse;
+        const padding_top: i32 = self.config.padding[0] as i32;
+        const padding_right: i32 = self.config.padding[1] as i32;
+        const padding_bottom: i32 = self.config.padding[2] as i32;
+        const padding_left: i32 = self.config.padding[3] as i32;
+        var available_main: i32 = container.h as i32 - padding_top - padding_bottom;
+        var available_cross: i32 = container.w as i32 - padding_left - padding_right;
+        if is_row {
+            available_main = container.w as i32 - padding_left - padding_right;
+            available_cross = container.h as i32 - padding_top - padding_bottom;
+        }
+        const gap: i32 = flex_gap(self.config, is_row);
+
+        var total_main: i32 = 0;
+        var total_grow: i32 = 0;
+        var i: i32 = 0;
+        while i < child_count {
+            const node: &GuiObj = children[i];
+            flex_clamp_child_size(node);
+            if is_row {
+                total_main = total_main + node.w as i32;
+            } else {
+                total_main = total_main + node.h as i32;
+            }
+            total_grow = total_grow + flex_child_grow(node);
+            i = i + 1;
+        }
+
+        if child_count > 1 {
+            total_main = total_main + gap * (child_count - 1);
+        }
+
+        var extra_space: i32 = available_main - total_main;
+        if extra_space < 0 {
+            extra_space = 0;
+        }
+
+        var cursor: i32 = padding_top;
+        if is_row {
+            cursor = padding_left;
+        }
+        if self.config.justify == Justify.Center {
+            cursor = cursor + extra_space / 2;
+        } else if self.config.justify == Justify.End {
+            cursor = cursor + extra_space;
+        } else if self.config.justify == Justify.SpaceAround && child_count > 0 {
+            cursor = cursor + extra_space / (child_count * 2);
+        } else if self.config.justify == Justify.SpaceEvenly && child_count > 0 {
+            cursor = cursor + extra_space / (child_count + 1);
+        }
+
+        var dynamic_gap: i32 = gap;
+        if self.config.justify == Justify.SpaceBetween && child_count > 1 {
+            dynamic_gap = gap + extra_space / (child_count - 1);
+        } else if self.config.justify == Justify.SpaceAround && child_count > 0 {
+            dynamic_gap = gap + extra_space / child_count;
+        } else if self.config.justify == Justify.SpaceEvenly && child_count > 0 {
+            dynamic_gap = gap + extra_space / (child_count + 1);
+        }
+
+        i = 0;
+        while i < child_count {
+            const node: &GuiObj = children[i];
+            var main_size: i32 = node.h as i32;
+            if is_row {
+                main_size = node.w as i32;
+            }
+            const grow: i32 = flex_child_grow(node);
+            if total_grow > 0 && grow > 0 && extra_space > 0 {
+                main_size = main_size + (extra_space * grow) / total_grow;
+            }
+
+            var cross_size: i32 = node.w as i32;
+            if is_row {
+                cross_size = node.h as i32;
+            }
+            var cross_pos: i32 = padding_left;
+            if is_row {
+                cross_pos = padding_top;
+            }
+            const align: Align = flex_child_align(node, self.config.align_items);
+            if align == Align.Center {
+                cross_pos = cross_pos + (available_cross - cross_size) / 2;
+            } else if align == Align.End {
+                cross_pos = cross_pos + available_cross - cross_size;
+            } else if align == Align.Stretch {
+                cross_size = available_cross;
+            }
+
+            if is_row {
+                node.x = cursor as i16;
+                node.y = cross_pos as i16;
+                node.w = main_size as u16;
+                node.h = cross_size as u16;
+            } else {
+                node.x = cross_pos as i16;
+                node.y = cursor as i16;
+                node.w = cross_size as u16;
+                node.h = main_size as u16;
+            }
+            node.flags.dirty = false;
+            cursor = cursor + main_size + dynamic_gap;
+            i = i + 1;
+        }
+    }
+}
+
+export fn flex_layout_row() FlexLayout {
+    return FlexLayout{ config: flex_config_row() };
+}
+
+export fn flex_layout_column() FlexLayout {
+    return FlexLayout{ config: flex_config_column() };
+}

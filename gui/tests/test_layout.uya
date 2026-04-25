@@ -1,0 +1,110 @@
+use core.obj.GuiObj;
+use core.obj.gui_obj_default;
+use core.obj.gui_obj_register;
+use core.obj.gui_obj_reset_registry;
+use core.obj_tree.ObjTree;
+use core.obj_tree.obj_tree_new;
+use layout.auto.AutoLayout;
+use layout.auto.LayoutMode;
+use layout.auto.auto_layout_new;
+use layout.flex.Align;
+use layout.flex.FlexConfig;
+use layout.flex.FlexLayout;
+use layout.flex.flex_config_row;
+use layout.grid.GridConfig;
+use layout.grid.GridAutoFlow;
+use layout.grid.GridLayout;
+use style.StyleProp;
+use std.testing.assert_eq_i32;
+
+export const TEST_LAYOUT_MODULE: i32 = 1;
+
+test "flex layout arranges row children" {
+    var root: GuiObj = gui_obj_default();
+    var a: GuiObj = gui_obj_default();
+    var b: GuiObj = gui_obj_default();
+
+    root.w = 100;
+    root.h = 40;
+    a.w = 20;
+    a.h = 10;
+    b.w = 30;
+    b.h = 10;
+    root.add_child(&a);
+    root.add_child(&b);
+
+    var cfg: FlexConfig = flex_config_row();
+    cfg.gap = 5;
+    cfg.align_items = Align.Center;
+    var layout: FlexLayout = FlexLayout{ config: cfg };
+    layout.apply(&root);
+
+    try assert_eq_i32(a.x as i32, 0);
+    try assert_eq_i32(b.x as i32, 25);
+    try assert_eq_i32(a.y as i32, 15);
+}
+
+test "grid layout places items by column row" {
+    var root: GuiObj = gui_obj_default();
+    var a: GuiObj = gui_obj_default();
+    var b: GuiObj = gui_obj_default();
+
+    root.add_child(&a);
+    root.add_child(&b);
+    a.style.set_u32(StyleProp.GridColumn, 1u32);
+    a.style.set_u32(StyleProp.GridRow, 0u32);
+    b.style.set_u32(StyleProp.GridColumn, 0u32);
+    b.style.set_u32(StyleProp.GridRow, 1u32);
+
+    var layout: GridLayout = GridLayout{
+        config: GridConfig{
+            columns: [20, 30, 0, 0, 0, 0, 0, 0],
+            rows: [10, 15, 0, 0, 0, 0, 0, 0],
+            col_count: 2,
+            row_count: 2,
+            gap_x: 2,
+            gap_y: 3,
+            padding: [0, 0, 0, 0],
+            auto_flow: GridAutoFlow.Row,
+        },
+    };
+    layout.apply(&root);
+
+    try assert_eq_i32(a.x as i32, 22);
+    try assert_eq_i32(a.y as i32, 0);
+    try assert_eq_i32(b.x as i32, 0);
+    try assert_eq_i32(b.y as i32, 13);
+}
+
+test "obj tree perform layout uses auto layout mode" {
+    gui_obj_reset_registry();
+
+    var root: GuiObj = gui_obj_default();
+    var left: GuiObj = gui_obj_default();
+    var right: GuiObj = gui_obj_default();
+
+    root.w = 120;
+    root.h = 40;
+    left.w = 20;
+    left.h = 10;
+    right.w = 20;
+    right.h = 10;
+    root.style.set_u32(StyleProp.LayoutMode, LayoutMode.Flex as u32);
+    root.style.set_u32(StyleProp.Gap, 10u32);
+
+    _ = gui_obj_register(0, &root);
+    _ = gui_obj_register(1, &left);
+    _ = gui_obj_register(2, &right);
+
+    var tree: ObjTree = obj_tree_new();
+    tree.set_root(0, &root);
+    tree.attach(0, 1);
+    tree.attach(0, 2);
+
+    var auto: AutoLayout = auto_layout_new();
+    auto.flex.config.gap = 10;
+    tree.perform_layout(0, &auto);
+
+    try assert_eq_i32(left.x as i32, 0);
+    try assert_eq_i32(right.x as i32, 30);
+}

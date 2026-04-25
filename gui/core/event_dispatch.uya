@@ -1,0 +1,173 @@
+use core.event.Event;
+use core.event.EventOption;
+use core.event.EventPhase;
+use core.event.EventQueue;
+use core.event.EventType;
+use core.event.GestureDetector;
+use core.event.InputDev;
+use core.event.event_focus;
+use core.event.event_queue_new;
+use core.event.event_with_phase;
+use core.event.gesture_detector_new;
+use core.obj.GuiObj;
+use core.obj.gui_obj_get;
+use core.obj_tree.BubblePath;
+use core.obj_tree.ObjTree;
+use core.point.Point;
+
+export struct EventDispatcher {
+    queue: EventQueue,
+    gesture: GestureDetector,
+    focus_obj: i32,
+    capture_obj: i32,
+    hover_obj: i32,
+
+    fn dispatch(self: &Self, evt: Event, tree: &ObjTree) bool {
+        var working: Event = evt;
+        if self.capture_obj >= 0 {
+            working.target = self.capture_obj;
+        } else if working.target < 0 {
+            working.target = self.find_target(tree, working.point);
+        }
+
+        if working.target < 0 {
+            return false;
+        }
+
+        const path: BubblePath = tree.bubble_path(working.target);
+        var handled: bool = false;
+
+        var capture_idx: i32 = path.len - 1;
+        while capture_idx > 0 {
+            const obj: &GuiObj = gui_obj_get(path.nodes[capture_idx]);
+            if obj != null {
+                var capture_evt: Event = event_with_phase(working, EventPhase.Capture);
+                if obj.handle_event(&capture_evt) {
+                    handled = true;
+                }
+                if capture_evt.stop_bubble {
+                    return true;
+                }
+            }
+            capture_idx = capture_idx - 1;
+        }
+
+        const target_obj: &GuiObj = gui_obj_get(working.target);
+        if target_obj != null {
+            var target_evt: Event = event_with_phase(working, EventPhase.Target);
+            if target_obj.handle_event(&target_evt) {
+                handled = true;
+            }
+
+            if working.event_type == EventType.Press && target_obj.flags.focusable {
+                self.update_focus(tree, working.target, working.timestamp);
+            }
+
+            if target_evt.stop_bubble {
+                return true;
+            }
+        }
+
+        return self.bubble_event(tree, path, working) || handled;
+    }
+
+    fn find_target(self: &Self, tree: &ObjTree, point: Point) i32 {
+        _ = self;
+        if tree.root_idx < 0 {
+            return -1;
+        }
+        return tree.find_at_point(tree.root_idx, point);
+    }
+
+    fn bubble_event(self: &Self, tree: &ObjTree, path: BubblePath, evt: Event) bool {
+        _ = self;
+        _ = tree;
+        var handled: bool = false;
+        var i: i32 = 1;
+        while i < path.len {
+            const obj: &GuiObj = gui_obj_get(path.nodes[i]);
+            if obj != null {
+                var bubble_evt: Event = event_with_phase(evt, EventPhase.Bubble);
+                if obj.handle_event(&bubble_evt) {
+                    handled = true;
+                }
+                if bubble_evt.stop_bubble {
+                    break;
+                }
+            }
+            i = i + 1;
+        }
+        return handled;
+    }
+
+    fn set_focus(self: &Self, obj_idx: i32) void {
+        self.focus_obj = obj_idx;
+    }
+
+    fn get_focus(self: &Self) i32 {
+        return self.focus_obj;
+    }
+
+    fn set_capture(self: &Self, obj_idx: i32) void {
+        self.capture_obj = obj_idx;
+    }
+
+    fn clear_capture(self: &Self) void {
+        self.capture_obj = -1;
+    }
+
+    fn update_focus(self: &Self, tree: &ObjTree, next_focus: i32, timestamp: u32) void {
+        if self.focus_obj == next_focus {
+            return;
+        }
+
+        if self.focus_obj >= 0 {
+            const prev_obj: &GuiObj = gui_obj_get(self.focus_obj);
+            if prev_obj != null {
+                var focus_out: Event = event_focus(EventType.FocusOut, self.focus_obj, timestamp);
+                _ = prev_obj.handle_event(&focus_out);
+            }
+        }
+
+        self.focus_obj = next_focus;
+
+        if next_focus >= 0 {
+            const next_obj: &GuiObj = gui_obj_get(next_focus);
+            if next_obj != null {
+                var focus_in: Event = event_focus(EventType.FocusIn, next_focus, timestamp);
+                _ = next_obj.handle_event(&focus_in);
+            }
+        }
+        _ = tree;
+    }
+
+    fn process_touch(self: &Self, tree: &ObjTree, point: Point, is_down: bool, timestamp: u32) i32 {
+        const target: i32 = self.find_target(tree, point);
+        self.gesture.process_touch(point, is_down, timestamp, target, &self.queue);
+        return self.pump(tree);
+    }
+
+    fn pump(self: &Self, tree: &ObjTree) i32 {
+        var dispatched: i32 = 0;
+        while true {
+            match self.queue.pop() {
+                .Some(evt) => {
+                    _ = self.dispatch(evt, tree);
+                    dispatched = dispatched + 1;
+                },
+                .None(_) => { break; },
+            };
+        }
+        return dispatched;
+    }
+}
+
+export fn event_dispatcher_new() EventDispatcher {
+    return EventDispatcher{
+        queue: event_queue_new(),
+        gesture: gesture_detector_new(),
+        focus_obj: -1,
+        capture_obj: -1,
+        hover_obj: -1,
+    };
+}

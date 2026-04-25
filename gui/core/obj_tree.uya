@@ -2,6 +2,7 @@ use core.obj.GuiObj;
 use core.obj.gui_obj_get;
 use core.point.Point;
 use core.rect.Rect;
+use layout.auto.AutoLayout;
 
 export const OBJ_TREE_MAX_PATH: i32 = 64;
 
@@ -170,6 +171,30 @@ export struct ObjTree {
             return node.obj_idx;
         }
         return -1;
+    }
+
+    fn perform_layout(self: &Self, root_idx: i32, auto: &AutoLayout) void {
+        _ = self;
+        self.perform_layout_recursive(root_idx, auto);
+    }
+
+    fn perform_layout_recursive(self: &Self, node_idx: i32, auto: &AutoLayout) void {
+        _ = self;
+        const node: &GuiObj = gui_obj_get(node_idx);
+        if node == null {
+            return;
+        }
+
+        if node.flags.dirty {
+            auto.apply(node);
+            node.flags.dirty = false;
+        }
+
+        var child: &GuiObj = node.child_head;
+        while child != null {
+            self.perform_layout_recursive(child.obj_idx, auto);
+            child = child.sibling_next;
+        }
     }
 }
 

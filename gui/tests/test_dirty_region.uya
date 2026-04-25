@@ -1,0 +1,28 @@
+use core.dirty_region.DirtyRegion;
+use core.dirty_region.DirtyRegionView;
+use core.dirty_region.dirty_region_new;
+use core.rect.Rect;
+use std.testing.assert_eq_bool;
+use std.testing.assert_eq_i32;
+
+export const TEST_DIRTY_REGION_MODULE: i32 = 1;
+
+test "dirty region merges overlapping rects" {
+    var dirty: DirtyRegion = dirty_region_new();
+    dirty.add(Rect{ x: 0, y: 0, w: 10, h: 10 });
+    dirty.add(Rect{ x: 5, y: 5, w: 10, h: 10 });
+    dirty.merge();
+
+    const view: DirtyRegionView = dirty.get_regions();
+    try assert_eq_i32(view.len, 1);
+    try assert_eq_i32(view.regions[0].w as i32, 15);
+    try assert_eq_i32(view.regions[0].h as i32, 15);
+}
+
+test "dirty region full refresh heuristic" {
+    var dirty: DirtyRegion = dirty_region_new();
+    dirty.add(Rect{ x: 0, y: 0, w: 90, h: 90 });
+    try assert_eq_bool(dirty.should_full_refresh(Rect{ x: 0, y: 0, w: 100, h: 100 }), true);
+    dirty.clear();
+    try assert_eq_i32(dirty.get_regions().len, 0);
+}

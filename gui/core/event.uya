@@ -9,11 +9,19 @@ fn distance_sq(a: Point, b: Point) i32 {
     return dx * dx + dy * dy;
 }
 
+fn abs_i32(v: i32) i32 {
+    if v < 0 {
+        return 0 - v;
+    }
+    return v;
+}
+
 export enum EventType {
     None,
     Press,
     Release,
     Click,
+    DoubleClick,
     LongPress,
     SwipeLeft,
     SwipeRight,
@@ -30,7 +38,16 @@ export enum EventType {
     DrawRequest,
     Resize,
     Timer,
+    PinchStart,
+    Pinch,
+    PinchEnd,
     Custom,
+}
+
+export enum EventPhase {
+    Capture,
+    Target,
+    Bubble,
 }
 
 export enum InputDev {
@@ -43,10 +60,12 @@ export enum InputDev {
 
 export struct Event {
     event_type: EventType,
+    phase: EventPhase,
     dev_type: InputDev,
     target: i32,
     timestamp: u32,
     point: Point,
+    secondary_point: Point,
     key_code: u16,
     encoder_diff: i16,
     value: i32,
@@ -103,22 +122,27 @@ export struct EventQueue {
 }
 
 export struct GestureDetector {
+    config: GestureConfig,
     start_point: Point,
     start_time: u32,
     last_point: Point,
+    last_click_point: Point,
+    last_release_time: u32,
     is_pressed: bool,
     dragging: bool,
-    click_max_time: u16,
-    long_press_time: u16,
-    swipe_threshold: u16,
+    long_press_fired: bool,
+    pinch_active: bool,
+    pinch_distance_sq: i32,
 
     fn process_touch(self: &Self, touch_point: Point, is_down: bool, timestamp: u32, target: i32, queue: &EventQueue) void {
-        const threshold_sq: i32 = (self.swipe_threshold as i32) * (self.swipe_threshold as i32);
+        const drag_threshold_sq: i32 = (self.config.drag_threshold as i32) * (self.config.drag_threshold as i32);
+        const swipe_threshold_sq: i32 = (self.config.swipe_threshold as i32) * (self.config.swipe_threshold as i32);
 
         if is_down && !self.is_pressed {
             self.start_point = touch_point;
             self.last_point = touch_point;
             self.start_time = timestamp;
+            self.long_press_fired = false;
             self.is_pressed = true;
             self.dragging = false;
             _ = queue.push(event_point(EventType.Press, InputDev.Touch, target, timestamp, touch_point));
@@ -126,12 +150,23 @@ export struct GestureDetector {
         }
 
         if is_down && self.is_pressed {
+            const moved_sq: i32 = distance_sq(self.start_point, touch_point);
+            if !self.long_press_fired
+                && !self.dragging
+                && moved_sq <= drag_threshold_sq
+                && (timestamp - self.start_time) >= self.config.long_press_duration as u32 {
+                self.long_press_fired = true;
+                _ = queue.push(event_point(EventType.LongPress, InputDev.Touch, target, timestamp, touch_point));
+            }
+
             if touch_point != self.last_point {
-                if !self.dragging {
+                if !self.dragging && moved_sq > drag_threshold_sq {
                     self.dragging = true;
                     _ = queue.push(event_point(EventType.DragStart, InputDev.Touch, target, timestamp, self.start_point));
                 }
-                _ = queue.push(event_point(EventType.Drag, InputDev.Touch, target, timestamp, touch_point));
+                if self.dragging {
+                    _ = queue.push(event_point(EventType.Drag, InputDev.Touch, target, timestamp, touch_point));
+                }
                 self.last_point = touch_point;
             }
             return;
@@ -146,17 +181,26 @@ export struct GestureDetector {
                 _ = queue.push(event_point(EventType.DragEnd, InputDev.Touch, target, timestamp, touch_point));
             }
 
-            if moved_sq <= threshold_sq && elapsed <= self.click_max_time as u32 {
-                _ = queue.push(event_point(EventType.Click, InputDev.Touch, target, timestamp, touch_point));
-            } else if moved_sq <= threshold_sq && elapsed >= self.long_press_time as u32 {
-                _ = queue.push(event_point(EventType.LongPress, InputDev.Touch, target, timestamp, touch_point));
-            } else if moved_sq > threshold_sq {
+            if !self.dragging && !self.long_press_fired && moved_sq <= drag_threshold_sq && elapsed <= self.config.click_max_duration as u32 {
+                if self.last_release_time > 0
+                    && (timestamp - self.last_release_time) <= self.config.double_click_interval as u32
+                    && distance_sq(self.last_click_point, touch_point) <= drag_threshold_sq {
+                    _ = queue.push(event_point(EventType.DoubleClick, InputDev.Touch, target, timestamp, touch_point));
+                    self.last_release_time = 0;
+                } else {
+                    _ = queue.push(event_point(EventType.Click, InputDev.Touch, target, timestamp, touch_point));
+                    self.last_release_time = timestamp;
+                    self.last_click_point = touch_point;
+                }
+            } else if moved_sq >= swipe_threshold_sq {
                 const dx: i32 = touch_point.x as i32 - self.start_point.x as i32;
                 const dy: i32 = touch_point.y as i32 - self.start_point.y as i32;
-                if dx >= 0 && dx >= dy && dx >= (0 - dy) {
-                    _ = queue.push(event_point(EventType.SwipeRight, InputDev.Touch, target, timestamp, touch_point));
-                } else if dx < 0 && (0 - dx) >= dy && (0 - dx) >= (0 - dy) {
-                    _ = queue.push(event_point(EventType.SwipeLeft, InputDev.Touch, target, timestamp, touch_point));
+                if abs_i32(dx) >= abs_i32(dy) {
+                    if dx >= 0 {
+                        _ = queue.push(event_point(EventType.SwipeRight, InputDev.Touch, target, timestamp, touch_point));
+                    } else {
+                        _ = queue.push(event_point(EventType.SwipeLeft, InputDev.Touch, target, timestamp, touch_point));
+                    }
                 } else if dy >= 0 {
                     _ = queue.push(event_point(EventType.SwipeDown, InputDev.Touch, target, timestamp, touch_point));
                 } else {
@@ -166,17 +210,127 @@ export struct GestureDetector {
 
             self.is_pressed = false;
             self.dragging = false;
+            self.long_press_fired = false;
         }
     }
+
+    fn process_pinch(self: &Self, first: Point, second: Point, active: bool, timestamp: u32, target: i32, queue: &EventQueue) void {
+        const current_distance_sq: i32 = distance_sq(first, second);
+        const center: Point = Point{
+            x: ((first.x as i32 + second.x as i32) / 2) as i16,
+            y: ((first.y as i32 + second.y as i32) / 2) as i16,
+        };
+
+        if active && !self.pinch_active {
+            self.pinch_active = true;
+            self.pinch_distance_sq = current_distance_sq;
+            _ = queue.push(event_point_value(EventType.PinchStart, InputDev.Touch, target, timestamp, center, current_distance_sq));
+            return;
+        }
+
+        if active && self.pinch_active {
+            const delta_sq: i32 = abs_i32(current_distance_sq - self.pinch_distance_sq);
+            const pinch_threshold_sq: i32 = (self.config.pinch_threshold as i32) * (self.config.pinch_threshold as i32);
+            if delta_sq >= pinch_threshold_sq {
+                self.pinch_distance_sq = current_distance_sq;
+                _ = queue.push(event_point_value(EventType.Pinch, InputDev.Touch, target, timestamp, center, current_distance_sq));
+            }
+            return;
+        }
+
+        if !active && self.pinch_active {
+            self.pinch_active = false;
+            _ = queue.push(event_point_value(EventType.PinchEnd, InputDev.Touch, target, timestamp, center, self.pinch_distance_sq));
+            self.pinch_distance_sq = 0;
+        }
+    }
+}
+
+export struct GestureConfig {
+    click_max_duration: u16,
+    long_press_duration: u16,
+    swipe_threshold: u16,
+    drag_threshold: u16,
+    double_click_interval: u16,
+    pinch_threshold: u16,
+}
+
+export fn gesture_config_default() GestureConfig {
+    return GestureConfig{
+        click_max_duration: 500,
+        long_press_duration: 800,
+        swipe_threshold: 30,
+        drag_threshold: 8,
+        double_click_interval: 300,
+        pinch_threshold: 16,
+    };
+}
+
+export fn gesture_detector_with_config(config: GestureConfig) GestureDetector {
+    return GestureDetector{
+        config: config,
+        start_point: POINT_ZERO,
+        start_time: 0,
+        last_point: POINT_ZERO,
+        last_click_point: POINT_ZERO,
+        last_release_time: 0,
+        is_pressed: false,
+        dragging: false,
+        long_press_fired: false,
+        pinch_active: false,
+        pinch_distance_sq: 0,
+    };
+}
+
+export fn event_with_phase(evt: Event, phase: EventPhase) Event {
+    var next: Event = evt;
+    next.phase = phase;
+    return next;
+}
+
+export fn event_point_value(kind: EventType, dev: InputDev, target: i32, timestamp: u32, point: Point, value: i32) Event {
+    return Event{
+        event_type: kind,
+        phase: EventPhase.Target,
+        dev_type: dev,
+        target: target,
+        timestamp: timestamp,
+        point: point,
+        secondary_point: POINT_ZERO,
+        key_code: 0,
+        encoder_diff: 0,
+        value: value,
+        stop_bubble: false,
+        handled: false,
+    };
+}
+
+export fn event_focus(kind: EventType, target: i32, timestamp: u32) Event {
+    return Event{
+        event_type: kind,
+        phase: EventPhase.Target,
+        dev_type: InputDev.Keypad,
+        target: target,
+        timestamp: timestamp,
+        point: POINT_ZERO,
+        secondary_point: POINT_ZERO,
+        key_code: 0,
+        encoder_diff: 0,
+        value: 0,
+        stop_bubble: false,
+        handled: false,
+    };
 }
 
 export fn event_none() Event {
     return Event{
         event_type: EventType.None,
+        phase: EventPhase.Target,
         dev_type: InputDev.Touch,
         target: -1,
         timestamp: 0,
         point: POINT_ZERO,
+        secondary_point: POINT_ZERO,
         key_code: 0,
         encoder_diff: 0,
         value: 0,
@@ -188,10 +342,12 @@ export fn event_none() Event {
 export fn event_point(kind: EventType, dev: InputDev, target: i32, timestamp: u32, point: Point) Event {
     return Event{
         event_type: kind,
+        phase: EventPhase.Target,
         dev_type: dev,
         target: target,
         timestamp: timestamp,
         point: point,
+        secondary_point: POINT_ZERO,
         key_code: 0,
         encoder_diff: 0,
         value: 0,
@@ -203,10 +359,12 @@ export fn event_point(kind: EventType, dev: InputDev, target: i32, timestamp: u3
 export fn event_key(kind: EventType, dev: InputDev, target: i32, timestamp: u32, key_code: u16) Event {
     return Event{
         event_type: kind,
+        phase: EventPhase.Target,
         dev_type: dev,
         target: target,
         timestamp: timestamp,
         point: POINT_ZERO,
+        secondary_point: POINT_ZERO,
         key_code: key_code,
         encoder_diff: 0,
         value: 0,
@@ -218,10 +376,12 @@ export fn event_key(kind: EventType, dev: InputDev, target: i32, timestamp: u32,
 export fn event_value(kind: EventType, dev: InputDev, target: i32, timestamp: u32, value: i32) Event {
     return Event{
         event_type: kind,
+        phase: EventPhase.Target,
         dev_type: dev,
         target: target,
         timestamp: timestamp,
         point: POINT_ZERO,
+        secondary_point: POINT_ZERO,
         key_code: 0,
         encoder_diff: 0,
         value: value,
@@ -241,14 +401,5 @@ export fn event_queue_new() EventQueue {
 }
 
 export fn gesture_detector_new() GestureDetector {
-    return GestureDetector{
-        start_point: POINT_ZERO,
-        start_time: 0,
-        last_point: POINT_ZERO,
-        is_pressed: false,
-        dragging: false,
-        click_max_time: 250,
-        long_press_time: 600,
-        swipe_threshold: 8,
-    };
+    return gesture_detector_with_config(gesture_config_default());
 }

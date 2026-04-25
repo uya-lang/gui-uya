@@ -1,0 +1,45 @@
+use core.event.Event;
+use core.event.EventType;
+use core.event.event_none;
+use core.point.Point;
+use platform.indev.EncoderDriver;
+use platform.indev.KeyDriver;
+use platform.indev.MouseDriver;
+use platform.indev.TouchDriver;
+use platform.indev.encoder_driver_new;
+use platform.indev.key_driver_new;
+use platform.indev.mouse_driver_new;
+use platform.indev.touch_driver_new;
+use std.testing.assert_eq_bool;
+use std.testing.assert_eq_i32;
+use std.testing.expect;
+
+export const TEST_INPUT_DEV_MODULE: i32 = 1;
+
+test "touch driver reads pending event" {
+    var driver: TouchDriver = touch_driver_new();
+    var evt: Event = event_none();
+    driver.feed(3, 11, Point{ x: 4, y: 5 }, true);
+    try assert_eq_bool(driver.read(&evt), true);
+    try assert_eq_i32(evt.target, 3);
+    try expect(evt.event_type == EventType.Press);
+}
+
+test "mouse key and encoder drivers read pending event" {
+    var mouse: MouseDriver = mouse_driver_new();
+    var key: KeyDriver = key_driver_new();
+    var encoder: EncoderDriver = encoder_driver_new();
+    var evt: Event = event_none();
+
+    mouse.feed(1, 1, Point{ x: 2, y: 3 }, true);
+    try assert_eq_bool(mouse.read(&evt), true);
+    try expect(evt.event_type == EventType.Press);
+
+    key.feed(2, 2, 13, true);
+    try assert_eq_bool(key.read(&evt), true);
+    try expect(evt.event_type == EventType.KeyDown);
+
+    encoder.feed(3, 3, 4);
+    try assert_eq_bool(encoder.read(&evt), true);
+    try assert_eq_i32(evt.value, 4);
+}

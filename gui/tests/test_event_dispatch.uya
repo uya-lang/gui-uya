@@ -1,0 +1,132 @@
+use core.event.Event;
+use core.event.EventPhase;
+use core.event.EventType;
+use core.event.InputDev;
+use core.event.event_point;
+use core.event_dispatch.EventDispatcher;
+use core.event_dispatch.event_dispatcher_new;
+use core.obj.GuiObj;
+use core.obj.IGuiEventCallback;
+use core.obj.gui_obj_default;
+use core.obj.gui_obj_register;
+use core.obj.gui_obj_reset_registry;
+use core.obj_tree.ObjTree;
+use core.obj_tree.obj_tree_new;
+use core.point.Point;
+use core.rect.Rect;
+use std.testing.assert_eq_i32;
+
+export const TEST_EVENT_DISPATCH_MODULE: i32 = 1;
+
+struct CountingCallback : IGuiEventCallback {
+    count_ref: &i32,
+    last_target_ref: &i32,
+}
+
+CountingCallback {
+    fn invoke(self: &Self, obj: &GuiObj, evt: &Event, user_data: &void) bool {
+        _ = user_data;
+        self.count_ref[0] = self.count_ref[0] + 1;
+        self.last_target_ref[0] = evt.target;
+        return obj.obj_idx == evt.target || evt.phase != EventPhase.Target;
+    }
+}
+
+test "dispatcher routes click to deepest target callback" {
+    gui_obj_reset_registry();
+
+    var root: GuiObj = gui_obj_default();
+    var child: GuiObj = gui_obj_default();
+    root.set_area(Rect{ x: 0, y: 0, w: 100, h: 100 });
+    child.set_area(Rect{ x: 10, y: 10, w: 30, h: 30 });
+    child.flags.clickable = true;
+
+    _ = gui_obj_register(0, &root);
+    _ = gui_obj_register(1, &child);
+
+    var tree: ObjTree = obj_tree_new();
+    tree.set_root(0, &root);
+    tree.attach(0, 1);
+
+    var click_count: i32 = 0;
+    var last_target: i32 = -1;
+    var cb_impl: CountingCallback = CountingCallback{
+        count_ref: &click_count,
+        last_target_ref: &last_target,
+    };
+    var cb: IGuiEventCallback = cb_impl;
+    child.on_click(&cb, null);
+
+    var dispatcher: EventDispatcher = event_dispatcher_new();
+    _ = dispatcher.dispatch(event_point(EventType.Click, InputDev.Touch, -1, 10, Point{ x: 20, y: 20 }), &tree);
+
+    try assert_eq_i32(click_count, 1);
+    try assert_eq_i32(last_target, 1);
+}
+
+test "dispatcher updates focus on press and emits callback" {
+    gui_obj_reset_registry();
+
+    var root: GuiObj = gui_obj_default();
+    var child: GuiObj = gui_obj_default();
+    root.set_area(Rect{ x: 0, y: 0, w: 100, h: 100 });
+    child.set_area(Rect{ x: 10, y: 10, w: 30, h: 30 });
+    child.flags.focusable = true;
+    child.flags.clickable = true;
+
+    _ = gui_obj_register(0, &root);
+    _ = gui_obj_register(1, &child);
+
+    var tree: ObjTree = obj_tree_new();
+    tree.set_root(0, &root);
+    tree.attach(0, 1);
+
+    var focus_count: i32 = 0;
+    var last_target: i32 = -1;
+    var cb_impl: CountingCallback = CountingCallback{
+        count_ref: &focus_count,
+        last_target_ref: &last_target,
+    };
+    var cb: IGuiEventCallback = cb_impl;
+    child.on_focus(&cb, null);
+
+    var dispatcher: EventDispatcher = event_dispatcher_new();
+    _ = dispatcher.dispatch(event_point(EventType.Press, InputDev.Touch, -1, 10, Point{ x: 20, y: 20 }), &tree);
+
+    try assert_eq_i32(dispatcher.get_focus(), 1);
+    try assert_eq_i32(focus_count, 1);
+    try assert_eq_i32(last_target, 1);
+}
+
+test "dispatcher pumps queued touch gestures" {
+    gui_obj_reset_registry();
+
+    var root: GuiObj = gui_obj_default();
+    var child: GuiObj = gui_obj_default();
+    root.set_area(Rect{ x: 0, y: 0, w: 100, h: 100 });
+    child.set_area(Rect{ x: 10, y: 10, w: 30, h: 30 });
+    child.flags.clickable = true;
+
+    _ = gui_obj_register(0, &root);
+    _ = gui_obj_register(1, &child);
+
+    var tree: ObjTree = obj_tree_new();
+    tree.set_root(0, &root);
+    tree.attach(0, 1);
+
+    var click_count: i32 = 0;
+    var last_target: i32 = -1;
+    var cb_impl: CountingCallback = CountingCallback{
+        count_ref: &click_count,
+        last_target_ref: &last_target,
+    };
+    var cb: IGuiEventCallback = cb_impl;
+    child.on_click(&cb, null);
+
+    var dispatcher: EventDispatcher = event_dispatcher_new();
+    _ = dispatcher.process_touch(&tree, Point{ x: 20, y: 20 }, true, 100);
+    _ = dispatcher.process_touch(&tree, Point{ x: 20, y: 20 }, false, 180);
+
+    try assert_eq_i32(click_count, 1);
+    try assert_eq_i32(last_target, 1);
+}

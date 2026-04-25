@@ -1,0 +1,96 @@
+use core.color.BLACK;
+use core.color.Color;
+use core.color.WHITE;
+use core.obj.GuiObj;
+use core.obj.gui_obj_default;
+use style.Style;
+use style.StyleBuilder;
+use style.StyleProp;
+use style.StyleValue;
+use style.style_builder_new;
+use style.style_default;
+use style.style_make;
+use std.testing.assert_eq_bool;
+use std.testing.assert_eq_i32;
+use std.testing.expect;
+
+export const TEST_STYLE_MODULE: i32 = 1;
+
+fn style_color_eq(a: Color, b: Color) bool {
+    return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
+}
+
+fn hex_color(hex: u32) Color {
+    return Color{
+        r: ((hex >> 16) & 0xFFu32) as u8,
+        g: ((hex >> 8) & 0xFFu32) as u8,
+        b: (hex & 0xFFu32) as u8,
+        a: 255,
+    };
+}
+
+test "style inline get set and ext props" {
+    var st: Style = style_default();
+    st.set_color(StyleProp.BgColor, hex_color(0x112233u32));
+    st.set_u32(StyleProp.BorderWidth, 3u32);
+    st.set_i32(StyleProp.FlexGrow, 2);
+
+    var bg: StyleValue = StyleValue.u(0u32);
+    var border_width: StyleValue = StyleValue.u(0u32);
+    var flex_grow: StyleValue = StyleValue.i(0);
+
+    try assert_eq_bool(st.get(StyleProp.BgColor, &bg), true);
+    try assert_eq_bool(st.get(StyleProp.BorderWidth, &border_width), true);
+    try assert_eq_bool(st.get(StyleProp.FlexGrow, &flex_grow), true);
+
+    match bg {
+        .color(c) => { try assert_eq_i32(c.r as i32, 0x11); },
+        else => { return error.AssertionFailed; },
+    };
+    match border_width {
+        .u(v) => { try assert_eq_i32(v as i32, 3); },
+        else => { return error.AssertionFailed; },
+    };
+    match flex_grow {
+        .i(v) => { try assert_eq_i32(v, 2); },
+        else => { return error.AssertionFailed; },
+    };
+}
+
+test "style merge and clone keep overridden values" {
+    var base: Style = style_default();
+    var overlay: Style = style_default();
+
+    base.set_color(StyleProp.BgColor, hex_color(0x101010u32));
+    overlay.set_color(StyleProp.FgColor, hex_color(0xFFFFFFu32));
+    overlay.set_u32(StyleProp.PaddingLeft, 12u32);
+
+    base.merge(overlay);
+    const cloned: Style = base.clone();
+
+    try expect(base.get_color_or(StyleProp.BgColor, BLACK).r == 0x10);
+    try assert_eq_i32(base.get_u32_or(StyleProp.PaddingLeft, 0u32) as i32, 12);
+    try assert_eq_i32(cloned.get_u32_or(StyleProp.PaddingLeft, 0u32) as i32, 12);
+    try assert_eq_bool(style_color_eq(cloned.get_color_or(StyleProp.FgColor, BLACK), WHITE), true);
+}
+
+test "style builder and macro create expected values" {
+    var builder: StyleBuilder = style_builder_new();
+    builder.bg_color(hex_color(0x334455u32));
+    builder.fg_color(hex_color(0xEEEEEEu32));
+    builder.border(2, hex_color(0x222222u32));
+    builder.radius(9);
+    builder.padding(6);
+    builder.margin(4);
+    builder.font_size(16);
+    builder.opacity(200);
+    const built: Style = builder.build();
+
+    const macro_style: Style = style_make(hex_color(0xAA0000u32), hex_color(0xFFFFFFu32), 1, hex_color(0x550000u32), 5, 220);
+
+    try assert_eq_i32(built.get_u32_or(StyleProp.Radius, 0u32) as i32, 9);
+    try assert_eq_i32(built.get_u32_or(StyleProp.PaddingTop, 0u32) as i32, 6);
+    try assert_eq_i32(built.get_u32_or(StyleProp.MarginLeft, 0u32) as i32, 4);
+    try assert_eq_i32(macro_style.get_u32_or(StyleProp.Opacity, 0u32) as i32, 220);
+    try assert_eq_bool(style_color_eq(macro_style.get_color_or(StyleProp.FgColor, BLACK), WHITE), true);
+}

@@ -1,11 +1,25 @@
 use std.runtime.entry;
 
+use core.dirty_region.DirtyRegion;
+use core.dirty_region.dirty_region_new;
+use core.event_dispatch.EventDispatcher;
+use core.event_dispatch.event_dispatcher_new;
 use core.obj.GuiObj;
 use core.obj.gui_obj_default;
+use core.obj.gui_obj_register;
+use core.obj.gui_obj_reset_registry;
 use core.obj_pool.ObjPool;
+use core.obj_tree.ObjTree;
+use core.obj_tree.obj_tree_new;
+use core.point.Point;
+use core.rect.Rect;
+use layout.auto.AutoLayout;
+use layout.auto.LayoutMode;
+use layout.auto.auto_layout_new;
 use std.mem.allocator.MallocAllocator;
 use std.mem.allocator.g_allocator;
 use std.time.now_ms;
+use style.StyleProp;
 
 extern "libc" fn printf(fmt: *byte, ...) i32;
 
@@ -48,6 +62,69 @@ fn bench_allocator() !u64 {
     return (try now_ms()) - start_ms;
 }
 
+fn bench_layout_and_dirty() !u64 {
+    gui_obj_reset_registry();
+
+    var root: GuiObj = gui_obj_default();
+    var a: GuiObj = gui_obj_default();
+    var b: GuiObj = gui_obj_default();
+    root.set_area(Rect{ x: 0, y: 0, w: 160, h: 40 });
+    a.set_area(Rect{ x: 0, y: 0, w: 20, h: 10 });
+    b.set_area(Rect{ x: 0, y: 0, w: 20, h: 10 });
+    root.style.set_u32(StyleProp.LayoutMode, LayoutMode.Flex as u32);
+
+    _ = gui_obj_register(0, &root);
+    _ = gui_obj_register(1, &a);
+    _ = gui_obj_register(2, &b);
+
+    var tree: ObjTree = obj_tree_new();
+    tree.set_root(0, &root);
+    tree.attach(0, 1);
+    tree.attach(0, 2);
+
+    var auto: AutoLayout = auto_layout_new();
+    auto.flex.config.gap = 8;
+
+    const start_ms: u64 = try now_ms();
+    var i: i32 = 0;
+    while i < BENCH_ITERATIONS {
+        tree.perform_layout(0, &auto);
+        var dirty: DirtyRegion = dirty_region_new();
+        dirty.add(a.screen_area());
+        dirty.add(b.screen_area());
+        dirty.merge();
+        i = i + 1;
+    }
+    return (try now_ms()) - start_ms;
+}
+
+fn bench_dispatcher() !u64 {
+    gui_obj_reset_registry();
+
+    var root: GuiObj = gui_obj_default();
+    var child: GuiObj = gui_obj_default();
+    root.set_area(Rect{ x: 0, y: 0, w: 120, h: 40 });
+    child.set_area(Rect{ x: 0, y: 0, w: 40, h: 20 });
+    child.flags.clickable = true;
+
+    _ = gui_obj_register(0, &root);
+    _ = gui_obj_register(1, &child);
+
+    var tree: ObjTree = obj_tree_new();
+    tree.set_root(0, &root);
+    tree.attach(0, 1);
+
+    var dispatcher: EventDispatcher = event_dispatcher_new();
+    const start_ms: u64 = try now_ms();
+    var i: i32 = 0;
+    while i < BENCH_ITERATIONS {
+        _ = dispatcher.process_touch(&tree, Point{ x: 5, y: 5 }, true, (i * 2) as u32);
+        _ = dispatcher.process_touch(&tree, Point{ x: 5, y: 5 }, false, (i * 2 + 1) as u32);
+        i = i + 1;
+    }
+    return (try now_ms()) - start_ms;
+}
+
 export fn run_core_bench() i32 {
     const pool_ms: u64 = bench_obj_pool() catch {
         return 1;
@@ -55,9 +132,17 @@ export fn run_core_bench() i32 {
     const heap_ms: u64 = bench_allocator() catch {
         return 2;
     };
+    const layout_ms: u64 = bench_layout_and_dirty() catch {
+        return 3;
+    };
+    const dispatch_ms: u64 = bench_dispatcher() catch {
+        return 4;
+    };
 
-    printf("Phase0 benchmark (%d iterations)\n" as *byte, BENCH_ITERATIONS);
+    printf("Phase1 benchmark (%d iterations)\n" as *byte, BENCH_ITERATIONS);
     printf("obj_pool : %lu ms\n" as *byte, pool_ms);
     printf("allocator: %lu ms\n" as *byte, heap_ms);
+    printf("layout+dirty: %lu ms\n" as *byte, layout_ms);
+    printf("dispatcher  : %lu ms\n" as *byte, dispatch_ms);
     return 0;
 }

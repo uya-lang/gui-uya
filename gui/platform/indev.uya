@@ -1,0 +1,142 @@
+use core.event.Event;
+use core.event.EventOption;
+use core.event.EventType;
+use core.event.InputDev;
+use core.event.event_key;
+use core.event.event_none;
+use core.event.event_point;
+use core.event.event_value;
+use core.point.Point;
+
+export interface IInputDev {
+    fn read(self: &Self, out_evt: &Event) bool;
+    fn dev_type(self: &Self) InputDev;
+}
+
+export struct TouchDriver : IInputDev {
+    pending: EventOption,
+
+    fn feed(self: &Self, target: i32, timestamp: u32, point: Point, is_down: bool) void {
+        var event_type: EventType = EventType.Release;
+        if is_down {
+            event_type = EventType.Press;
+        }
+        self.pending = EventOption.Some(event_point(event_type, InputDev.Touch, target, timestamp, point));
+    }
+
+    fn read(self: &Self, out_evt: &Event) bool {
+        match self.pending {
+            .Some(evt) => {
+                out_evt[0] = evt;
+                self.pending = EventOption.None();
+                return true;
+            },
+            .None(_) => {},
+        };
+        return false;
+    }
+
+    fn dev_type(self: &Self) InputDev {
+        _ = self;
+        return InputDev.Touch;
+    }
+}
+
+export struct MouseDriver : IInputDev {
+    pending: EventOption,
+
+    fn feed(self: &Self, target: i32, timestamp: u32, point: Point, pressed: bool) void {
+        var event_type: EventType = EventType.Release;
+        if pressed {
+            event_type = EventType.Press;
+        }
+        self.pending = EventOption.Some(event_point(event_type, InputDev.Mouse, target, timestamp, point));
+    }
+
+    fn read(self: &Self, out_evt: &Event) bool {
+        match self.pending {
+            .Some(evt) => {
+                out_evt[0] = evt;
+                self.pending = EventOption.None();
+                return true;
+            },
+            .None(_) => {},
+        };
+        return false;
+    }
+
+    fn dev_type(self: &Self) InputDev {
+        _ = self;
+        return InputDev.Mouse;
+    }
+}
+
+export struct KeyDriver : IInputDev {
+    pending: EventOption,
+
+    fn feed(self: &Self, target: i32, timestamp: u32, key_code: u16, pressed: bool) void {
+        var event_type: EventType = EventType.KeyUp;
+        if pressed {
+            event_type = EventType.KeyDown;
+        }
+        self.pending = EventOption.Some(event_key(event_type, InputDev.Keypad, target, timestamp, key_code));
+    }
+
+    fn read(self: &Self, out_evt: &Event) bool {
+        match self.pending {
+            .Some(evt) => {
+                out_evt[0] = evt;
+                self.pending = EventOption.None();
+                return true;
+            },
+            .None(_) => {},
+        };
+        return false;
+    }
+
+    fn dev_type(self: &Self) InputDev {
+        _ = self;
+        return InputDev.Keypad;
+    }
+}
+
+export struct EncoderDriver : IInputDev {
+    pending: EventOption,
+
+    fn feed(self: &Self, target: i32, timestamp: u32, delta: i16) void {
+        self.pending = EventOption.Some(event_value(EventType.ValueChange, InputDev.Encoder, target, timestamp, delta as i32));
+    }
+
+    fn read(self: &Self, out_evt: &Event) bool {
+        match self.pending {
+            .Some(evt) => {
+                out_evt[0] = evt;
+                self.pending = EventOption.None();
+                return true;
+            },
+            .None(_) => {},
+        };
+        return false;
+    }
+
+    fn dev_type(self: &Self) InputDev {
+        _ = self;
+        return InputDev.Encoder;
+    }
+}
+
+export fn touch_driver_new() TouchDriver {
+    return TouchDriver{ pending: EventOption.None() };
+}
+
+export fn mouse_driver_new() MouseDriver {
+    return MouseDriver{ pending: EventOption.None() };
+}
+
+export fn key_driver_new() KeyDriver {
+    return KeyDriver{ pending: EventOption.None() };
+}
+
+export fn encoder_driver_new() EncoderDriver {
+    return EncoderDriver{ pending: EventOption.None() };
+}

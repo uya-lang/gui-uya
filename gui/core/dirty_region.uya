@@ -1,0 +1,136 @@
+use core.rect.RECT_ZERO;
+use core.rect.Rect;
+use core.rect.rect_union;
+
+export const MAX_DIRTY_PRECISE: i32 = 16;
+export const MAX_DIRTY_MERGED: i32 = 8;
+
+fn rect_area(r: Rect) u32 {
+    return r.w as u32 * r.h as u32;
+}
+
+fn rect_touches(a: Rect, b: Rect) bool {
+    const a_right: i32 = a.x as i32 + a.w as i32;
+    const b_right: i32 = b.x as i32 + b.w as i32;
+    const a_bottom: i32 = a.y as i32 + a.h as i32;
+    const b_bottom: i32 = b.y as i32 + b.h as i32;
+    return !(a_right < b.x as i32 || b_right < a.x as i32 || a_bottom < b.y as i32 || b_bottom < a.y as i32);
+}
+
+export struct DirtyRegionView {
+    regions: [Rect: 8],
+    len: i32,
+}
+
+export struct DirtyRegion {
+    precise: [Rect: 16],
+    precise_count: i32,
+    merged: [Rect: 8],
+    merged_count: i32,
+    full_threshold_percent: u8,
+    force_full: bool,
+
+    fn add(self: &Self, rect: Rect) void {
+        if rect.is_empty() {
+            return;
+        }
+
+        if self.precise_count < MAX_DIRTY_PRECISE {
+            self.precise[self.precise_count] = rect;
+            self.precise_count = self.precise_count + 1;
+        } else {
+            self.force_full = true;
+        }
+
+        var i: i32 = 0;
+        while i < self.merged_count {
+            if rect_touches(self.merged[i], rect) {
+                self.merged[i] = rect_union(self.merged[i], rect);
+                return;
+            }
+            i = i + 1;
+        }
+
+        if self.merged_count < MAX_DIRTY_MERGED {
+            self.merged[self.merged_count] = rect;
+            self.merged_count = self.merged_count + 1;
+        } else {
+            self.force_full = true;
+        }
+    }
+
+    fn merge(self: &Self) void {
+        var i: i32 = 0;
+        while i < self.merged_count {
+            var j: i32 = i + 1;
+            while j < self.merged_count {
+                if rect_touches(self.merged[i], self.merged[j]) {
+                    self.merged[i] = rect_union(self.merged[i], self.merged[j]);
+                    self.remove_merged_at(j);
+                } else {
+                    j = j + 1;
+                }
+            }
+            i = i + 1;
+        }
+    }
+
+    fn remove_merged_at(self: &Self, idx: i32) void {
+        if idx < 0 || idx >= self.merged_count {
+            return;
+        }
+        var i: i32 = idx;
+        while i + 1 < self.merged_count {
+            self.merged[i] = self.merged[i + 1];
+            i = i + 1;
+        }
+        self.merged_count = self.merged_count - 1;
+    }
+
+    fn should_full_refresh(self: &Self, screen: Rect) bool {
+        if self.force_full {
+            return true;
+        }
+
+        var dirty_area: u32 = 0u32;
+        var i: i32 = 0;
+        while i < self.merged_count {
+            dirty_area = dirty_area + rect_area(self.merged[i]);
+            i = i + 1;
+        }
+        if rect_area(screen) == 0u32 {
+            return false;
+        }
+        return dirty_area * 100u32 >= rect_area(screen) * self.full_threshold_percent as u32;
+    }
+
+    fn get_regions(self: &Self) DirtyRegionView {
+        var view: DirtyRegionView = DirtyRegionView{
+            regions: [],
+            len: self.merged_count,
+        };
+        var i: i32 = 0;
+        while i < self.merged_count {
+            view.regions[i] = self.merged[i];
+            i = i + 1;
+        }
+        return view;
+    }
+
+    fn clear(self: &Self) void {
+        self.precise_count = 0;
+        self.merged_count = 0;
+        self.force_full = false;
+    }
+}
+
+export fn dirty_region_new() DirtyRegion {
+    return DirtyRegion{
+        precise: [],
+        precise_count: 0,
+        merged: [],
+        merged_count: 0,
+        full_threshold_percent: 70,
+        force_full: false,
+    };
+}
