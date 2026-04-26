@@ -1,0 +1,176 @@
+use libc.cos;
+use libc.pow;
+use libc.sin;
+
+const PI: f64 = 3.141592653589793;
+const BACK_C1: f64 = 1.70158;
+const BACK_C2: f64 = BACK_C1 * 1.525;
+const ELASTIC_C4: f64 = (2.0 * PI) / 3.0;
+const ELASTIC_C5: f64 = (2.0 * PI) / 4.5;
+
+fn easing_clamp_unit(v: f64) f64 {
+    if v <= 0.0 {
+        return 0.0;
+    }
+    if v >= 1.0 {
+        return 1.0;
+    }
+    return v;
+}
+
+fn easing_bounce_out(t: f64) f64 {
+    const n1: f64 = 7.5625;
+    const d1: f64 = 2.75;
+    if t < 1.0 / d1 {
+        return n1 * t * t;
+    }
+    if t < 2.0 / d1 {
+        const t2: f64 = t - 1.5 / d1;
+        return n1 * t2 * t2 + 0.75;
+    }
+    if t < 2.5 / d1 {
+        const t2: f64 = t - 2.25 / d1;
+        return n1 * t2 * t2 + 0.9375;
+    }
+    const t2: f64 = t - 2.625 / d1;
+    return n1 * t2 * t2 + 0.984375;
+}
+
+fn easing_bounce_in(t: f64) f64 {
+    return 1.0 - easing_bounce_out(1.0 - t);
+}
+
+fn easing_bounce_in_out(t: f64) f64 {
+    if t < 0.5 {
+        return (1.0 - easing_bounce_out(1.0 - 2.0 * t)) / 2.0;
+    }
+    return (1.0 + easing_bounce_out(2.0 * t - 1.0)) / 2.0;
+}
+
+export enum EasingType {
+    Linear,
+    EaseInQuad,
+    EaseOutQuad,
+    EaseInOutQuad,
+    EaseInCubic,
+    EaseOutCubic,
+    EaseInOutCubic,
+    EaseInQuart,
+    EaseOutQuart,
+    EaseInOutQuart,
+    EaseInSine,
+    EaseOutSine,
+    EaseInOutSine,
+    EaseInExpo,
+    EaseOutExpo,
+    EaseInOutExpo,
+    EaseInElastic,
+    EaseOutElastic,
+    EaseInOutElastic,
+    EaseInBack,
+    EaseOutBack,
+    EaseInOutBack,
+    EaseInBounce,
+    EaseOutBounce,
+    EaseInOutBounce,
+}
+
+export fn easing_variant_count() i32 {
+    return 25;
+}
+
+export fn apply_easing(t: f32, easing: EasingType) f32 {
+    const tt: f64 = easing_clamp_unit(t as f64);
+    if easing == EasingType.Linear {
+        return tt as f32;
+    } else if easing == EasingType.EaseInQuad {
+        return (tt * tt) as f32;
+    } else if easing == EasingType.EaseOutQuad {
+        return (1.0 - (1.0 - tt) * (1.0 - tt)) as f32;
+    } else if easing == EasingType.EaseInOutQuad {
+        if tt < 0.5 {
+            return (2.0 * tt * tt) as f32;
+        }
+        return (1.0 - pow(0.0 - 2.0 * tt + 2.0, 2.0) / 2.0) as f32;
+    } else if easing == EasingType.EaseInCubic {
+        return (tt * tt * tt) as f32;
+    } else if easing == EasingType.EaseOutCubic {
+        return (1.0 - pow(1.0 - tt, 3.0)) as f32;
+    } else if easing == EasingType.EaseInOutCubic {
+        if tt < 0.5 {
+            return (4.0 * tt * tt * tt) as f32;
+        }
+        return (1.0 - pow(0.0 - 2.0 * tt + 2.0, 3.0) / 2.0) as f32;
+    } else if easing == EasingType.EaseInQuart {
+        return (tt * tt * tt * tt) as f32;
+    } else if easing == EasingType.EaseOutQuart {
+        return (1.0 - pow(1.0 - tt, 4.0)) as f32;
+    } else if easing == EasingType.EaseInOutQuart {
+        if tt < 0.5 {
+            return (8.0 * tt * tt * tt * tt) as f32;
+        }
+        return (1.0 - pow(0.0 - 2.0 * tt + 2.0, 4.0) / 2.0) as f32;
+    } else if easing == EasingType.EaseInSine {
+        return (1.0 - cos((tt * PI) / 2.0)) as f32;
+    } else if easing == EasingType.EaseOutSine {
+        return sin((tt * PI) / 2.0) as f32;
+    } else if easing == EasingType.EaseInOutSine {
+        return ((1.0 - cos(PI * tt)) / 2.0) as f32;
+    } else if easing == EasingType.EaseInExpo {
+        if tt == 0.0 {
+            return 0.0 as f32;
+        }
+        return pow(2.0, 10.0 * tt - 10.0) as f32;
+    } else if easing == EasingType.EaseOutExpo {
+        if tt == 1.0 {
+            return 1.0 as f32;
+        }
+        return (1.0 - pow(2.0, 0.0 - 10.0 * tt)) as f32;
+    } else if easing == EasingType.EaseInOutExpo {
+        if tt == 0.0 {
+            return 0.0 as f32;
+        }
+        if tt == 1.0 {
+            return 1.0 as f32;
+        }
+        if tt < 0.5 {
+            return (pow(2.0, 20.0 * tt - 10.0) / 2.0) as f32;
+        }
+        return ((2.0 - pow(2.0, 0.0 - 20.0 * tt + 10.0)) / 2.0) as f32;
+    } else if easing == EasingType.EaseInElastic {
+        if tt == 0.0 || tt == 1.0 {
+            return tt as f32;
+        }
+        return (0.0 - pow(2.0, 10.0 * tt - 10.0) * sin((tt * 10.0 - 10.75) * ELASTIC_C4)) as f32;
+    } else if easing == EasingType.EaseOutElastic {
+        if tt == 0.0 || tt == 1.0 {
+            return tt as f32;
+        }
+        return (pow(2.0, 0.0 - 10.0 * tt) * sin((tt * 10.0 - 0.75) * ELASTIC_C4) + 1.0) as f32;
+    } else if easing == EasingType.EaseInOutElastic {
+        if tt == 0.0 || tt == 1.0 {
+            return tt as f32;
+        }
+        if tt < 0.5 {
+            return ((0.0 - pow(2.0, 20.0 * tt - 10.0) * sin((20.0 * tt - 11.125) * ELASTIC_C5)) / 2.0) as f32;
+        }
+        return ((pow(2.0, 0.0 - 20.0 * tt + 10.0) * sin((20.0 * tt - 11.125) * ELASTIC_C5)) / 2.0 + 1.0) as f32;
+    } else if easing == EasingType.EaseInBack {
+        return ((BACK_C1 + 1.0) * tt * tt * tt - BACK_C1 * tt * tt) as f32;
+    } else if easing == EasingType.EaseOutBack {
+        const t2: f64 = tt - 1.0;
+        return (1.0 + (BACK_C1 + 1.0) * t2 * t2 * t2 + BACK_C1 * t2 * t2) as f32;
+    } else if easing == EasingType.EaseInOutBack {
+        if tt < 0.5 {
+            const t2: f64 = 2.0 * tt;
+            return ((t2 * t2 * ((BACK_C2 + 1.0) * t2 - BACK_C2)) / 2.0) as f32;
+        }
+        const t2: f64 = 2.0 * tt - 2.0;
+        return ((t2 * t2 * ((BACK_C2 + 1.0) * t2 + BACK_C2) + 2.0) / 2.0) as f32;
+    } else if easing == EasingType.EaseInBounce {
+        return easing_bounce_in(tt) as f32;
+    } else if easing == EasingType.EaseOutBounce {
+        return easing_bounce_out(tt) as f32;
+    }
+    return easing_bounce_in_out(tt) as f32;
+}

@@ -1,0 +1,30 @@
+use libc.CLOCK_MONOTONIC;
+use libc.TimeSpec;
+use libc.sys_clock_gettime;
+use libc.sys_nanosleep;
+
+fn tick_monotonic_now() TimeSpec {
+    var ts: TimeSpec = TimeSpec{ tv_sec: 0, tv_nsec: 0 };
+    _ = sys_clock_gettime(CLOCK_MONOTONIC, &ts) catch {};
+    return ts;
+}
+
+export fn get_tick_ms() u32 {
+    const ts: TimeSpec = tick_monotonic_now();
+    const total_ms: u64 = (ts.tv_sec as u64) * 1000u64 + (ts.tv_nsec as u64) / 1000000u64;
+    return total_ms as u32;
+}
+
+export fn get_tick_us() u64 {
+    const ts: TimeSpec = tick_monotonic_now();
+    return (ts.tv_sec as u64) * 1000000u64 + (ts.tv_nsec as u64) / 1000u64;
+}
+
+export fn sleep_ms(ms: u32) void {
+    var req: TimeSpec = TimeSpec{
+        tv_sec: (ms / 1000u32) as i64,
+        tv_nsec: ((ms % 1000u32) as i64) * 1000000i64,
+    };
+    var rem: TimeSpec = TimeSpec{ tv_sec: 0, tv_nsec: 0 };
+    _ = sys_nanosleep(&req, &rem) catch {};
+}

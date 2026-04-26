@@ -129,3 +129,27 @@ export fn bitmap_allocator_new(capacity: i32) BitmapAllocator {
         lock: 0,
     };
 }
+
+export fn bitmap_allocator_alloc(bitmap: &BitmapAllocator) i32 {
+    return bitmap.alloc();
+}
+
+export fn bitmap_allocator_free(bitmap: &BitmapAllocator, idx: i32) void {
+    bitmap.free(idx);
+}
+
+export fn bitmap_allocator_is_used(bitmap: &BitmapAllocator, idx: i32) bool {
+    return bitmap.is_used(idx);
+}
+
+export fn bitmap_allocator_find_first_zero(bitmap: &BitmapAllocator) i32 {
+    return bitmap.find_first_zero();
+}
+
+export fn bitmap_allocator_used(bitmap: &BitmapAllocator) i32 {
+    return bitmap.used();
+}
+
+export fn bitmap_allocator_free_slots(bitmap: &BitmapAllocator) i32 {
+    return bitmap.free_slots();
+}

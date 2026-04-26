@@ -1,14 +1,22 @@
 use core.event.Event;
+use core.event.GestureConfig;
 use core.event.EventType;
+use core.event.InputDev;
 use core.event.event_none;
+use core.event.gesture_config_default;
 use core.point.Point;
 use platform.indev.EncoderDriver;
+use platform.indev.IInputDev;
+use platform.indev.InputManager;
 use platform.indev.KeyDriver;
 use platform.indev.MouseDriver;
+use platform.indev.TouchCalibSample;
 use platform.indev.TouchDriver;
 use platform.indev.encoder_driver_new;
+use platform.indev.input_manager_new;
 use platform.indev.key_driver_new;
 use platform.indev.mouse_driver_new;
+use platform.indev.touch_calibration_identity;
 use platform.indev.touch_driver_new;
 use std.testing.assert_eq_bool;
 use std.testing.assert_eq_i32;
@@ -42,4 +50,51 @@ test "mouse key and encoder drivers read pending event" {
     encoder.feed(3, 3, 4);
     try assert_eq_bool(encoder.read(&evt), true);
     try assert_eq_i32(evt.value(), 4);
+}
+
+test "touch driver calibration and filter map raw samples" {
+    var driver: TouchDriver = touch_driver_new();
+    driver.set_filter_enabled(false);
+    driver.calibration = touch_calibration_identity();
+
+    var samples: [TouchCalibSample: 4] = [
+        TouchCalibSample{ raw: Point{ x: 100, y: 100 }, screen: Point{ x: 0, y: 0 } },
+        TouchCalibSample{ raw: Point{ x: 900, y: 100 }, screen: Point{ x: 80, y: 0 } },
+        TouchCalibSample{ raw: Point{ x: 100, y: 900 }, screen: Point{ x: 0, y: 80 } },
+        TouchCalibSample{ raw: Point{ x: 900, y: 900 }, screen: Point{ x: 80, y: 80 } },
+    ];
+    driver.calibrate_4pt(&samples[0], 4);
+
+    var evt: Event = event_none();
+    driver.feed_raw(9, 10u32, Point{ x: 500, y: 500 }, true);
+    try assert_eq_bool(driver.read(&evt), true);
+    try expect(evt.point().x >= 39 && evt.point().x <= 41);
+    try expect(evt.point().y >= 39 && evt.point().y <= 41);
+}
+
+test "input manager supports hotplug and edge gestures" {
+    var touch: TouchDriver = touch_driver_new();
+    var mouse: MouseDriver = mouse_driver_new();
+    var manager: InputManager = input_manager_new();
+    var touch_dev: IInputDev = touch;
+    var mouse_dev: IInputDev = mouse;
+
+    try assert_eq_bool(manager.attach(&touch_dev), true);
+    try assert_eq_bool(manager.attach(&mouse_dev), true);
+    try assert_eq_i32(manager.device_count(), 2);
+
+    var config: GestureConfig = gesture_config_default();
+    config.swipe_threshold = 10;
+    touch.set_gesture_config(config);
+    touch.set_filter_enabled(false);
+    touch.feed(5, 1u32, Point{ x: 2, y: 2 }, true);
+    touch.feed(5, 20u32, Point{ x: 20, y: 2 }, false);
+
+    var evt: Event = event_none();
+    try assert_eq_bool(manager.poll(&evt), true);
+    try expect(evt.event_type == EventType.Press || evt.event_type == EventType.Release || evt.event_type == EventType.SwipeRight || evt.event_type == EventType.Click);
+
+    try assert_eq_bool(manager.detach(InputDev.Mouse), true);
+    try assert_eq_i32(manager.device_count(), 1);
+    try assert_eq_bool(manager.hotplug_revision >= 3u32, true);
 }

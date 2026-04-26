@@ -54,6 +54,18 @@ fn widget_transparent() Color {
     return Color{ r: 0, g: 0, b: 0, a: 0 };
 }
 
+fn widget_apply_opacity(color: Color, opacity: u8) Color {
+    if opacity >= 255 {
+        return color;
+    }
+    return Color{
+        r: color.r,
+        g: color.g,
+        b: color.b,
+        a: (((color.a as u32) * (opacity as u32)) / 255u32) as u8,
+    };
+}
+
 fn widget_event_slot_default() WidgetEventSlot {
     return WidgetEventSlot{
         callback: null,
@@ -392,9 +404,10 @@ export fn widget_inner_rect(widget: &Widget) Rect {
 export fn widget_draw_surface(widget: &Widget, ctx: &RenderCtx) Rect {
     const area: Rect = widget.base.screen_area();
     const style: &Style = &widget.base.style;
-    const bg: Color = widget_state_bg(style, widget.state);
-    const border_color: Color = style.get_color_or(StyleProp.BorderColor, widget_transparent());
-    const shadow_color: Color = style.get_color_or(StyleProp.ShadowColor, widget_transparent());
+    const opacity: u8 = (style.get_u32_or(StyleProp.Opacity, 255u32) as! u8).value;
+    const bg: Color = widget_apply_opacity(widget_state_bg(style, widget.state), opacity);
+    const border_color: Color = widget_apply_opacity(style.get_color_or(StyleProp.BorderColor, widget_transparent()), opacity);
+    const shadow_color: Color = widget_apply_opacity(style.get_color_or(StyleProp.ShadowColor, widget_transparent()), opacity);
     const radius: u8 = (style.get_u32_or(StyleProp.Radius, 0u32) as! u8).value;
     const border_width: u8 = (style.get_u32_or(StyleProp.BorderWidth, 0u32) as! u8).value;
     const shadow_x: i16 = (style.get_i32_or(StyleProp.ShadowOffsetX, 0) as! i16).value;

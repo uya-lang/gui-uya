@@ -1,5 +1,10 @@
 use std.runtime.entry;
 
+use anim.timeline.AnimManager;
+use anim.timeline.anim_manager_new;
+use anim.tween.AnimProp;
+use anim.tween.Tween;
+use anim.tween.anim_value_i32;
 use core.dirty_region.DirtyRegion;
 use core.dirty_region.dirty_region_new;
 use core.event_dispatch.EventDispatcher;
@@ -179,6 +184,47 @@ fn bench_render_image_batch() !u64 {
     return (try now_ms()) - start_ms;
 }
 
+fn bench_animations() !u64 {
+    gui_obj_reset_registry();
+
+    var objects: [GuiObj: 32] = [];
+    var manager: AnimManager = anim_manager_new();
+    var i: i32 = 0;
+    while i < 32 {
+        objects[i] = gui_obj_default();
+        objects[i].x = 0;
+        objects[i].y = (i as! i16).value;
+        objects[i].w = 8;
+        objects[i].h = 8;
+        _ = gui_obj_register(i, &objects[i]);
+
+        var tween: Tween = Tween.new(i, AnimProp.X, anim_value_i32(120 + i), 160u32);
+        tween.with_from_i32(0);
+        _ = manager.start_tween(&tween) catch {
+            return 0u64;
+        };
+        i = i + 1;
+    }
+
+    const start_ms: u64 = try now_ms();
+    i = 0;
+    while i < BENCH_ITERATIONS {
+        manager.update_all(16u32);
+        if !manager.is_animating() {
+            var j: i32 = 0;
+            while j < 32 {
+                var tween: Tween = Tween.new(j, AnimProp.X, anim_value_i32(120 + j), 160u32);
+                tween.with_from_i32(0);
+                _ = manager.start_tween(&tween) catch {};
+                objects[j].x = 0;
+                j = j + 1;
+            }
+        }
+        i = i + 1;
+    }
+    return (try now_ms()) - start_ms;
+}
+
 export fn run_core_bench() i32 {
     const pool_ms: u64 = bench_obj_pool() catch {
         return 1;
@@ -198,13 +244,17 @@ export fn run_core_bench() i32 {
     const image_batch_ms: u64 = bench_render_image_batch() catch {
         return 6;
     };
+    const animation_ms: u64 = bench_animations() catch {
+        return 7;
+    };
 
-    printf("Phase2 benchmark (%d iterations)\n" as *byte, BENCH_ITERATIONS);
+    printf("Phase4 benchmark (%d iterations)\n" as *byte, BENCH_ITERATIONS);
     printf("obj_pool : %lu ms\n" as *byte, pool_ms);
     printf("allocator: %lu ms\n" as *byte, heap_ms);
     printf("layout+dirty: %lu ms\n" as *byte, layout_ms);
     printf("dispatcher  : %lu ms\n" as *byte, dispatch_ms);
     printf("render prim : %lu ms\n" as *byte, render_ms);
     printf("image+batch : %lu ms\n" as *byte, image_batch_ms);
+    printf("32 anims    : %lu ms\n" as *byte, animation_ms);
     return 0;
 }

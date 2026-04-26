@@ -29,6 +29,9 @@ use widget.img.Image;
 use widget.lbl.Label;
 use widget.list.ListView;
 use widget.page.Page;
+use widget.page.PageNavigator;
+use widget.page.PageTransitionKind;
+use widget.page.page_navigator_new;
 use widget.panel.Panel;
 use widget.slider.Slider;
 use widget.switch.Switch;
@@ -206,4 +209,32 @@ test "page can render nested widgets" {
     page.render(&ctx);
 
     try assert_eq_bool(ctx_pixel(&ctx, 14, 12) == Color{ r: 33, g: 126, b: 227, a: 255 }, true);
+}
+
+test "page navigator supports push pop transitions and edge swipe" {
+    var bytes: [byte: 8192] = [];
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 48, 32, 192, PixelFormat.ARGB8888));
+    var page_a: Page = Page.new("A");
+    var page_b: Page = Page.new("B");
+    page_a.widget.at(0, 0);
+    page_a.widget.size(48, 32);
+    page_b.widget.at(0, 0);
+    page_b.widget.size(48, 32);
+    page_a.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 255, g: 240, b: 240, a: 255 });
+    page_b.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 240, g: 248, b: 255, a: 255 });
+
+    var nav: PageNavigator = page_navigator_new(Rect{ x: 0, y: 0, w: 48, h: 32 });
+    try assert_eq_bool(nav.push(page_a.obj(), PageTransitionKind.None, 0u32), true);
+    try assert_eq_bool(nav.push(page_b.obj(), PageTransitionKind.SlideLeft, 120u32), true);
+    try assert_eq_bool(nav.is_animating(), true);
+    nav.render(&ctx);
+    nav.update(60u32);
+    try assert_eq_bool(nav.is_animating(), true);
+    nav.update(60u32);
+    try assert_eq_bool(nav.top() == page_b.obj(), true);
+
+    var swipe_evt: Event = event_point(EventType.SwipeRight, InputDev.Touch, -1, 200u32, Point{ x: 2, y: 8 });
+    try assert_eq_bool(nav.handle_event(&swipe_evt), true);
+    nav.update(180u32);
+    try assert_eq_bool(nav.top() == page_a.obj(), true);
 }

@@ -1,0 +1,215 @@
+use libc.O_RDONLY;
+use libc.sys_access;
+use libc.sys_close;
+use libc.sys_open;
+use libc.sys_read;
+use std.async.Future;
+
+export const ROM_FS_CAPACITY: i32 = 16;
+export const FS_PATH_CAPACITY: i32 = 256;
+
+export error FsNotFound;
+export error FsBufferTooSmall;
+export error FsReadFailed;
+
+fn fs_cstr_len(text: &const byte) usize {
+    if text == null {
+        return 0usize;
+    }
+    var len: usize = 0usize;
+    while text[len] != 0 {
+        len = len + 1usize;
+    }
+    return len;
+}
+
+fn fs_cstr_eq(a: &const byte, b: &const byte) bool {
+    var i: usize = 0usize;
+    while true {
+        if a == null || b == null {
+            return a == b;
+        }
+        if a[i] != b[i] {
+            return false;
+        }
+        if a[i] == 0 {
+            return true;
+        }
+        i = i + 1usize;
+    }
+}
+
+fn fs_copy_path(dst: &byte, src: &const byte, max_len: usize) bool {
+    if dst == null || src == null || max_len == 0usize {
+        return false;
+    }
+    var i: usize = 0usize;
+    while i + 1usize < max_len && src[i] != 0 {
+        dst[i] = src[i];
+        i = i + 1usize;
+    }
+    if src[i] != 0 && i + 1usize >= max_len {
+        return false;
+    }
+    dst[i] = 0;
+    return true;
+}
+
+fn fs_join_path(base_dir: &const byte, path: &const byte, out_path: &byte, max_len: usize) bool {
+    if base_dir == null || base_dir[0] == 0 {
+        return fs_copy_path(out_path, path, max_len);
+    }
+
+    var i: usize = 0usize;
+    while i + 1usize < max_len && base_dir[i] != 0 {
+        out_path[i] = base_dir[i];
+        i = i + 1usize;
+    }
+    if base_dir[i] != 0 {
+        return false;
+    }
+
+    if i > 0usize && out_path[i - 1usize] != '/' as byte {
+        if i + 1usize >= max_len {
+            return false;
+        }
+        out_path[i] = '/' as byte;
+        i = i + 1usize;
+    }
+
+    var j: usize = 0usize;
+    while i + 1usize < max_len && path[j] != 0 {
+        out_path[i] = path[j];
+        i = i + 1usize;
+        j = j + 1usize;
+    }
+    if path[j] != 0 {
+        return false;
+    }
+    out_path[i] = 0;
+    return true;
+}
+
+export interface IFileSystem {
+    fn exists(self: &Self, path: &const byte) bool;
+    fn read(self: &Self, path: &const byte, out: &byte, capacity: usize) !usize;
+}
+
+export struct RomFsEntry {
+    path: &const byte,
+    data: &const byte,
+    len: usize,
+    used: bool,
+}
+
+export struct RomFileSystem : IFileSystem {
+    entries: [RomFsEntry: 16],
+    entry_count: u8,
+
+    fn add_file(self: &Self, path: &const byte, data: &const byte, len: usize) bool {
+        if self.entry_count as i32 >= ROM_FS_CAPACITY {
+            return false;
+        }
+        const slot: usize = (self.entry_count as! usize).value;
+        self.entries[slot] = RomFsEntry{
+            path: path,
+            data: data,
+            len: len,
+            used: true,
+        };
+        self.entry_count = self.entry_count + 1;
+        return true;
+    }
+
+    fn exists(self: &Self, path: &const byte) bool {
+        var i: i32 = 0;
+        while i < self.entry_count as i32 {
+            if self.entries[i].used && fs_cstr_eq(self.entries[i].path, path) {
+                return true;
+            }
+            i = i + 1;
+        }
+        return false;
+    }
+
+    fn read(self: &Self, path: &const byte, out: &byte, capacity: usize) !usize {
+        var i: i32 = 0;
+        while i < self.entry_count as i32 {
+            if self.entries[i].used && fs_cstr_eq(self.entries[i].path, path) {
+                if self.entries[i].len > capacity {
+                    return error.FsBufferTooSmall;
+                }
+                var copied: usize = 0usize;
+                while copied < self.entries[i].len {
+                    out[copied] = self.entries[i].data[copied];
+                    copied = copied + 1usize;
+                }
+                return copied;
+            }
+            i = i + 1;
+        }
+        return error.FsNotFound;
+    }
+
+    @async_fn
+    fn read_async(self: &Self, path: &const byte, out: &byte, capacity: usize) Future<!usize> {
+        return try self.read(path, out, capacity);
+    }
+}
+
+export struct FatFileSystem : IFileSystem {
+    base_dir: &const byte,
+
+    fn exists(self: &Self, path: &const byte) bool {
+        var full_path: [byte: 256] = [];
+        if !fs_join_path(self.base_dir, path, &full_path[0], FS_PATH_CAPACITY as usize) {
+            return false;
+        }
+        const ok: !i32 = sys_access(&full_path[0] as *const byte, 0);
+        _ = ok catch {
+            return false;
+        };
+        return true;
+    }
+
+    fn read(self: &Self, path: &const byte, out: &byte, capacity: usize) !usize {
+        var full_path: [byte: 256] = [];
+        if !fs_join_path(self.base_dir, path, &full_path[0], FS_PATH_CAPACITY as usize) {
+            return error.FsBufferTooSmall;
+        }
+
+        const fd: i32 = (sys_open(&full_path[0] as *const byte, O_RDONLY as i32, 0) catch {
+            return error.FsNotFound;
+        });
+
+        const read_n: !isize = sys_read(fd, out as *byte, capacity);
+        _ = sys_close(fd) catch {};
+        const n: isize = read_n catch {
+            return error.FsReadFailed;
+        };
+        if n < 0 {
+            return error.FsReadFailed;
+        }
+        return n as usize;
+    }
+
+    @async_fn
+    fn read_async(self: &Self, path: &const byte, out: &byte, capacity: usize) Future<!usize> {
+        return try self.read(path, out, capacity);
+    }
+}
+
+export fn rom_fs_new() RomFileSystem {
+    return RomFileSystem{
+        entries: [],
+        entry_count: 0,
+    };
+}
+
+export fn fat_fs_new(base_dir: &const byte) FatFileSystem {
+    return FatFileSystem{ base_dir: base_dir };
+}
+
+export fn fs_path_len(path: &const byte) usize {
+    return fs_cstr_len(path);
+}

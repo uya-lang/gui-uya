@@ -1,8 +1,8 @@
 # UyaGUI - 详细开发 TODO 文档
 
 > 版本: v0.1.0  
-> 日期: 2026-04-25  
-> 状态: Phase 3 组件库已实现（最小可编译/可测试基线）
+> 日期: 2026-04-26  
+> 状态: Phase 4 高级特性已实现（最小可编译/可测试基线）
 
 > 说明: 本文中的类型与函数签名默认以当前 Uya 语法为准；涉及未来 API 形态时，会显式写成“提案”而不是直接当成现行语法。
 
@@ -16,18 +16,18 @@
 | Phase 1: 核心系统 | 已实现（最小可编译/可测试基线） | 4 周 | - |
 | Phase 2: 渲染引擎 | 已实现（最小可编译/可测试基线） | 3 周 | - |
 | Phase 3: 组件库 | 已实现（最小可编译/可测试基线） | 3 周 | - |
-| Phase 4: 高级特性 | 未开始 | 2 周 | - |
+| Phase 4: 高级特性 | 已实现（最小可编译/可测试基线） | 2 周 | - |
 | Phase 5: 优化与测试 | 未开始（已具备基础测试/基准框架） | 3 周 | - |
 | Phase 6: 文档与示例 | 未开始（已有 `phase0` / `phase1` smoke 示例） | 2 周 | - |
 | **总计** | | **20 周** | |
 
 ## 当前实现快照
 
-- 2026-04-25 当前工作区已完成 Phase 3 最小基线: 在保留 Phase 2 渲染模块的基础上，新增长驻 `widget/{base,btn,lbl,img,slider,switch,page,panel,list,grid_view,chart,canvas}.uya`、`tests/test_widgets.uya`、`examples/phase3_smoke.uya` 与 `examples/custom/{gauge,keyboard}.uya`。
-- 2026-04-25 当前 `make test` / `make build` 已恢复可用；默认 smoke 入口已切换为 `gui/phase3_smoke.uya`。
+- 2026-04-26 当前工作区已完成 Phase 4 最小基线: 在 Phase 3 组件库基础上，新增 `anim/{easing,tween,timeline}.uya`、`platform/tick.uya`、`res/fs.uya`，并增强 `platform/{disp,indev}.uya`、`res/cache.uya` 与 `widget/page.uya`，补齐页面导航、资源异步入口、输入校准/管理与平台 profile。
+- 2026-04-26 当前 `make test` / `make build` / `make bench` 可用；默认 smoke 入口已切换为 `gui/phase4_smoke.uya`，对应 `examples/phase4_smoke.uya`、`tests/test_anim.uya` 与 `tests/test_phase4_io.uya` 已接入。
 - Phase 1 已落地模块仍完整可见: `style/*`、`theme`、`event_dispatch`、`platform/indev`、`layout/*`、`dirty_region`、`benchmarks/core_bench.uya`、`examples/phase1_smoke.uya`。
 - 以下 Phase 2 条目中的 `[x]` 表示“代码/接口已经写出或已有测试草案”，不代表当前工作区已经恢复绿色构建。
-- 仍未开始或明显不足: `anim/` 动画系统、真实字体/图片解码链路、硬件 GPU 后端与完整渲染性能优化。
+- 仍未开始或明显不足: 真实字体/图片解码链路、硬件 GPU 后端实装、完整渲染性能优化与更深入的平台外设适配。
 
 ---
 
@@ -756,97 +756,99 @@
 
 ## Phase 4: 高级特性 (Week 14-15)
 
+> 当前状态: 已实现 Phase 4 的最小可编译/可测试基线，动画系统、页面导航过渡、资源/文件系统抽象、输入增强与 tick/disp 平台抽象均已落地；对应 `phase4_smoke`、`test_anim`、`test_phase4_io`、扩展后的 `test_input_dev` / `test_widgets` 与 benchmark 已接入。
+
 ### Week 14: 动画系统
 
 #### Day 1-2: 补间动画
-- [ ] `anim/tween.uya` - 补间动画
-  - [ ] `enum EasingType: u8` (25+ 缓动函数)
-  - [ ] `enum AnimProp: u8` (X, Y, Width, Height, Opacity, ...)
-  - [ ] `union AnimValue` (i32, f32, Color)
-  - [ ] `struct Tween`
-    - [ ] target, property, from, to
-    - [ ] duration, delay, easing
-    - [ ] 运行时状态 (elapsed, running, reversed)
-    - [ ] repeat, yoyo
-  - [ ] 结构体方法:
-    - [ ] `fn new(target, prop, to, duration) Tween`
-    - [ ] `fn with_easing(self, easing) Tween`
-    - [ ] `fn with_delay(self, delay) Tween`
-    - [ ] `fn yoyo(self, enabled) Tween`
-    - [ ] `fn repeat(self, count) Tween`
-    - [ ] `fn on_complete(self, cb) Tween`
-    - [ ] `fn on_update(self, cb) Tween`
-    - [ ] `fn start(self) void`
-    - [ ] `fn update(self, dt) bool`
-    - [ ] `fn apply_value(self, value) void`
-- [ ] `anim/easing.uya` - 缓动函数实现
-  - [ ] 线性、二次、三次、四次
-  - [ ] Sine、Expo、Elastic、Back、Bounce
-  - [ ] 每种都有 In/Out/InOut 变体
+- [x] `anim/tween.uya` - 补间动画
+  - [x] `enum EasingType: u8` (25+ 缓动函数)
+  - [x] `enum AnimProp: u8` (X, Y, Width, Height, Opacity, ...)
+  - [x] `union AnimValue` (i32, f32, Color)
+  - [x] `struct Tween`
+    - [x] target, property, from, to
+    - [x] duration, delay, easing
+    - [x] 运行时状态 (elapsed, running, reversed)
+    - [x] repeat, yoyo
+  - [x] 结构体方法:
+    - [x] `fn new(target, prop, to, duration) Tween`
+    - [x] `fn with_easing(self, easing) Tween`
+    - [x] `fn with_delay(self, delay) Tween`
+    - [x] `fn yoyo(self, enabled) Tween`
+    - [x] `fn repeat(self, count) Tween`
+    - [x] `fn on_complete(self, cb) Tween`
+    - [x] `fn on_update(self, cb) Tween`
+    - [x] `fn start(self) void`
+    - [x] `fn update(self, dt) bool`
+    - [x] `fn apply_value(self, value) void`
+- [x] `anim/easing.uya` - 缓动函数实现
+  - [x] 线性、二次、三次、四次
+  - [x] Sine、Expo、Elastic、Back、Bounce
+  - [x] 每种都有 In/Out/InOut 变体
 
 #### Day 3: 动画管理器
-- [ ] `anim/timeline.uya` - 动画管理
-  - [ ] `struct AnimManager`
-    - [ ] tweens: `[Tween: MAX_ANIMATIONS]`
-    - [ ] active: `[bool: MAX_ANIMATIONS]`
-  - [ ] 结构体方法:
-    - [ ] `fn start_tween(self, tween) !i32`
-    - [ ] `fn stop_tween(self, id) void`
-    - [ ] `fn stop_all(self) void`
-    - [ ] `fn update_all(self, dt) void`
-    - [ ] `fn is_animating(self) bool`
-  - [ ] `@async_fn fn animation_loop(self: &Self, tick_ms: u32) Future<!void>`
-- [ ] 性能测试 (32 个并发动画)
+- [x] `anim/timeline.uya` - 动画管理
+  - [x] `struct AnimManager`
+    - [x] tweens: `[Tween: MAX_ANIMATIONS]`
+    - [x] active: `[bool: MAX_ANIMATIONS]`
+  - [x] 结构体方法:
+    - [x] `fn start_tween(self, tween) !i32`
+    - [x] `fn stop_tween(self, id) void`
+    - [x] `fn stop_all(self) void`
+    - [x] `fn update_all(self, dt) void`
+    - [x] `fn is_animating(self) bool`
+  - [x] `@async_fn fn animation_loop(self: &Self, tick_ms: u32) Future<!void>`
+- [x] 性能测试 (32 个并发动画)
 
 #### Day 4-5: 页面过渡
-- [ ] 页面切换动画
-  - [ ] Slide (Left/Right/Up/Down)
-  - [ ] Fade
-  - [ ] Scale
-  - [ ] Custom
-- [ ] 导航栈管理
-  - [ ] Push/Pop 动画
-  - [ ] 手势返回 (Edge Swipe)
+- [x] 页面切换动画
+  - [x] Slide (Left/Right/Up/Down)
+  - [x] Fade
+  - [x] Scale
+  - [x] Custom
+- [x] 导航栈管理
+  - [x] Push/Pop 动画
+  - [x] 手势返回 (Edge Swipe)
 
 ### Week 15: 资源管理与输入
 
 #### Day 1-2: 资源系统
-- [ ] `res/cache.uya` - 图像缓存
-  - [ ] LRU 策略
-  - [ ] 引用计数
-  - [ ] 内存预算
-  - [ ] 异步加载
-- [ ] `res/fs.uya` - 文件系统抽象
-  - [ ] `interface IFileSystem`
-  - [ ] 内置 ROM FS
-  - [ ] FAT FS 适配
-  - [ ] 异步读取接口
+- [x] `res/cache.uya` - 图像缓存
+  - [x] LRU 策略
+  - [x] 引用计数
+  - [x] 内存预算
+  - [x] 异步加载
+- [x] `res/fs.uya` - 文件系统抽象
+  - [x] `interface IFileSystem`
+  - [x] 内置 ROM FS
+  - [x] FAT FS 适配
+  - [x] 异步读取接口
 
 #### Day 3-4: 输入系统完善
-- [ ] `platform/indev.uya` - 输入设备
-  - [ ] 触摸屏驱动
-    - [ ] 校准算法 (4点/9点)
-    - [ ] 中值滤波
-    - [ ] 手势识别集成
-  - [ ] 鼠标驱动
-  - [ ] 键盘驱动
-  - [ ] 编码器驱动
-- [ ] 输入设备管理器
-  - [ ] 多设备同时支持
-  - [ ] 设备热插拔
+- [x] `platform/indev.uya` - 输入设备
+  - [x] 触摸屏驱动
+    - [x] 校准算法 (4点/9点)
+    - [x] 中值滤波
+    - [x] 手势识别集成
+  - [x] 鼠标驱动
+  - [x] 键盘驱动
+  - [x] 编码器驱动
+- [x] 输入设备管理器
+  - [x] 多设备同时支持
+  - [x] 设备热插拔
 
 #### Day 5: 平台抽象
-- [ ] `platform/tick.uya` - 时钟接口
-  - [ ] `fn get_tick_ms() u32`
-  - [ ] `fn get_tick_us() u64`
-  - [ ] `fn sleep_ms(ms) void`
-- [ ] `platform/disp.uya` - 显示驱动接口
-  - [ ] 常见驱动适配
-    - [ ] ILI9341 (320x240)
-    - [ ] ST7789 (240x320)
-    - [ ] ST7735 (128x160)
-    - [ ] SSD1963 (480x272/800x480)
-    - [ ] RA8875 (800x480)
+- [x] `platform/tick.uya` - 时钟接口
+  - [x] `fn get_tick_ms() u32`
+  - [x] `fn get_tick_us() u64`
+  - [x] `fn sleep_ms(ms) void`
+- [x] `platform/disp.uya` - 显示驱动接口
+  - [x] 常见驱动适配
+    - [x] ILI9341 (320x240)
+    - [x] ST7789 (240x320)
+    - [x] ST7735 (128x160)
+    - [x] SSD1963 (480x272/800x480)
+    - [x] RA8875 (800x480)
 
 ---
 

@@ -1,0 +1,91 @@
+use anim.easing.EasingType;
+use anim.easing.apply_easing;
+use anim.easing.easing_variant_count;
+use anim.timeline.AnimManager;
+use anim.timeline.anim_manager_new;
+use anim.tween.AnimProp;
+use anim.tween.AnimValue;
+use anim.tween.Tween;
+use anim.tween.anim_value_color;
+use anim.tween.anim_value_i32;
+use core.color.BLUE;
+use core.color.Color;
+use core.color.RED;
+use core.obj.GuiObj;
+use core.obj.gui_obj_default;
+use core.obj.gui_obj_register;
+use core.obj.gui_obj_reset_registry;
+use style.StyleProp;
+use std.testing.assert_eq_bool;
+use std.testing.assert_eq_i32;
+use std.testing.expect;
+
+export const TEST_ANIM_MODULE: i32 = 1;
+
+test "easing table covers phase4 variants" {
+    try assert_eq_i32(easing_variant_count(), 25);
+    try expect(apply_easing(0.0, EasingType.Linear) == 0.0);
+    try expect(apply_easing(1.0, EasingType.EaseOutBounce) >= 0.99);
+}
+
+test "tween updates object geometry and colors" {
+    gui_obj_reset_registry();
+
+    var obj: GuiObj = gui_obj_default();
+    obj.x = 0;
+    obj.y = 0;
+    obj.w = 20;
+    obj.h = 10;
+    obj.style.set_color(StyleProp.BgColor, Color{ r: 255, g: 0, b: 0, a: 255 });
+    _ = gui_obj_register(7, &obj);
+
+    var move: Tween = Tween.new(7, AnimProp.X, anim_value_i32(40), 100u32);
+    move.with_from_i32(0);
+    move.with_easing(EasingType.Linear);
+    move.start();
+    try assert_eq_bool(move.update(50u32), true);
+    try expect(obj.x >= 19 && obj.x <= 21);
+
+    var color_tween: Tween = Tween.new(7, AnimProp.BgColor, anim_value_color(Color{ r: 0, g: 0, b: 255, a: 255 }), 100u32);
+    color_tween.with_from_color(Color{ r: 255, g: 0, b: 0, a: 255 });
+    color_tween.with_easing(EasingType.Linear);
+    color_tween.start();
+    _ = color_tween.update(50u32);
+    const mid: Color = obj.style.get_color_or(StyleProp.BgColor, Color{ r: 255, g: 0, b: 0, a: 255 });
+    try expect(mid.r < 255 && mid.b > 0);
+
+    _ = move.update(50u32);
+    try assert_eq_i32(obj.x, 40);
+}
+
+test "anim manager sustains 32 concurrent tweens" {
+    gui_obj_reset_registry();
+
+    var objects: [GuiObj: 32] = [];
+    var manager: AnimManager = anim_manager_new();
+    var i: i32 = 0;
+    while i < 32 {
+        objects[i] = gui_obj_default();
+        objects[i].x = 0;
+        objects[i].y = i as i16;
+        objects[i].w = 8;
+        objects[i].h = 8;
+        _ = gui_obj_register(i, &objects[i]);
+
+        var tween: Tween = Tween.new(i, AnimProp.X, anim_value_i32(32 + i), 96u32);
+        tween.with_from_i32(0);
+        const slot: i32 = try manager.start_tween(&tween);
+        try expect(slot >= 0);
+        i = i + 1;
+    }
+
+    try assert_eq_bool(manager.is_animating(), true);
+    manager.update_all(96u32);
+    try assert_eq_bool(manager.is_animating(), false);
+
+    i = 0;
+    while i < 32 {
+        try assert_eq_i32(objects[i].x as i32, 32 + i);
+        i = i + 1;
+    }
+}

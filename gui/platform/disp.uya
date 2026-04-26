@@ -320,3 +320,99 @@ export fn framebuffer_clear(fb: &FrameBuffer, color: Color) void {
         y = y + 1;
     }
 }
+
+export enum DisplayDriverKind {
+    ILI9341,
+    ST7789,
+    ST7735,
+    SSD1963_480x272,
+    SSD1963_800x480,
+    RA8875_800x480,
+}
+
+export struct DisplayDriverProfile {
+    kind: DisplayDriverKind,
+    width: u16,
+    height: u16,
+    stride: u16,
+    format: PixelFormat,
+    bus_hz: u32,
+    name_ptr: &const byte,
+}
+
+export fn display_driver_profile(kind: DisplayDriverKind) DisplayDriverProfile {
+    if kind == DisplayDriverKind.ILI9341 {
+        return DisplayDriverProfile{
+            kind: kind,
+            width: 320,
+            height: 240,
+            stride: 640,
+            format: PixelFormat.RGB565,
+            bus_hz: 40000000u32,
+            name_ptr: "ILI9341",
+        };
+    }
+    if kind == DisplayDriverKind.ST7789 {
+        return DisplayDriverProfile{
+            kind: kind,
+            width: 240,
+            height: 320,
+            stride: 480,
+            format: PixelFormat.RGB565,
+            bus_hz: 40000000u32,
+            name_ptr: "ST7789",
+        };
+    }
+    if kind == DisplayDriverKind.ST7735 {
+        return DisplayDriverProfile{
+            kind: kind,
+            width: 128,
+            height: 160,
+            stride: 256,
+            format: PixelFormat.RGB565,
+            bus_hz: 27000000u32,
+            name_ptr: "ST7735",
+        };
+    }
+    if kind == DisplayDriverKind.SSD1963_800x480 {
+        return DisplayDriverProfile{
+            kind: kind,
+            width: 800,
+            height: 480,
+            stride: 1600,
+            format: PixelFormat.RGB565,
+            bus_hz: 9000000u32,
+            name_ptr: "SSD1963-800x480",
+        };
+    }
+    if kind == DisplayDriverKind.RA8875_800x480 {
+        return DisplayDriverProfile{
+            kind: kind,
+            width: 800,
+            height: 480,
+            stride: 1600,
+            format: PixelFormat.RGB565,
+            bus_hz: 12000000u32,
+            name_ptr: "RA8875-800x480",
+        };
+    }
+    return DisplayDriverProfile{
+        kind: kind,
+        width: 480,
+        height: 272,
+        stride: 960,
+        format: PixelFormat.RGB565,
+        bus_hz: 9000000u32,
+        name_ptr: "SSD1963-480x272",
+    };
+}
+
+export fn display_driver_required_bytes(kind: DisplayDriverKind) usize {
+    const profile: DisplayDriverProfile = display_driver_profile(kind);
+    return framebuffer_required_bytes(profile.width, profile.height, profile.format);
+}
+
+export fn framebuffer_new_for_driver(pixels: &byte, kind: DisplayDriverKind) FrameBuffer {
+    const profile: DisplayDriverProfile = display_driver_profile(kind);
+    return framebuffer_new(pixels, profile.width, profile.height, profile.stride, profile.format);
+}

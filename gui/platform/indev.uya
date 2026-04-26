@@ -1,38 +1,195 @@
 use core.event.Event;
 use core.event.EventOption;
+use core.event.EventQueue;
 use core.event.EventType;
+use core.event.GestureConfig;
+use core.event.GestureDetector;
 use core.event.InputDev;
-use core.event.event_option_none;
-use core.event.event_option_some;
-use core.event.event_key;
-use core.event.event_none;
 use core.event.event_point;
+use core.event.event_key;
+use core.event.event_option_none;
+use core.event.event_queue_new;
 use core.event.event_value;
+use core.event.gesture_config_default;
+use core.event.gesture_detector_with_config;
+use core.point.POINT_ZERO;
 use core.point.Point;
+
+export const TOUCH_FILTER_WINDOW: i32 = 5;
+export const MAX_INPUT_DEVICES: i32 = 8;
+
+fn indev_sort_i16(values: &i16, count: i32) void {
+    var i: i32 = 1;
+    while i < count {
+        const key: i16 = values[i];
+        var j: i32 = i - 1;
+        while j >= 0 && values[j] > key {
+            values[(j + 1) as usize] = values[j as usize];
+            j = j - 1;
+        }
+        values[(j + 1) as usize] = key;
+        i = i + 1;
+    }
+}
+
+fn indev_clamp_i32(v: i32, min_v: i32, max_v: i32) i32 {
+    if v < min_v {
+        return min_v;
+    }
+    if v > max_v {
+        return max_v;
+    }
+    return v;
+}
+
+fn indev_copy_queue_event(queue: &EventQueue, out_evt: &Event) bool {
+    const next: EventOption = queue.pop();
+    if !next.has_value {
+        return false;
+    }
+    out_evt[0] = next.value;
+    return true;
+}
+
+fn indev_identity_calibration() TouchCalibration {
+    return TouchCalibration{
+        raw_min_x: 0,
+        raw_max_x: 4095,
+        raw_min_y: 0,
+        raw_max_y: 4095,
+        screen_min_x: 0,
+        screen_max_x: 4095,
+        screen_min_y: 0,
+        screen_max_y: 4095,
+        sample_count: 0,
+    };
+}
 
 export interface IInputDev {
     fn read(self: &Self, out_evt: &Event) bool;
     fn dev_type(self: &Self) InputDev;
 }
 
+export struct TouchCalibSample {
+    raw: Point,
+    screen: Point,
+}
+
+export struct TouchCalibration {
+    raw_min_x: i16,
+    raw_max_x: i16,
+    raw_min_y: i16,
+    raw_max_y: i16,
+    screen_min_x: i16,
+    screen_max_x: i16,
+    screen_min_y: i16,
+    screen_max_y: i16,
+    sample_count: u8,
+
+    fn apply(self: &Self, raw: Point) Point {
+        const raw_span_x: i32 = self.raw_max_x as i32 - self.raw_min_x as i32;
+        const raw_span_y: i32 = self.raw_max_y as i32 - self.raw_min_y as i32;
+        if raw_span_x == 0 || raw_span_y == 0 {
+            return raw;
+        }
+
+        const screen_span_x: i32 = self.screen_max_x as i32 - self.screen_min_x as i32;
+        const screen_span_y: i32 = self.screen_max_y as i32 - self.screen_min_y as i32;
+        const mapped_x: i32 = self.screen_min_x as i32
+            + ((raw.x as i32 - self.raw_min_x as i32) * screen_span_x) / raw_span_x;
+        const mapped_y: i32 = self.screen_min_y as i32
+            + ((raw.y as i32 - self.raw_min_y as i32) * screen_span_y) / raw_span_y;
+        return Point{
+            x: indev_clamp_i32(mapped_x, self.screen_min_x as i32, self.screen_max_x as i32) as i16,
+            y: indev_clamp_i32(mapped_y, self.screen_min_y as i32, self.screen_max_y as i32) as i16,
+        };
+    }
+}
+
+export struct TouchMedianFilter {
+    enabled: bool,
+    count: u8,
+    write_idx: u8,
+    xs: [i16: 5],
+    ys: [i16: 5],
+
+    fn push(self: &Self, point: Point) Point {
+        if !self.enabled {
+            return point;
+        }
+        self.xs[self.write_idx as usize] = point.x;
+        self.ys[self.write_idx as usize] = point.y;
+        self.write_idx = ((self.write_idx as i32 + 1) % TOUCH_FILTER_WINDOW) as u8;
+        if self.count < TOUCH_FILTER_WINDOW as u8 {
+            self.count = self.count + 1;
+        }
+
+        var xs_local: [i16: 5] = [];
+        var ys_local: [i16: 5] = [];
+        var i: i32 = 0;
+        while i < self.count as i32 {
+            xs_local[i] = self.xs[i];
+            ys_local[i] = self.ys[i];
+            i = i + 1;
+        }
+        indev_sort_i16(&xs_local[0], self.count as i32);
+        indev_sort_i16(&ys_local[0], self.count as i32);
+        const mid: i32 = self.count as i32 / 2;
+        return Point{
+            x: xs_local[mid as usize],
+            y: ys_local[mid as usize],
+        };
+    }
+
+    fn reset(self: &Self) void {
+        self.count = 0;
+        self.write_idx = 0;
+    }
+}
+
 export struct TouchDriver : IInputDev {
-    pending: EventOption,
+    queue: EventQueue,
+    calibration: TouchCalibration,
+    filter: TouchMedianFilter,
+    gesture: GestureDetector,
 
     fn feed(self: &Self, target: i32, timestamp: u32, point: Point, is_down: bool) void {
-        var event_type: EventType = EventType.Release;
-        if is_down {
-            event_type = EventType.Press;
+        const filtered: Point = self.filter.push(point);
+        self.gesture.process_touch(filtered, is_down, timestamp, target, &self.queue);
+    }
+
+    fn feed_raw(self: &Self, target: i32, timestamp: u32, raw_point: Point, is_down: bool) void {
+        const mapped: Point = self.calibration.apply(raw_point);
+        self.feed(target, timestamp, mapped, is_down);
+    }
+
+    fn feed_pinch(self: &Self, target: i32, timestamp: u32, first_raw: Point, second_raw: Point, active: bool) void {
+        const first: Point = self.filter.push(self.calibration.apply(first_raw));
+        const second: Point = self.filter.push(self.calibration.apply(second_raw));
+        self.gesture.process_pinch(first, second, active, timestamp, target, &self.queue);
+    }
+
+    fn calibrate_4pt(self: &Self, samples: &TouchCalibSample, count: i32) void {
+        self.calibration = touch_calibration_from_samples(samples, count);
+    }
+
+    fn calibrate_9pt(self: &Self, samples: &TouchCalibSample, count: i32) void {
+        self.calibration = touch_calibration_from_samples(samples, count);
+    }
+
+    fn set_filter_enabled(self: &Self, enabled: bool) void {
+        self.filter.enabled = enabled;
+        if !enabled {
+            self.filter.reset();
         }
-        self.pending = event_option_some(event_point(event_type, InputDev.Touch, target, timestamp, point));
+    }
+
+    fn set_gesture_config(self: &Self, config: GestureConfig) void {
+        self.gesture = gesture_detector_with_config(config);
     }
 
     fn read(self: &Self, out_evt: &Event) bool {
-        if self.pending.has_value {
-            out_evt[0] = self.pending.value;
-            self.pending = event_option_none();
-            return true;
-        }
-        return false;
+        return indev_copy_queue_event(&self.queue, out_evt);
     }
 
     fn dev_type(self: &Self) InputDev {
@@ -42,23 +199,18 @@ export struct TouchDriver : IInputDev {
 }
 
 export struct MouseDriver : IInputDev {
-    pending: EventOption,
+    queue: EventQueue,
 
     fn feed(self: &Self, target: i32, timestamp: u32, point: Point, pressed: bool) void {
         var event_type: EventType = EventType.Release;
         if pressed {
             event_type = EventType.Press;
         }
-        self.pending = event_option_some(event_point(event_type, InputDev.Mouse, target, timestamp, point));
+        _ = self.queue.push(event_point(event_type, InputDev.Mouse, target, timestamp, point));
     }
 
     fn read(self: &Self, out_evt: &Event) bool {
-        if self.pending.has_value {
-            out_evt[0] = self.pending.value;
-            self.pending = event_option_none();
-            return true;
-        }
-        return false;
+        return indev_copy_queue_event(&self.queue, out_evt);
     }
 
     fn dev_type(self: &Self) InputDev {
@@ -68,23 +220,18 @@ export struct MouseDriver : IInputDev {
 }
 
 export struct KeyDriver : IInputDev {
-    pending: EventOption,
+    queue: EventQueue,
 
     fn feed(self: &Self, target: i32, timestamp: u32, key_code: u16, pressed: bool) void {
         var event_type: EventType = EventType.KeyUp;
         if pressed {
             event_type = EventType.KeyDown;
         }
-        self.pending = event_option_some(event_key(event_type, InputDev.Keypad, target, timestamp, key_code));
+        _ = self.queue.push(event_key(event_type, InputDev.Keypad, target, timestamp, key_code));
     }
 
     fn read(self: &Self, out_evt: &Event) bool {
-        if self.pending.has_value {
-            out_evt[0] = self.pending.value;
-            self.pending = event_option_none();
-            return true;
-        }
-        return false;
+        return indev_copy_queue_event(&self.queue, out_evt);
     }
 
     fn dev_type(self: &Self) InputDev {
@@ -94,19 +241,14 @@ export struct KeyDriver : IInputDev {
 }
 
 export struct EncoderDriver : IInputDev {
-    pending: EventOption,
+    queue: EventQueue,
 
     fn feed(self: &Self, target: i32, timestamp: u32, delta: i16) void {
-        self.pending = event_option_some(event_value(EventType.ValueChange, InputDev.Encoder, target, timestamp, delta as i32));
+        _ = self.queue.push(event_value(EventType.ValueChange, InputDev.Encoder, target, timestamp, delta as i32));
     }
 
     fn read(self: &Self, out_evt: &Event) bool {
-        if self.pending.has_value {
-            out_evt[0] = self.pending.value;
-            self.pending = event_option_none();
-            return true;
-        }
-        return false;
+        return indev_copy_queue_event(&self.queue, out_evt);
     }
 
     fn dev_type(self: &Self) InputDev {
@@ -115,18 +257,178 @@ export struct EncoderDriver : IInputDev {
     }
 }
 
+export struct InputDeviceSlot {
+    dev: &IInputDev,
+    kind: InputDev,
+    connected: bool,
+}
+
+export struct InputManager {
+    slots: [InputDeviceSlot: 8],
+    slot_count: u8,
+    hotplug_revision: u32,
+
+    fn attach(self: &Self, dev: &IInputDev) bool {
+        if dev == null {
+            return false;
+        }
+        if self.has_device(dev.dev_type()) {
+            self.detach(dev.dev_type());
+        }
+        if self.slot_count as i32 >= MAX_INPUT_DEVICES {
+            return false;
+        }
+        const slot: usize = (self.slot_count as! usize).value;
+        self.slots[slot] = InputDeviceSlot{
+            dev: dev,
+            kind: dev.dev_type(),
+            connected: true,
+        };
+        self.slot_count = self.slot_count + 1;
+        self.hotplug_revision = self.hotplug_revision + 1u32;
+        return true;
+    }
+
+    fn detach(self: &Self, kind: InputDev) bool {
+        var i: i32 = 0;
+        while i < self.slot_count as i32 {
+            if self.slots[i].connected && self.slots[i].kind == kind {
+                var j: i32 = i;
+                while j + 1 < self.slot_count as i32 {
+                    self.slots[j] = self.slots[j + 1];
+                    j = j + 1;
+                }
+                if self.slot_count > 0 {
+                    self.slot_count = self.slot_count - 1;
+                }
+                self.hotplug_revision = self.hotplug_revision + 1u32;
+                return true;
+            }
+            i = i + 1;
+        }
+        return false;
+    }
+
+    fn has_device(self: &Self, kind: InputDev) bool {
+        var i: i32 = 0;
+        while i < self.slot_count as i32 {
+            if self.slots[i].connected && self.slots[i].kind == kind {
+                return true;
+            }
+            i = i + 1;
+        }
+        return false;
+    }
+
+    fn device_count(self: &Self) i32 {
+        return self.slot_count as i32;
+    }
+
+    fn poll(self: &Self, out_evt: &Event) bool {
+        var i: i32 = 0;
+        while i < self.slot_count as i32 {
+            if self.slots[i].connected && self.slots[i].dev.read(out_evt) {
+                return true;
+            }
+            i = i + 1;
+        }
+        return false;
+    }
+}
+
+export fn touch_calibration_from_samples(samples: &TouchCalibSample, count: i32) TouchCalibration {
+    if samples == null || count <= 0 {
+        return indev_identity_calibration();
+    }
+
+    var calib: TouchCalibration = TouchCalibration{
+        raw_min_x: samples[0].raw.x,
+        raw_max_x: samples[0].raw.x,
+        raw_min_y: samples[0].raw.y,
+        raw_max_y: samples[0].raw.y,
+        screen_min_x: samples[0].screen.x,
+        screen_max_x: samples[0].screen.x,
+        screen_min_y: samples[0].screen.y,
+        screen_max_y: samples[0].screen.y,
+        sample_count: count as u8,
+    };
+
+    var i: i32 = 1;
+    while i < count {
+        if samples[i].raw.x < calib.raw_min_x {
+            calib.raw_min_x = samples[i].raw.x;
+        }
+        if samples[i].raw.x > calib.raw_max_x {
+            calib.raw_max_x = samples[i].raw.x;
+        }
+        if samples[i].raw.y < calib.raw_min_y {
+            calib.raw_min_y = samples[i].raw.y;
+        }
+        if samples[i].raw.y > calib.raw_max_y {
+            calib.raw_max_y = samples[i].raw.y;
+        }
+        if samples[i].screen.x < calib.screen_min_x {
+            calib.screen_min_x = samples[i].screen.x;
+        }
+        if samples[i].screen.x > calib.screen_max_x {
+            calib.screen_max_x = samples[i].screen.x;
+        }
+        if samples[i].screen.y < calib.screen_min_y {
+            calib.screen_min_y = samples[i].screen.y;
+        }
+        if samples[i].screen.y > calib.screen_max_y {
+            calib.screen_max_y = samples[i].screen.y;
+        }
+        i = i + 1;
+    }
+    return calib;
+}
+
 export fn touch_driver_new() TouchDriver {
-    return TouchDriver{ pending: event_option_none() };
+    return TouchDriver{
+        queue: event_queue_new(),
+        calibration: indev_identity_calibration(),
+        filter: TouchMedianFilter{
+            enabled: true,
+            count: 0,
+            write_idx: 0,
+            xs: [],
+            ys: [],
+        },
+        gesture: gesture_detector_with_config(gesture_config_default()),
+    };
 }
 
 export fn mouse_driver_new() MouseDriver {
-    return MouseDriver{ pending: event_option_none() };
+    return MouseDriver{ queue: event_queue_new() };
 }
 
 export fn key_driver_new() KeyDriver {
-    return KeyDriver{ pending: event_option_none() };
+    return KeyDriver{ queue: event_queue_new() };
 }
 
 export fn encoder_driver_new() EncoderDriver {
-    return EncoderDriver{ pending: event_option_none() };
+    return EncoderDriver{ queue: event_queue_new() };
+}
+
+export fn input_manager_new() InputManager {
+    return InputManager{
+        slots: [],
+        slot_count: 0,
+        hotplug_revision: 0u32,
+    };
+}
+
+export fn touch_calibration_identity() TouchCalibration {
+    return indev_identity_calibration();
+}
+
+export fn touch_filter_default() TouchMedianFilter {
+    return TouchMedianFilter{
+        enabled: true,
+        count: 0,
+        write_idx: 0,
+        xs: [],
+        ys: [],
+    };
 }
