@@ -560,8 +560,8 @@
     - [ ] STM32 DMA2D
     - [ ] ESP32-S3 LCD_CAM
     - [ ] NXP PXP
-    - [ ] 通用 OpenGL ES 2.0
-  - [ ] 自动检测与回退
+    - [x] 通用 OpenGL ES 2.0
+  - [x] 自动检测与回退
 
 #### Day 3-4: 零拷贝与 DMA
 - [x] `render/zerocopy.uya` - 零拷贝优化

@@ -24,11 +24,13 @@ use sim.config.SimBackendKind;
 use sim.config.SimConfig;
 use sim.config.sim_backend_name;
 use sim.config.sim_config_from_runtime;
+use sim.config.sim_gpu_name;
 
 fn sim_print_usage() void {
     _ = printf(
         "UyaGUI Linux Simulator\n"
         "  --backend sdl2|fb\n"
+        "  --gpu auto|software|gles2\n"
         "  --demo phase4|phase6\n"
         "  --width N --height N --scale N\n"
         "  --fullscreen | --windowed\n"
@@ -40,16 +42,17 @@ fn sim_print_usage() void {
 }
 
 fn run_simulator_sdl(cfg: SimConfig) i32 {
-    _ = printf("[sim] backend=%s\n" as *byte, sim_backend_name(cfg.backend));
+    _ = printf("[sim] backend=%s gpu=%s\n" as *byte, sim_backend_name(cfg.backend), sim_gpu_name(cfg.gpu));
  
     var display: SdlDisplay = sdl_display_new();
-    if !display.init(cfg.width, cfg.height, cfg.scale, cfg.title, cfg.fullscreen) {
+    if !display.init(cfg.width, cfg.height, cfg.scale, cfg.title, cfg.fullscreen, cfg.gpu as i32) {
         _ = printf("[sim] SDL2 init failed: %s\n" as *byte, sdl_display_last_error());
         return 2;
     }
     defer {
         display.shutdown();
     }
+    _ = printf("[sim] sdl gpu active=%s\n" as *byte, display.active_gpu_name());
 
     var input: SdlInputSystem = sdl_input_system_new();
     input.init();

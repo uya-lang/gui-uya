@@ -5,15 +5,26 @@ use render.ctx.RenderCtx;
 use render.ctx.render_ctx_new;
 use sim.app.SimApp;
 use sim.app.sim_app_new;
+use sim.common.sim_cstr_eq;
 use sim.common.SIM_KEY_F11;
 use sim.config.SimConfig;
+use sim.config.SimGpuKind;
 use sim.config.sim_config_default;
+use sim.config.sim_gpu_name;
 use sim.recorder.RecordedEvent;
 use sim.recorder.RecorderEventKind;
 use std.testing.assert_eq_bool;
 use std.testing.assert_eq_i32;
 
 export const TEST_SIM_APP_MODULE: i32 = 1;
+
+test "sim config defaults to auto gpu and exposes names" {
+    const cfg: SimConfig = sim_config_default();
+    try assert_eq_i32(cfg.gpu as i32, SimGpuKind.Auto as i32);
+    try assert_eq_bool(sim_cstr_eq(sim_gpu_name(SimGpuKind.Auto), "auto"), true);
+    try assert_eq_bool(sim_cstr_eq(sim_gpu_name(SimGpuKind.Software), "software"), true);
+    try assert_eq_bool(sim_cstr_eq(sim_gpu_name(SimGpuKind.Gles2), "gles2"), true);
+}
 
 test "sim app renders and reacts to playback-style input" {
     var app: SimApp = sim_app_new();
@@ -75,4 +86,3 @@ test "sim app renders and reacts to playback-style input" {
     try assert_eq_bool(ctx.stats.text_ops > 0u32, true);
     try assert_eq_bool(ctx.stats.image_ops > 0u32, true);
 }
-

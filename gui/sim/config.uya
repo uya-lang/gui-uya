@@ -22,8 +22,15 @@ export enum SimBackendKind {
     FrameBuffer,
 }
 
+export enum SimGpuKind {
+    Auto,
+    Software,
+    Gles2,
+}
+
 export struct SimConfig {
     backend: SimBackendKind,
+    gpu: SimGpuKind,
     demo: SimDemoKind,
     width: u16,
     height: u16,
@@ -57,9 +64,20 @@ export fn sim_backend_name(kind: SimBackendKind) &const byte {
     return "sdl2" as &const byte;
 }
 
+export fn sim_gpu_name(kind: SimGpuKind) &const byte {
+    if kind == SimGpuKind.Software {
+        return "software" as &const byte;
+    }
+    if kind == SimGpuKind.Gles2 {
+        return "gles2" as &const byte;
+    }
+    return "auto" as &const byte;
+}
+
 export fn sim_config_default() SimConfig {
     return SimConfig{
         backend: SimBackendKind.Sdl2,
+        gpu: SimGpuKind.Auto,
         demo: SimDemoKind.Phase4,
         width: 320,
         height: 240,
@@ -119,6 +137,15 @@ export fn sim_config_from_runtime() SimConfig {
                     cfg.backend = SimBackendKind.FrameBuffer;
                 } else {
                     cfg.backend = SimBackendKind.Sdl2;
+                }
+                i = i + 1;
+            } else if sim_cstr_eq(arg as &const byte, "--gpu") && next != null {
+                if sim_cstr_eq(next as &const byte, "software") {
+                    cfg.gpu = SimGpuKind.Software;
+                } else if sim_cstr_eq(next as &const byte, "gles2") || sim_cstr_eq(next as &const byte, "opengles2") {
+                    cfg.gpu = SimGpuKind.Gles2;
+                } else {
+                    cfg.gpu = SimGpuKind.Auto;
                 }
                 i = i + 1;
             } else if sim_cstr_eq(arg as &const byte, "--width") && next != null {

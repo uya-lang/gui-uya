@@ -34,6 +34,7 @@
 | Phase 4 I/O 回归 | [x] 已覆盖 | `gui/tests/test_phase4_io.uya` 已验证 tick / host fs / async read / cache |
 | Smoke / demo 入口 | [x] 已有离屏版本 | `gui/phase4_smoke.uya`、`gui/phase6_smoke.uya` 已可作为模拟器接入目标 |
 | SDL2 显示后端 | [x] 已实现 | 已新增 `gui/platform/sdl2/{disp_sdl.uya,sdl_host.c}` |
+| SDL2 OpenGL ES 2.0 后端 | [x] 已实现 | 已支持 `--gpu auto|software|gles2` 与无 context 自动回退 |
 | SDL2 输入后端 | [x] 已实现 | 已新增 `gui/platform/sdl2/indev_sdl.uya` |
 | Linux 模拟器主循环 | [x] 已实现 | 已新增 `gui/sim/{main,runner,app,config}.uya` 与 `gui/sim_main.uya` 构建入口 |
 | 截图/录制/Profiler 工具 | [x] 已实现 | 已新增 `gui/sim/{screenshot,recorder,profiler}.uya` |

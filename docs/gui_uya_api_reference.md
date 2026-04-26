@@ -328,9 +328,9 @@
 
 ## `gui/platform/sdl2/disp_sdl.uya`
 
-- L21: `export struct SdlDisplay {`
-- L127: `export fn sdl_display_new() SdlDisplay {`
-- L139: `export fn sdl_display_last_error() &const byte {`
+- L22: `export struct SdlDisplay {`
+- L139: `export fn sdl_display_new() SdlDisplay {`
+- L151: `export fn sdl_display_last_error() &const byte {`
 
 ## `gui/platform/sdl2/indev_sdl.uya`
 
@@ -496,11 +496,13 @@
 
 - L15: `export enum SimDemoKind {`
 - L20: `export enum SimBackendKind {`
-- L25: `export struct SimConfig {`
-- L46: `export fn sim_demo_name(kind: SimDemoKind) &const byte {`
-- L53: `export fn sim_backend_name(kind: SimBackendKind) &const byte {`
-- L60: `export fn sim_config_default() SimConfig {`
-- L83: `export fn sim_config_from_runtime() SimConfig {`
+- L25: `export enum SimGpuKind {`
+- L31: `export struct SimConfig {`
+- L53: `export fn sim_demo_name(kind: SimDemoKind) &const byte {`
+- L60: `export fn sim_backend_name(kind: SimBackendKind) &const byte {`
+- L67: `export fn sim_gpu_name(kind: SimGpuKind) &const byte {`
+- L77: `export fn sim_config_default() SimConfig {`
+- L101: `export fn sim_config_from_runtime() SimConfig {`
 
 ## `gui/sim/main.uya`
 
@@ -526,7 +528,7 @@
 
 ## `gui/sim/runner.uya`
 
-- L236: `export fn run_simulator() i32 {`
+- L239: `export fn run_simulator() i32 {`
 
 ## `gui/sim/screenshot.uya`
 
@@ -645,7 +647,7 @@
 
 ## `gui/tests/test_sim_app.uya`
 
-- L16: `export const TEST_SIM_APP_MODULE: i32 = 1;`
+- L19: `export const TEST_SIM_APP_MODULE: i32 = 1;`
 
 ## `gui/tests/test_sim_tools.uya`
 

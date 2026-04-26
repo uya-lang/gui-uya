@@ -13,11 +13,13 @@
 - 已有命令：`make sim-build`、`make sim-run`、`make sim-debug`、`make sim-fb-run`
 - 已有 headless 命令：`make sim-headless`
 - 已有 SDL2 后端：`gui/platform/sdl2/{disp_sdl.uya, indev_sdl.uya, sdl_host.c}`
+- 已有 SDL2 OpenGL ES 2.0 present 后端：支持 `--gpu auto|software|gles2`
 - 已有调试工具：`gui/sim/{screenshot,profiler,recorder}.uya`
 - 已有无 SDL2 单测：`gui/tests/test_sim_app.uya`、`gui/tests/test_sim_tools.uya`
 - 已有 CI smoke：`.github/workflows/gui-phase0.yml` 会安装 `libsdl2-dev`，并在 dummy video 下跑 `make sim-headless SIM_HEADLESS_ARGS="--max-frames 2 --screenshot build/sim/ci.bmp"`
 - 已有本地实机 smoke：
   - `./build/sim/gui_uya_sim --max-frames 5 --screenshot build/sim/manual.bmp`
+  - `./build/sim/gui_uya_sim --gpu gles2 --max-frames 5`
   - `make sim-run SIM_ARGS="--max-frames 3 --screenshot build/sim/makerun.bmp"`
 
 ## 0.1 构建与运行
@@ -32,6 +34,9 @@ make sim-build
 
 # 默认运行（phase4 场景）
 make sim-run
+
+# 强制使用 OpenGL ES 2.0 present 后端
+make sim-run SIM_ARGS="--gpu gles2 --max-frames 120"
 
 # 运行 phase6 并限定帧数，适合 CI / smoke
 make sim-run SIM_ARGS="--demo phase6 --max-frames 120"
@@ -56,6 +61,7 @@ make sim-fb-run
 ## 0.2 运行参数
 
 - `--demo phase4|phase6`
+- `--gpu auto|software|gles2`（默认 `auto`，`auto` 会在 GLES2 不可用时回退到 software）
 - `--width N --height N --scale N`（默认 `scale=3`）
 - `--fullscreen | --windowed`
 - `--root PATH`
@@ -72,6 +78,7 @@ make sim-fb-run
 - `make sim-headless`
 - 可覆盖参数：`SIM_HEADLESS_ARGS="--max-frames 5 --screenshot build/sim/custom.bmp"`
 - 实现方式：通过 `SDL_VIDEODRIVER=dummy` 复用 SDL2 主线，不额外分叉一套 headless runtime
+- 说明：`--gpu auto` 在 dummy video / 无 GLES2 context 的环境下会自动回退到 software；`--gpu gles2` 会严格要求成功创建 GLES2 context
 
 ### Framebuffer 专用入口
 
@@ -119,6 +126,7 @@ make sim-fb-run
 - 截图目前已支持 `PNG`、`BMP` 与原始 framebuffer dump（`.uyafb`）
 - Framebuffer 专用后端已具备首版显示链路，并已支持控制终端键盘热键与方向键，以及可选 `evdev` 指针/触摸/滚轮；更完整校准与多点手势仍未实现
 - 当前机器上 `/dev/fb0` 存在但普通用户无权限，`--backend fb` 会清晰返回 `Permission denied`
+- `SDL2 + --gpu auto` 在无 OpenGL ES 2.0 context 的环境下会自动回退到 software，并继续完成 headless smoke / 截图链路
 - 默认文本渲染已切到内置位图字体，不再显示统一占位方框
   - ASCII：`5x7`
   - 中文常用字：`U+4E00..U+9FFF` 的 `8x8` 内置点阵
@@ -168,14 +176,14 @@ make sim-fb-run
 | 鼠标输入 | ✅ | ✅ | ✅ |
 | 键盘输入 | ✅ | ✅ | ✅ |
 | 触摸屏模拟 | ✅ | ❌ | ❌ |
-| GPU 加速 | ✅ OpenGL | ❌ | ❌ |
+| GPU 加速 | ✅ OpenGL ES 2.0 / software 自动回退 | ❌ | ❌ |
 | 跨平台 | ✅ Linux/Mac/Win | ❌ Linux only | ❌ Linux only |
 | 依赖复杂度 | 中 | 低 | 低 |
 | **推荐度** | **★★★★★** | ★★★ | ★★ |
 
 ### 1.3 推荐方案
 
-**主方案: SDL2** — 功能完整、跨平台、支持 GPU 加速  
+**主方案: SDL2** — 功能完整、跨平台、支持 OpenGL ES 2.0 加速与 software 回退  
 **备选方案: Linux Framebuffer** — 零依赖、最接近嵌入式环境  
 **双模式: SDL2 + Framebuffer 切换** — 开发用 SDL2，验证用 FB
 

@@ -11,11 +11,12 @@ use platform.disp.framebuffer_required_bytes;
 extern fn malloc(size: usize) &void;
 extern fn free(ptr: &void) void;
 
-extern fn uya_gui_sim_sdl_display_open(width: i32, height: i32, scale: i32, fullscreen: i32, title: &const byte) &void;
+extern fn uya_gui_sim_sdl_display_open(width: i32, height: i32, scale: i32, fullscreen: i32, gpu_mode: i32, title: &const byte) &void;
 extern fn uya_gui_sim_sdl_display_close(handle: &void) void;
 extern fn uya_gui_sim_sdl_display_present(handle: &void, pixels: &const byte, pitch: i32, width: i32, height: i32, format_tag: i32) i32;
 extern fn uya_gui_sim_sdl_display_set_fullscreen(handle: &void, enabled: i32) i32;
 extern fn uya_gui_sim_sdl_display_set_title(handle: &void, title: &const byte) void;
+extern fn uya_gui_sim_sdl_display_gpu_name(handle: &void) &byte;
 extern fn uya_gui_sim_sdl_last_error() &byte;
 
 export struct SdlDisplay {
@@ -27,8 +28,8 @@ export struct SdlDisplay {
     fullscreen: bool,
     ctx: DisplayCtx,
 
-    fn init(self: &Self, width: u16, height: u16, scale: u8, title: &const byte, fullscreen: bool) bool {
-        self.host = uya_gui_sim_sdl_display_open(width as i32, height as i32, scale as i32, fullscreen as i32, title);
+    fn init(self: &Self, width: u16, height: u16, scale: u8, title: &const byte, fullscreen: bool, gpu_mode: i32) bool {
+        self.host = uya_gui_sim_sdl_display_open(width as i32, height as i32, scale as i32, fullscreen as i32, gpu_mode, title);
         if self.host == null {
             return false;
         }
@@ -121,6 +122,17 @@ export struct SdlDisplay {
             return;
         }
         uya_gui_sim_sdl_display_set_title(self.host, title);
+    }
+
+    fn active_gpu_name(self: &Self) &const byte {
+        if self.host == null {
+            return "unknown" as &const byte;
+        }
+        const name: &byte = uya_gui_sim_sdl_display_gpu_name(self.host);
+        if name == null {
+            return "unknown" as &const byte;
+        }
+        return name as &const byte;
     }
 }
 
