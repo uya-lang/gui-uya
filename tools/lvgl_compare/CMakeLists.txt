@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(lvgl_text_compare C)
+project(lvgl_compare C)
 
 include(FetchContent)
 find_package(SDL2 REQUIRED)
@@ -24,3 +24,9 @@ add_executable(lvgl_text_compare
 )
 
 target_link_libraries(lvgl_text_compare PRIVATE lvgl::lvgl SDL2::SDL2 m)
+
+add_executable(lvgl_dashboard_compare
+    dashboard.c
+)
+
+target_link_libraries(lvgl_dashboard_compare PRIVATE lvgl::lvgl SDL2::SDL2 m)

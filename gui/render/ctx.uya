@@ -636,15 +636,65 @@ export struct RenderCtx {
             return;
         }
 
-        var y: i32 = draw_rect.y as i32;
-        while y < draw_rect.y as i32 + draw_rect.h as i32 {
-            var x: i32 = draw_rect.x as i32;
-            while x < draw_rect.x as i32 + draw_rect.w as i32 {
-                const sd: f64 = signed_distance_round_rect(rect, rr, x as f64 + 0.5, y as f64 + 0.5);
-                self.draw_pixel_coverage(x, y, color, coverage_from_signed_distance(sd));
-                x = x + 1;
+        const rr_i: i32 = rr as i32;
+        const rect_x: i32 = rect.x as i32;
+        const rect_y: i32 = rect.y as i32;
+        const rect_w: i32 = rect.w as i32;
+        const rect_h: i32 = rect.h as i32;
+        const inner_w: u16 = ((rect_w - rr_i * 2) as! u16).value;
+        const inner_h: u16 = ((rect_h - rr_i * 2) as! u16).value;
+
+        if rect_w > rr_i * 2 {
+            _ = self.fill_rect_no_dirty(Rect{
+                x: (rect_x + rr_i) as i16,
+                y: rect.y,
+                w: inner_w,
+                h: rect.h,
+            }, color);
+        }
+        if rect_h > rr_i * 2 {
+            _ = self.fill_rect_no_dirty(Rect{
+                x: rect.x,
+                y: (rect_y + rr_i) as i16,
+                w: rr,
+                h: inner_h,
+            }, color);
+            _ = self.fill_rect_no_dirty(Rect{
+                x: (rect_x + rect_w - rr_i) as i16,
+                y: (rect_y + rr_i) as i16,
+                w: rr,
+                h: inner_h,
+            }, color);
+        }
+
+        var corner_y: i32 = 0;
+        while corner_y < rr_i {
+            var corner_x: i32 = 0;
+            while corner_x < rr_i {
+                const left_x: i32 = rect_x + corner_x;
+                const right_x: i32 = rect_x + rect_w - rr_i + corner_x;
+                const top_y: i32 = rect_y + corner_y;
+                const bottom_y: i32 = rect_y + rect_h - rr_i + corner_y;
+
+                if ctx_clip_contains_xy(&clip, left_x, top_y) {
+                    const sd_tl: f64 = signed_distance_round_rect(rect, rr, left_x as f64 + 0.5, top_y as f64 + 0.5);
+                    self.draw_pixel_coverage(left_x, top_y, color, coverage_from_signed_distance(sd_tl));
+                }
+                if ctx_clip_contains_xy(&clip, right_x, top_y) {
+                    const sd_tr: f64 = signed_distance_round_rect(rect, rr, right_x as f64 + 0.5, top_y as f64 + 0.5);
+                    self.draw_pixel_coverage(right_x, top_y, color, coverage_from_signed_distance(sd_tr));
+                }
+                if ctx_clip_contains_xy(&clip, left_x, bottom_y) {
+                    const sd_bl: f64 = signed_distance_round_rect(rect, rr, left_x as f64 + 0.5, bottom_y as f64 + 0.5);
+                    self.draw_pixel_coverage(left_x, bottom_y, color, coverage_from_signed_distance(sd_bl));
+                }
+                if ctx_clip_contains_xy(&clip, right_x, bottom_y) {
+                    const sd_br: f64 = signed_distance_round_rect(rect, rr, right_x as f64 + 0.5, bottom_y as f64 + 0.5);
+                    self.draw_pixel_coverage(right_x, bottom_y, color, coverage_from_signed_distance(sd_br));
+                }
+                corner_x = corner_x + 1;
             }
-            y = y + 1;
+            corner_y = corner_y + 1;
         }
         self.stats.rect_ops = self.stats.rect_ops + 1u32;
         self.dirty.add(draw_rect);

@@ -13,7 +13,10 @@ use core.point.POINT_ZERO;
 use core.point.Point;
 use core.rect.Rect;
 use examples.demo_clock.render_demo_clock;
-use examples.demo_dashboard.render_demo_dashboard_state;
+use examples.demo_dashboard.DashboardRetained;
+use examples.demo_dashboard.dashboard_retained_init;
+use examples.demo_dashboard.dashboard_retained_new;
+use examples.demo_dashboard.render_dashboard_retained_state;
 use examples.demo_game.render_demo_game_state;
 use examples.demo_music.render_demo_music_state;
 use examples.demo_perf.render_demo_perf;
@@ -24,6 +27,10 @@ use libc.snprintf;
 use platform.disp.FrameBuffer;
 use platform.disp.PixelFormat;
 use render.ctx.RenderCtx;
+use render.font.ttf_cache_hit_count;
+use render.font.ttf_cache_miss_count;
+use render.font.ttf_cache_reset;
+use render.font.ttf_font_native_backend_is_c;
 use render.img.ImageData;
 use render.img.empty_image;
 use render.img.image_data_new;
@@ -72,6 +79,8 @@ use widget.page.Page;
 use widget.panel.Panel;
 use widget.slider.Slider;
 use widget.switch.Switch;
+
+extern "libc" fn printf(fmt: *byte, ...) i32;
 
 const APP_ID_PAGE: i32 = 1;
 const APP_ID_LEFT_PANEL: i32 = 2;
@@ -165,6 +174,7 @@ export struct SimApp {
     settings_alerts: bool,
     settings_brightness: i32,
     dashboard_metric: i32,
+    dashboard_retained: DashboardRetained,
     game_score: i32,
     game_paused: bool,
     standalone_drag_target: i32,
@@ -253,6 +263,8 @@ SimApp {
         self.pending_fullscreen_toggle = false;
         self.last_chart_tick_ms = 0u32;
         self.standalone_anim_tick_ms = 0u32;
+        dashboard_retained_init(&self.dashboard_retained);
+        ttf_cache_reset();
         self.reset_standalone_demo_state(config.demo);
         self.phase6_result = -2;
         self.phase4_result = -2;
@@ -559,7 +571,7 @@ SimApp {
             return;
         }
         if self.config.demo == SimDemoKind.Dashboard {
-            render_demo_dashboard_state(ctx, origin_x, origin_y, self.dashboard_metric);
+            render_dashboard_retained_state(&self.dashboard_retained, ctx, origin_x, origin_y, self.dashboard_metric);
             return;
         }
         if self.config.demo == SimDemoKind.Game {
@@ -827,7 +839,11 @@ SimApp {
 
     fn render(self: &Self, ctx: &RenderCtx) void {
         if !sim_demo_is_phase(self.config.demo) {
-            ctx.clear(Color{ r: 226, g: 232, b: 240, a: 255 });
+            if self.config.demo == SimDemoKind.Dashboard {
+                ctx.clear(Color{ r: 15, g: 23, b: 42, a: 255 });
+            } else {
+                ctx.clear(Color{ r: 226, g: 232, b: 240, a: 255 });
+            }
             self.render_selected_demo(ctx);
             return;
         }
@@ -1032,6 +1048,8 @@ SimApp {
     fn record_frame(self: &Self, ctx: &RenderCtx, update_ms: u32, render_ms: u32, present_ms: u32, frame_ms: u32) void {
         if self.profiler.record(update_ms, render_ms, present_ms, frame_ms) {
             self.profiler.print_summary();
+            self.print_render_stats(ctx);
+            self.print_ttf_cache_summary();
         }
         self.refresh_metrics_label(
             frame_ms,
@@ -1048,6 +1066,44 @@ SimApp {
         }
         self.pending_screenshot = false;
         return true;
+    }
+
+    fn print_ttf_cache_summary(self: &Self) void {
+        _ = self;
+        const hits: u32 = ttf_cache_hit_count();
+        const misses: u32 = ttf_cache_miss_count();
+        const total: u32 = hits + misses;
+        var hit_rate: u32 = 0u32;
+        if total > 0u32 {
+            hit_rate = ((hits as u64 * 100u64) / total as u64) as u32;
+        }
+        var backend_name: *byte = "uya-stb\0" as *byte;
+        if ttf_font_native_backend_is_c() {
+            backend_name = "c-stb\0" as *byte;
+        }
+        _ = printf(
+            "[sim font] backend=%s ttf-cache hits=%u misses=%u hit-rate=%u%%\n" as *byte,
+            backend_name,
+            hits,
+            misses,
+            hit_rate
+        );
+    }
+
+    fn print_render_stats(self: &Self, ctx: &RenderCtx) void {
+        _ = self;
+        if ctx == null {
+            return;
+        }
+        _ = printf(
+            "[sim render] pixels=%u rects=%u lines=%u circles=%u text=%u images=%u\n" as *byte,
+            ctx.stats.pixel_ops,
+            ctx.stats.rect_ops,
+            ctx.stats.line_ops,
+            ctx.stats.circle_ops,
+            ctx.stats.text_ops,
+            ctx.stats.image_ops
+        );
     }
 
     fn consume_fullscreen_toggle(self: &Self) bool {
@@ -1102,6 +1158,7 @@ SimApp {
             _ = self.recorder.save(self.recorder_path()) catch {};
         }
         self.profiler.print_summary();
+        self.print_ttf_cache_summary();
     }
 }
 
@@ -1158,6 +1215,7 @@ export fn sim_app_new() SimApp {
         settings_alerts: false,
         settings_brightness: 68,
         dashboard_metric: 0,
+        dashboard_retained: dashboard_retained_new(),
         game_score: 128,
         game_paused: false,
         standalone_drag_target: STANDALONE_DRAG_NONE,

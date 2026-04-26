@@ -11,6 +11,10 @@
 #define LV_FONT_MONTSERRAT_14 1
 #define LV_FONT_DEFAULT &lv_font_montserrat_14
 
+#define LV_USE_LABEL 1
+#define LV_USE_BUTTON 1
+#define LV_USE_CHART 1
+
 #define LV_USE_SNAPSHOT 1
 #define LV_USE_TINY_TTF 1
 #define LV_TINY_TTF_CACHE_GLYPH_CNT 256

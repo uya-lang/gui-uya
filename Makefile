@@ -12,8 +12,13 @@ LVGL_COMPARE_DIR ?= tools/lvgl_compare
 LVGL_COMPARE_BUILD_DIR ?= $(BUILD_DIR)/lvgl_compare
 MODE ?= debug
 UYA_OPT := $(if $(filter release,$(MODE)),-O3,-O0)
+DASHBOARD_COMPARE_FRAMES ?= 120
+DASHBOARD_COMPARE_MODE ?= release
+LVGL_DASHBOARD_FRAMES ?= $(DASHBOARD_COMPARE_FRAMES)
+LVGL_DASHBOARD_REBUILD ?= 0
+FONT_BACKEND_COMPARE_FRAMES ?= 120
 
-.PHONY: build test bench bench-report docs-api ci clean hooks build-arm build-riscv build-esp32 sim-build sim-run sim-debug sim-headless text-compare lvgl-text-compare
+.PHONY: build test bench bench-report docs-api ci clean hooks build-arm build-riscv build-esp32 sim-build sim-run sim-debug sim-headless text-compare lvgl-text-compare lvgl-dashboard-compare dashboard-compare font-backend-compare
 
 SIM_BUILD_DIR ?= $(BUILD_DIR)/sim
 SIM_BIN ?= $(SIM_BUILD_DIR)/gui_uya_sim
@@ -49,6 +54,24 @@ lvgl-text-compare:
 	cmake -S $(LVGL_COMPARE_DIR) -B $(LVGL_COMPARE_BUILD_DIR)
 	cmake --build $(LVGL_COMPARE_BUILD_DIR) -j
 	SDL_VIDEODRIVER=dummy $(LVGL_COMPARE_BUILD_DIR)/lvgl_text_compare
+
+lvgl-dashboard-compare:
+	@mkdir -p $(LVGL_COMPARE_BUILD_DIR) $(BUILD_DIR)/dashboard_compare
+	cmake -S $(LVGL_COMPARE_DIR) -B $(LVGL_COMPARE_BUILD_DIR)
+	cmake --build $(LVGL_COMPARE_BUILD_DIR) -j --target lvgl_dashboard_compare
+	SDL_VIDEODRIVER=dummy LVGL_DASHBOARD_FRAMES=$(LVGL_DASHBOARD_FRAMES) LVGL_DASHBOARD_REBUILD=$(LVGL_DASHBOARD_REBUILD) $(LVGL_COMPARE_BUILD_DIR)/lvgl_dashboard_compare
+
+dashboard-compare:
+	@mkdir -p $(BUILD_DIR)/dashboard_compare
+	$(MAKE) sim-build MODE=$(DASHBOARD_COMPARE_MODE)
+	SDL_VIDEODRIVER=dummy $(SIM_BIN) --demo dashboard --max-frames $(DASHBOARD_COMPARE_FRAMES) --screenshot $(BUILD_DIR)/dashboard_compare/uya_dashboard.bmp
+	$(MAKE) lvgl-dashboard-compare LVGL_DASHBOARD_FRAMES=$(DASHBOARD_COMPARE_FRAMES) LVGL_DASHBOARD_REBUILD=$(LVGL_DASHBOARD_REBUILD)
+
+font-backend-compare:
+	@mkdir -p $(BUILD_DIR)/dashboard_compare
+	$(MAKE) sim-build MODE=release
+	SDL_VIDEODRIVER=dummy $(SIM_BIN) --demo dashboard --max-frames $(FONT_BACKEND_COMPARE_FRAMES) --screenshot $(BUILD_DIR)/dashboard_compare/uya_font_backend_uya.bmp
+	SDL_VIDEODRIVER=dummy UYA_FONT_BACKEND=c $(SIM_BIN) --demo dashboard --max-frames $(FONT_BACKEND_COMPARE_FRAMES) --screenshot $(BUILD_DIR)/dashboard_compare/uya_font_backend_c.bmp
 
 docs-api:
 	bash tools/gen_gui_api_docs.sh

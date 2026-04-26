@@ -18,6 +18,20 @@ use widget.lbl.Label;
 use widget.page.Page;
 use widget.panel.Panel;
 
+export struct DashboardRetained {
+    page: Page,
+    shell: Panel,
+    title: Label,
+    chart: Chart,
+    grid: GridView,
+    cpu: Button,
+    net: Button,
+    mem: Button,
+    manager: ThemeManager,
+    ready: bool,
+    metric: i32,
+}
+
 fn dashboard_metric_title(metric: i32) &const byte {
     if metric == 1 {
         return "Ops Dashboard / NET" as &const byte;
@@ -26,6 +40,115 @@ fn dashboard_metric_title(metric: i32) &const byte {
         return "Ops Dashboard / MEM" as &const byte;
     }
     return "Ops Dashboard / CPU" as &const byte;
+}
+
+fn dashboard_fill_chart(chart: &Chart, metric: i32) void {
+    _ = chart.clear();
+    if metric == 1 {
+        _ = chart.add_point(26);
+        _ = chart.add_point(32);
+        _ = chart.add_point(24);
+        _ = chart.add_point(38);
+        _ = chart.add_point(30);
+    } else if metric == 2 {
+        _ = chart.add_point(20);
+        _ = chart.add_point(22);
+        _ = chart.add_point(28);
+        _ = chart.add_point(31);
+        _ = chart.add_point(36);
+    } else {
+        _ = chart.add_point(18);
+        _ = chart.add_point(26);
+        _ = chart.add_point(21);
+        _ = chart.add_point(34);
+        _ = chart.add_point(29);
+    }
+}
+
+export fn dashboard_retained_new() DashboardRetained {
+    return DashboardRetained{
+        page: Page.new("Dashboard"),
+        shell: Panel.new(),
+        title: Label.new("Ops Dashboard / CPU"),
+        chart: Chart.new(),
+        grid: GridView.new(),
+        cpu: Button.filled("CPU"),
+        net: Button.outlined("NET"),
+        mem: Button.outlined("MEM"),
+        manager: theme_manager_new(),
+        ready: false,
+        metric: -1,
+    };
+}
+
+export fn dashboard_retained_init(dashboard: &DashboardRetained) void {
+    if dashboard == null || dashboard.ready {
+        return;
+    }
+
+    dashboard.page.widget.at(0, 0);
+    dashboard.page.widget.size(640, 480);
+    dashboard.page.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 15, g: 23, b: 42, a: 255 });
+
+    dashboard.shell.widget.at(24, 24);
+    dashboard.shell.widget.size(592, 432);
+
+    dashboard.title.widget.at(28, 24);
+    dashboard.title.widget.size(240, 32);
+    dashboard.title.widget.base.style.set_u32(StyleProp.FontSize, 28u32);
+
+    dashboard.chart.widget.at(28, 88);
+    dashboard.chart.widget.size(336, 248);
+    dashboard.chart.chart_type = ChartType.Area;
+
+    dashboard.grid.widget.at(392, 88);
+    dashboard.grid.widget.size(176, 232);
+    dashboard.grid.columns = 1;
+    dashboard.grid.item_size.w = 128;
+    dashboard.grid.item_size.h = 60;
+    dashboard.grid.row_gap = 6u8;
+    dashboard.grid.cell_padding = 2u8;
+    dashboard.grid.cell_content_mode = GridCellContentMode.Center;
+    dashboard.grid.content_align_x = GridContentAlign.Center;
+    dashboard.grid.content_align_y = GridContentAlign.Center;
+
+    dashboard.cpu.widget.base.style.set_u32(StyleProp.FontSize, 18u32);
+    dashboard.net.widget.base.style.set_u32(StyleProp.FontSize, 18u32);
+    dashboard.mem.widget.base.style.set_u32(StyleProp.FontSize, 18u32);
+    dashboard.grid.add_child(dashboard.cpu.obj());
+    dashboard.grid.add_child(dashboard.net.obj());
+    dashboard.grid.add_child(dashboard.mem.obj());
+
+    dashboard.manager.register_theme(material_dark_theme());
+
+    dashboard.page.add(dashboard.shell.obj());
+    dashboard.shell.add(dashboard.title.obj());
+    dashboard.shell.add(dashboard.chart.obj());
+    dashboard.shell.add(dashboard.grid.obj());
+    dashboard.manager.switch_theme(ThemeVariant.Dark);
+    dashboard.manager.apply_to_tree(dashboard.page.obj());
+    dashboard.page.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 0, g: 0, b: 0, a: 0 });
+    dashboard.page.widget.base.style.set_color(StyleProp.BorderColor, Color{ r: 0, g: 0, b: 0, a: 0 });
+    dashboard.page.widget.base.style.set_u32(StyleProp.BorderWidth, 0u32);
+    dashboard.page.widget.base.style.set_u32(StyleProp.Radius, 0u32);
+
+    dashboard_fill_chart(&dashboard.chart, 0);
+    dashboard.ready = true;
+    dashboard.metric = 0;
+}
+
+export fn render_dashboard_retained_state(dashboard: &DashboardRetained, ctx: &RenderCtx, origin_x: i16, origin_y: i16, metric: i32) void {
+    if dashboard == null {
+        return;
+    }
+    dashboard_retained_init(dashboard);
+    dashboard.page.widget.at(origin_x, origin_y);
+    if dashboard.metric != metric {
+        _ = dashboard.title.set_text(dashboard_metric_title(metric));
+        dashboard_fill_chart(&dashboard.chart, metric);
+        dashboard.metric = metric;
+    }
+    dashboard.page.render(ctx);
 }
 
 export fn render_demo_dashboard_state(ctx: &RenderCtx, origin_x: i16, origin_y: i16, metric: i32) void {
@@ -47,25 +170,7 @@ export fn render_demo_dashboard_state(ctx: &RenderCtx, origin_x: i16, origin_y: 
     chart.widget.at(28, 88);
     chart.widget.size(336, 248);
     chart.chart_type = ChartType.Area;
-    if metric == 1 {
-        _ = chart.add_point(26);
-        _ = chart.add_point(32);
-        _ = chart.add_point(24);
-        _ = chart.add_point(38);
-        _ = chart.add_point(30);
-    } else if metric == 2 {
-        _ = chart.add_point(20);
-        _ = chart.add_point(22);
-        _ = chart.add_point(28);
-        _ = chart.add_point(31);
-        _ = chart.add_point(36);
-    } else {
-        _ = chart.add_point(18);
-        _ = chart.add_point(26);
-        _ = chart.add_point(21);
-        _ = chart.add_point(34);
-        _ = chart.add_point(29);
-    }
+    dashboard_fill_chart(&chart, metric);
 
     var grid: GridView = GridView.new();
     grid.widget.at(392, 88);

@@ -99,7 +99,16 @@ make sim-run SIM_ARGS="--demo dashboard --scale 1"
 make sim-run SIM_ARGS="--demo music --scale 1"
 make sim-run SIM_ARGS="--max-frames 3 --screenshot build/sim/manual.bmp"
 make sim-headless SIM_HEADLESS_ARGS="--max-frames 5 --screenshot build/sim/headless.bmp"
+make lvgl-dashboard-compare
+make dashboard-compare
 ```
+
+`make dashboard-compare` 会生成 `build/dashboard_compare/uya_dashboard.bmp` 和
+`build/dashboard_compare/lvgl_dashboard.bmp`，并在终端输出两个 dashboard 场景的帧耗时。
+该目标默认用 `DASHBOARD_COMPARE_MODE=release` 构建 Uya，避免 debug 数字误导；可用
+`DASHBOARD_COMPARE_FRAMES=300` 调整采样帧数。Uya dashboard 现在默认使用 retained
+对象树，`dashboard-compare` 默认也让 LVGL 走 retained 刷新路径；如需查看 LVGL 每帧重建
+dashboard 的成本，可运行 `make dashboard-compare LVGL_DASHBOARD_REBUILD=1`。
 
 可用运行参数：
 

@@ -30,7 +30,7 @@ static int uya_stb_round_to_i32(float value)
     return (int)(value - 0.5f);
 }
 
-void * uya_stb_font_create(const unsigned char * data, size_t data_len, uint32_t sfnt_offset, uint16_t pixel_height)
+void * uya_c_stb_font_create(const unsigned char * data, size_t data_len, uint32_t sfnt_offset, uint16_t pixel_height)
 {
     UyaStbFontBackend * backend;
 
@@ -55,20 +55,20 @@ void * uya_stb_font_create(const unsigned char * data, size_t data_len, uint32_t
     return backend;
 }
 
-void uya_stb_font_destroy(void * handle)
+void uya_c_stb_font_destroy(void * handle)
 {
     if(handle != NULL) free(handle);
 }
 
-int uya_stb_font_find_glyph_index(void * handle, uint32_t codepoint)
+int uya_c_stb_font_find_glyph_index(void * handle, uint32_t codepoint)
 {
     UyaStbFontBackend * backend = (UyaStbFontBackend *)handle;
     if(backend == NULL) return 0;
     return stbtt_FindGlyphIndex(&backend->info, (int)codepoint);
 }
 
-int uya_stb_font_get_glyph_metrics(void * handle, uint32_t codepoint, uint16_t * glyph_id_out, int * advance_px_out,
-                                   int * x1_out, int * y1_out, int * x2_out, int * y2_out)
+int uya_c_stb_font_get_glyph_metrics(void * handle, uint32_t codepoint, uint16_t * glyph_id_out, int * advance_px_out,
+                                     int * x1_out, int * y1_out, int * x2_out, int * y2_out)
 {
     UyaStbFontBackend * backend = (UyaStbFontBackend *)handle;
     int glyph_id;
@@ -97,7 +97,7 @@ int uya_stb_font_get_glyph_metrics(void * handle, uint32_t codepoint, uint16_t *
     return 1;
 }
 
-int uya_stb_font_get_kerning_adjust(void * handle, uint32_t left_codepoint, uint32_t right_codepoint)
+int uya_c_stb_font_get_kerning_adjust(void * handle, uint32_t left_codepoint, uint32_t right_codepoint)
 {
     UyaStbFontBackend * backend = (UyaStbFontBackend *)handle;
     int left_glyph;
@@ -122,8 +122,8 @@ int uya_stb_font_get_kerning_adjust(void * handle, uint32_t left_codepoint, uint
     return kerned_px - base_px;
 }
 
-int uya_stb_font_render_glyph(void * handle, uint16_t glyph_id, unsigned char * dst, size_t dst_stride,
-                              int width, int height, int hint_enabled)
+int uya_c_stb_font_render_glyph(void * handle, uint16_t glyph_id, unsigned char * dst, size_t dst_stride,
+                                int width, int height, int hint_enabled)
 {
     UyaStbFontBackend * backend = (UyaStbFontBackend *)handle;
     int row;

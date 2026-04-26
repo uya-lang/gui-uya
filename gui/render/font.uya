@@ -1,9 +1,12 @@
+@c_import("font_stb_backend.c");
+
 use core.color.Color;
 use core.rect.Rect;
 use libc.MAP_PRIVATE;
 use libc.O_RDONLY;
 use libc.PROT_READ;
 use libc.Stat;
+use libc.getenv;
 use libc.sys_close;
 use libc.sys_fstat;
 use libc.sys_mmap;
@@ -13,6 +16,14 @@ use render.ctx.RenderCtx;
 
 extern fn malloc(size: usize) &void;
 extern fn free(ptr: &void) void;
+extern fn uya_c_stb_font_create(data: &const byte, data_len: usize, sfnt_offset: u32, pixel_height: u16) &void;
+extern fn uya_c_stb_font_destroy(handle: &void) void;
+extern fn uya_c_stb_font_find_glyph_index(handle: &void, codepoint: u32) i32;
+extern fn uya_c_stb_font_get_glyph_metrics(handle: &void, codepoint: u32, glyph_id_out: &u16, advance_px_out: &i32,
+                                           x1_out: &i32, y1_out: &i32, x2_out: &i32, y2_out: &i32) i32;
+extern fn uya_c_stb_font_get_kerning_adjust(handle: &void, left_codepoint: u32, right_codepoint: u32) i32;
+extern fn uya_c_stb_font_render_glyph(handle: &void, glyph_id: u16, dst: &byte, dst_stride: usize,
+                                      width: i32, height: i32, hint_enabled: i32) i32;
 
 const CJK_GLYPH_8X8_BYTES: &[const byte] = @embed("cjk_unifont_4e00_9fff_8x8.bin");
 const DEFAULT_UI_FONT_BYTES: &[const byte] = @embed("DejaVuSans.ttf");
@@ -1976,7 +1987,31 @@ fn ttf_scale_for_mapping_em(asset: &TtfFontAsset, pixel_height: u16) f64 {
     return pixel_height as f64 / asset.units_per_em as f64;
 }
 
-fn uya_stb_font_create(data: &const byte, data_len: usize, sfnt_offset: u32, pixel_height: u16) &void {
+fn font_backend_env_is_c(value: &byte) bool {
+    if value == null {
+        return false;
+    }
+    if (value[0] == 'c' as byte || value[0] == 'C' as byte) && value[1] == 0 {
+        return true;
+    }
+    if (value[0] == 's' as byte || value[0] == 'S' as byte)
+        && (value[1] == 't' as byte || value[1] == 'T' as byte)
+        && (value[2] == 'b' as byte || value[2] == 'B' as byte)
+        && value[3] == 0 {
+        return true;
+    }
+    return false;
+}
+
+fn font_backend_use_c_stb() bool {
+    return font_backend_env_is_c(getenv("UYA_FONT_BACKEND\0"));
+}
+
+export fn ttf_font_native_backend_is_c() bool {
+    return font_backend_use_c_stb();
+}
+
+fn uya_font_uya_stb_create(data: &const byte, data_len: usize, sfnt_offset: u32, pixel_height: u16) &void {
     if data == null || data_len < 12usize || pixel_height == 0u16 {
         return null;
     }
@@ -2003,13 +2038,13 @@ fn uya_stb_font_create(data: &const byte, data_len: usize, sfnt_offset: u32, pix
     return raw;
 }
 
-fn uya_stb_font_destroy(handle: &void) void {
+fn uya_font_uya_stb_destroy(handle: &void) void {
     if handle != null {
         free(handle);
     }
 }
 
-fn uya_stb_font_find_glyph_index(handle: &void, codepoint: u32) i32 {
+fn uya_font_uya_stb_find_glyph_index(handle: &void, codepoint: u32) i32 {
     const backend: &TtfFontAsset = uya_stb_backend(handle);
     if backend == null {
         return 0;
@@ -2017,8 +2052,8 @@ fn uya_stb_font_find_glyph_index(handle: &void, codepoint: u32) i32 {
     return ttf_map_codepoint(backend, codepoint) as i32;
 }
 
-fn uya_stb_font_get_glyph_metrics(handle: &void, codepoint: u32, glyph_id_out: &u16, advance_px_out: &i32,
-                                  x1_out: &i32, y1_out: &i32, x2_out: &i32, y2_out: &i32) i32 {
+fn uya_font_uya_stb_get_glyph_metrics(handle: &void, codepoint: u32, glyph_id_out: &u16, advance_px_out: &i32,
+                                      x1_out: &i32, y1_out: &i32, x2_out: &i32, y2_out: &i32) i32 {
     const backend: &TtfFontAsset = uya_stb_backend(handle);
     if backend == null {
         return 0;
@@ -2058,7 +2093,7 @@ fn uya_stb_font_get_glyph_metrics(handle: &void, codepoint: u32, glyph_id_out: &
     return 1;
 }
 
-fn uya_stb_font_get_kerning_adjust(handle: &void, left_codepoint: u32, right_codepoint: u32) i32 {
+fn uya_font_uya_stb_get_kerning_adjust(handle: &void, left_codepoint: u32, right_codepoint: u32) i32 {
     const backend: &TtfFontAsset = uya_stb_backend(handle);
     if backend == null {
         return 0;
@@ -2087,8 +2122,8 @@ fn uya_stb_font_get_kerning_adjust(handle: &void, left_codepoint: u32, right_cod
     return 0;
 }
 
-fn uya_stb_font_render_glyph(handle: &void, glyph_id: u16, dst: &byte, dst_stride: usize,
-                             width: i32, height: i32, hint_enabled: i32) i32 {
+fn uya_font_uya_stb_render_glyph(handle: &void, glyph_id: u16, dst: &byte, dst_stride: usize,
+                                 width: i32, height: i32, hint_enabled: i32) i32 {
     const backend: &TtfFontAsset = uya_stb_backend(handle);
     if backend == null || dst == null || dst_stride == 0usize {
         return 0;
@@ -2141,6 +2176,51 @@ fn uya_stb_font_render_glyph(handle: &void, glyph_id: u16, dst: &byte, dst_strid
     };
     ttf_rasterize_glyph_coverage(edge_count, &glyph, dst, dst_stride);
     return 1;
+}
+
+fn uya_stb_font_create(data: &const byte, data_len: usize, sfnt_offset: u32, pixel_height: u16) &void {
+    if font_backend_use_c_stb() {
+        return uya_c_stb_font_create(data, data_len, sfnt_offset, pixel_height);
+    }
+    return uya_font_uya_stb_create(data, data_len, sfnt_offset, pixel_height);
+}
+
+fn uya_stb_font_destroy(handle: &void) void {
+    if font_backend_use_c_stb() {
+        uya_c_stb_font_destroy(handle);
+        return;
+    }
+    uya_font_uya_stb_destroy(handle);
+}
+
+fn uya_stb_font_find_glyph_index(handle: &void, codepoint: u32) i32 {
+    if font_backend_use_c_stb() {
+        return uya_c_stb_font_find_glyph_index(handle, codepoint);
+    }
+    return uya_font_uya_stb_find_glyph_index(handle, codepoint);
+}
+
+fn uya_stb_font_get_glyph_metrics(handle: &void, codepoint: u32, glyph_id_out: &u16, advance_px_out: &i32,
+                                  x1_out: &i32, y1_out: &i32, x2_out: &i32, y2_out: &i32) i32 {
+    if font_backend_use_c_stb() {
+        return uya_c_stb_font_get_glyph_metrics(handle, codepoint, glyph_id_out, advance_px_out, x1_out, y1_out, x2_out, y2_out);
+    }
+    return uya_font_uya_stb_get_glyph_metrics(handle, codepoint, glyph_id_out, advance_px_out, x1_out, y1_out, x2_out, y2_out);
+}
+
+fn uya_stb_font_get_kerning_adjust(handle: &void, left_codepoint: u32, right_codepoint: u32) i32 {
+    if font_backend_use_c_stb() {
+        return uya_c_stb_font_get_kerning_adjust(handle, left_codepoint, right_codepoint);
+    }
+    return uya_font_uya_stb_get_kerning_adjust(handle, left_codepoint, right_codepoint);
+}
+
+fn uya_stb_font_render_glyph(handle: &void, glyph_id: u16, dst: &byte, dst_stride: usize,
+                             width: i32, height: i32, hint_enabled: i32) i32 {
+    if font_backend_use_c_stb() {
+        return uya_c_stb_font_render_glyph(handle, glyph_id, dst, dst_stride, width, height, hint_enabled);
+    }
+    return uya_font_uya_stb_render_glyph(handle, glyph_id, dst, dst_stride, width, height, hint_enabled);
 }
 
 fn ttf_select_sfnt_offset(data: &const byte, len: usize) u32 {
