@@ -111,33 +111,24 @@ static int uya_gui_sim_keycode(SDL_Keycode sym) {
     }
 }
 
-static void uya_gui_sim_scale_point(const UyaGuiSimDisplay *display, int in_x, int in_y, int16_t *out_x, int16_t *out_y) {
-    int window_w = display->width * (display->scale > 0 ? display->scale : 1);
-    int window_h = display->height * (display->scale > 0 ? display->scale : 1);
-    SDL_GetWindowSize(display->window, &window_w, &window_h);
-    if (window_w <= 0) {
-        window_w = display->width;
+static void uya_gui_sim_clamp_logical_point(const UyaGuiSimDisplay *display, int in_x, int in_y, int16_t *out_x, int16_t *out_y) {
+    /* SDL_RenderSetLogicalSize already maps window mouse events into logical coordinates. */
+    int logical_x = in_x;
+    int logical_y = in_y;
+    if (logical_x < 0) {
+        logical_x = 0;
     }
-    if (window_h <= 0) {
-        window_h = display->height;
+    if (logical_y < 0) {
+        logical_y = 0;
     }
-
-    int scaled_x = (in_x * display->width) / window_w;
-    int scaled_y = (in_y * display->height) / window_h;
-    if (scaled_x < 0) {
-        scaled_x = 0;
+    if (logical_x >= display->width) {
+        logical_x = display->width - 1;
     }
-    if (scaled_y < 0) {
-        scaled_y = 0;
+    if (logical_y >= display->height) {
+        logical_y = display->height - 1;
     }
-    if (scaled_x >= display->width) {
-        scaled_x = display->width - 1;
-    }
-    if (scaled_y >= display->height) {
-        scaled_y = display->height - 1;
-    }
-    *out_x = (int16_t)scaled_x;
-    *out_y = (int16_t)scaled_y;
+    *out_x = (int16_t)logical_x;
+    *out_y = (int16_t)logical_y;
 }
 
 void *uya_gui_sim_sdl_display_open(int32_t width, int32_t height, int32_t scale, int32_t fullscreen, const uint8_t *title) {
@@ -343,19 +334,19 @@ int32_t uya_gui_sim_sdl_poll_event(SdlHostEvent *out_evt) {
     switch (evt.type) {
         case SDL_MOUSEMOTION:
             out_evt->kind = SDL_EVT_POINTER_MOVE;
-            uya_gui_sim_scale_point(g_active_display, evt.motion.x, evt.motion.y, &out_evt->x, &out_evt->y);
+            uya_gui_sim_clamp_logical_point(g_active_display, evt.motion.x, evt.motion.y, &out_evt->x, &out_evt->y);
             return 1;
         case SDL_MOUSEBUTTONDOWN:
             if (evt.button.button == SDL_BUTTON_LEFT) {
                 out_evt->kind = SDL_EVT_POINTER_DOWN;
-                uya_gui_sim_scale_point(g_active_display, evt.button.x, evt.button.y, &out_evt->x, &out_evt->y);
+                uya_gui_sim_clamp_logical_point(g_active_display, evt.button.x, evt.button.y, &out_evt->x, &out_evt->y);
                 return 1;
             }
             return 0;
         case SDL_MOUSEBUTTONUP:
             if (evt.button.button == SDL_BUTTON_LEFT) {
                 out_evt->kind = SDL_EVT_POINTER_UP;
-                uya_gui_sim_scale_point(g_active_display, evt.button.x, evt.button.y, &out_evt->x, &out_evt->y);
+                uya_gui_sim_clamp_logical_point(g_active_display, evt.button.x, evt.button.y, &out_evt->x, &out_evt->y);
                 return 1;
             }
             return 0;
