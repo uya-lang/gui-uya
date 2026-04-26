@@ -12,6 +12,8 @@ use core.rect.Rect;
 use libc.strlen;
 use render.ctx.RenderCtx;
 use render.font.Font;
+use render.font.FontBitmapFormat;
+use render.font.FontRenderKind;
 use render.font.font_default;
 use render.font.text_width;
 use style.DEFAULT_STYLE;
@@ -34,13 +36,29 @@ export const WIDGET_TYPE_CHART: u32 = 0x100Au32;
 export const WIDGET_TYPE_CANVAS: u32 = 0x100Bu32;
 
 var _widget_default_font: Font = Font{
-    height: 8,
-    baseline: 7,
-    line_height: 10,
-    glyph_width: 6,
-    glyph_height: 8,
-    tracking: 1,
+    name: "",
+    height: 0u8,
+    baseline: 0u8,
+    line_height: 0u8,
+    glyph_width: 0u8,
+    glyph_height: 0u8,
+    tracking: 0,
+    glyph_count: 0u16,
+    glyphs: null,
+    glyph_lut: null,
+    kerning: null,
+    kerning_count: 0u16,
+    bitmap_data: null,
+    bitmap_stride: 0u16,
+    bitmap_format: FontBitmapFormat.None,
+    render_kind: FontRenderKind.BuiltinBitmap,
+    builtin_cjk: false,
 };
+
+fn widget_default_font_ref() &Font {
+    _widget_default_font = font_default();
+    return &_widget_default_font;
+}
 
 fn widget_copy_color(color: Color) Color {
     return Color{
@@ -343,7 +361,7 @@ export fn widget_bind_callbacks(base: &GuiObj, render_cb: &IGuiRenderCallback, i
 export fn widget_font(style: &Style) &Font {
     const font_ptr: &void = style.get_ptr_or(StyleProp.Font, null);
     if font_ptr == null {
-        return &_widget_default_font;
+        return widget_default_font_ref();
     }
     return font_ptr as &Font;
 }

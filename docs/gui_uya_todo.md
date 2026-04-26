@@ -29,7 +29,7 @@
 - 2026-04-26 已完成 Phase 6 第一轮仓库内闭环: 新增 `phase6_smoke`、`tests/test_phase6_examples.uya`、`examples/demo_{clock,music,settings,dashboard,game,perf}.uya`，补齐快速入门/API 索引/主题/性能/移植/架构文档，并新增 [gui_uya_phase6_report.md](./gui_uya_phase6_report.md)。
 - Phase 1 已落地模块仍完整可见: `style/*`、`theme`、`event_dispatch`、`platform/indev`、`layout/*`、`dirty_region`、`benchmarks/core_bench.uya`、`examples/phase1_smoke.uya`。
 - 以下 Phase 2 条目中的 `[x]` 表示“代码/接口已经写出或已有测试草案”，不代表当前工作区已经恢复绿色构建。
-- 仍未开始或明显不足: 真实字体/图片解码链路、硬件 GPU / DMA 后端实装、与 LVGL 的对比基准、目标板/显示实机兼容验证、正式发布动作。
+- 仍未开始或明显不足: 完整图片解码链路、硬件 GPU / DMA 后端实装、与 LVGL 的对比基准、目标板/显示实机兼容验证、正式发布动作。
 
 ---
 
@@ -501,16 +501,18 @@
     - [x] 偏移、步进、尺寸
   - [x] `struct Font`
     - [x] 字体元数据 (高度、基线、行高)
-    - [ ] 字形查找表
-    - [ ] 字距调整表
+    - [x] 字形查找表
+    - [x] 字距调整表
   - [x] 字体绘制
     - [x] `draw_text`
     - [x] `draw_text_aligned`
     - [x] `text_width`
-  - [ ] 位图字体 (BMFont 兼容)
-  - [ ] 矢量字体 (TTF 简化光栅化)
-  - [ ] 内置字体 (系统字体)
-- [ ] 将当前几何占位字形替换为真实字库渲染
+  - [x] 位图字体 (BMFont 兼容)
+  - [x] 矢量字体 (TTF 简化光栅化)
+  - [x] 内置字体 (系统字体)
+- [x] 将当前几何占位字形替换为真实字库渲染
+  - [x] 默认字体已支持 ASCII `5x7`、常用 CJK `8x8`、BMFont Alpha atlas 与简化矢量描边回退
+  - [x] 已补 `kerning`、BMFont 解析、系统字体变体与专项渲染回归
 
 #### Day 4: 抗锯齿与效果
 - [ ] Alpha 混合优化

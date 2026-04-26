@@ -1,7 +1,6 @@
 use core.color.Color;
 use core.color.BLACK;
 use core.color.RED;
-use core.color.WHITE;
 use core.rect.Rect;
 use platform.disp.FrameBuffer;
 use platform.disp.PixelFormat;
@@ -9,11 +8,16 @@ use platform.disp.framebuffer_new;
 use render.ctx.RenderCtx;
 use render.ctx.ctx_pixel;
 use render.ctx.render_ctx_new;
+use render.font.BitmapFontAsset;
 use render.font.Font;
+use render.font.bitmap_font_asset_new;
+use render.font.bitmap_font_load_bmfont;
 use render.font.TextAlign;
 use render.font.draw_text;
 use render.font.draw_text_aligned;
 use render.font.font_default;
+use render.font.font_system_compact;
+use render.font.font_system_vector;
 use render.font.text_width;
 use render.img.ImageData;
 use render.img.draw_image;
@@ -22,6 +26,7 @@ use render.img.draw_image_scaled;
 use render.img.image_data_new;
 use res.cache.ImageCache;
 use res.cache.image_cache_new;
+use libc.strlen;
 use std.testing.assert_eq_bool;
 use std.testing.assert_eq_i32;
 
@@ -108,4 +113,51 @@ test "font antialiases diagonal edges" {
     try assert_eq_bool(edge.r > 0u8, true);
     try assert_eq_bool(edge.r < 255u8, true);
     try assert_eq_bool(ctx_pixel(&ctx, 4, 0) == white_expect, true);
+}
+
+test "font applies builtin kerning and exposes compact system variant" {
+    const font: Font = font_default();
+    const compact: Font = font_system_compact();
+
+    try assert_eq_i32(text_width("AA", 2usize, &font) as i32, 13);
+    try assert_eq_i32(text_width("AV", 2usize, &font) as i32, 12);
+    try assert_eq_bool(text_width("AV", 2usize, &compact) < text_width("AV", 2usize, &font), true);
+}
+
+test "bmfont asset loads glyphs and draws atlas alpha" {
+    var atlas: [byte: 12] = [
+        0, 255,   255, 0,   255, 255,
+        255, 255, 255, 255, 0, 255,
+    ];
+    const desc: &const byte = "common lineHeight=2 base=2\nchar id=65 x=0 y=0 width=2 height=2 xoffset=0 yoffset=0 xadvance=3\nchar id=86 x=2 y=0 width=2 height=2 xoffset=0 yoffset=0 xadvance=3\nchar id=63 x=4 y=0 width=2 height=2 xoffset=0 yoffset=0 xadvance=3\nkerning first=65 second=86 amount=-1\n";
+
+    var asset: BitmapFontAsset = bitmap_font_asset_new();
+    try assert_eq_bool(bitmap_font_load_bmfont(&asset, desc, strlen(desc as *const byte), &atlas[0], 6u16), true);
+    try assert_eq_i32(text_width("AV", 2usize, &asset.font) as i32, 5);
+
+    var bytes: [byte: 256] = [];
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 8, 4, 32, PixelFormat.ARGB8888));
+    const white_expect0: Color = Color{ r: 255, g: 255, b: 255, a: 255 };
+    const white_expect1: Color = Color{ r: 255, g: 255, b: 255, a: 255 };
+    const white_expect2: Color = Color{ r: 255, g: 255, b: 255, a: 255 };
+    ctx.clear(Color{ r: 0, g: 0, b: 0, a: 255 });
+    draw_text(&ctx, 0, 0, "AV?", 3usize, &asset.font, Color{ r: 255, g: 255, b: 255, a: 255 });
+
+    try assert_eq_bool(ctx_pixel(&ctx, 1, 0) == white_expect0, true);
+    try assert_eq_bool(ctx_pixel(&ctx, 2, 0) == white_expect1, true);
+    try assert_eq_bool(ctx_pixel(&ctx, 6, 1) == white_expect2, true);
+}
+
+test "vector system font rasterizes strokes" {
+    const font: Font = font_system_vector();
+    var bytes: [byte: 1024] = [];
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 16, 16, 64, PixelFormat.ARGB8888));
+    const white_expect: Color = Color{ r: 255, g: 255, b: 255, a: 255 };
+
+    ctx.clear(Color{ r: 0, g: 0, b: 0, a: 255 });
+    draw_text(&ctx, 0, 0, "AV0", 3usize, &font, Color{ r: 255, g: 255, b: 255, a: 255 });
+
+    try assert_eq_bool(ctx.stats.text_ops > 0u32, true);
+    try assert_eq_bool(ctx.stats.line_ops > 0u32, true);
+    try assert_eq_bool(ctx_pixel(&ctx, 3, 0) == white_expect, true);
 }

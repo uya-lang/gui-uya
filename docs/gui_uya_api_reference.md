@@ -277,6 +277,32 @@
 - L410: `export fn display_driver_required_bytes(kind: DisplayDriverKind) usize {`
 - L415: `export fn framebuffer_new_for_driver(pixels: &byte, kind: DisplayDriverKind) FrameBuffer {`
 
+## `gui/platform/fb/disp_fb.uya`
+
+- L21: `export struct FbDisplay {`
+- L123: `export fn fb_display_new() FbDisplay {`
+- L133: `export fn fb_display_last_error() &const byte {`
+
+## `gui/platform/fb/indev_fb.uya`
+
+- L22: `export struct FbInputSystem {`
+- L96: `export fn fb_input_system_new() FbInputSystem {`
+- L111: `export fn fb_input_last_error() &const byte {`
+
+## `gui/platform/fb/indev_fb_common.uya`
+
+- L7: `export const FB_EVT_NONE: u8 = 0u8;`
+- L8: `export const FB_EVT_KEY_DOWN: u8 = 1u8;`
+- L9: `export const FB_EVT_HOVER_MOVE: u8 = 2u8;`
+- L10: `export const FB_EVT_TOUCH_DOWN: u8 = 3u8;`
+- L11: `export const FB_EVT_TOUCH_UP: u8 = 4u8;`
+- L12: `export const FB_EVT_TOUCH_MOVE: u8 = 5u8;`
+- L13: `export const FB_EVT_WHEEL: u8 = 6u8;`
+- L15: `export struct FbHostEvent {`
+- L24: `export fn fb_host_event_none() FbHostEvent {`
+- L35: `export fn fb_feed_host_event(`
+- L86: `export fn fb_hover_point_default() Point {`
+
 ## `gui/platform/indev.uya`
 
 - L18: `export const TOUCH_FILTER_WINDOW: i32 = 5;`
@@ -300,6 +326,18 @@
 - L422: `export fn touch_calibration_identity() TouchCalibration {`
 - L426: `export fn touch_filter_default() TouchMedianFilter {`
 
+## `gui/platform/sdl2/disp_sdl.uya`
+
+- L21: `export struct SdlDisplay {`
+- L127: `export fn sdl_display_new() SdlDisplay {`
+- L139: `export fn sdl_display_last_error() &const byte {`
+
+## `gui/platform/sdl2/indev_sdl.uya`
+
+- L26: `export struct SdlHostEvent {`
+- L35: `export struct SdlInputSystem {`
+- L141: `export fn sdl_input_system_new() SdlInputSystem {`
+
 ## `gui/platform/tick.uya`
 
 - L12: `export fn get_tick_ms() u32 {`
@@ -320,22 +358,36 @@
 - L39: `export enum RenderMode {`
 - L45: `export struct RenderStats {`
 - L56: `export struct RenderCtx {`
-- L301: `export fn empty_framebuffer_color() Color {`
-- L305: `export fn render_ctx_new(fb: FrameBuffer) RenderCtx {`
-- L327: `export fn empty_render_ctx() RenderCtx {`
-- L331: `export fn default_ctx() RenderCtx {`
-- L335: `export fn ctx_pixel(ctx: &RenderCtx, x: i16, y: i16) Color {`
+- L327: `export fn empty_framebuffer_color() Color {`
+- L331: `export fn render_ctx_new(fb: FrameBuffer) RenderCtx {`
+- L353: `export fn empty_render_ctx() RenderCtx {`
+- L357: `export fn default_ctx() RenderCtx {`
+- L361: `export fn ctx_pixel(ctx: &RenderCtx, x: i16, y: i16) Color {`
 
 ## `gui/render/font.uya`
 
-- L5: `export enum TextAlign {`
-- L11: `export struct Glyph {`
-- L21: `export struct Font {`
-- L50: `export fn font_default() Font {`
-- L61: `export fn glyph_for_char(font: &Font, code: u8) Glyph {`
-- L73: `export fn text_width(text: &const byte, len: usize, font: &Font) i16 {`
-- L81: `export fn draw_text(ctx: &RenderCtx, x: i16, y: i16, text: &const byte, len: usize, font: &Font, color: Color) void {`
-- L94: `export fn draw_text_aligned(ctx: &RenderCtx, rect: Rect, text: &const byte, len: usize, font: &Font, color: Color, align: TextAlign) void {`
+- L16: `export const BITMAP_FONT_GLYPH_CAPACITY: i32 = 128;`
+- L17: `export const BITMAP_FONT_UNICODE_CAPACITY: i32 = 64;`
+- L18: `export const BITMAP_FONT_KERNING_CAPACITY: i32 = 64;`
+- L20: `export enum TextAlign {`
+- L26: `export enum FontBitmapFormat {`
+- L32: `export enum FontRenderKind {`
+- L43: `export struct Glyph {`
+- L53: `export struct GlyphLookupEntry {`
+- L58: `export struct GlyphLookupTable {`
+- L65: `export struct KerningPair {`
+- L71: `export struct Font {`
+- L91: `export struct BitmapFontAsset {`
+- L985: `export fn bitmap_font_asset_new() BitmapFontAsset {`
+- L1005: `export fn bitmap_font_load_bmfont(asset: &BitmapFontAsset, desc: &const byte, len: usize, bitmap_data: &const byte, bitmap_stride: u16) bool {`
+- L1109: `export fn font_system_default() Font {`
+- L1132: `export fn font_system_compact() Font {`
+- L1155: `export fn font_system_vector() Font {`
+- L1178: `export fn font_default() Font {`
+- L1182: `export fn glyph_for_char(font: &Font, code: u8) Glyph {`
+- L1186: `export fn text_width(text: &const byte, len: usize, font: &Font) i16 {`
+- L1190: `export fn draw_text(ctx: &RenderCtx, x: i16, y: i16, text: &const byte, len: usize, font: &Font, color: Color) void {`
+- L1216: `export fn draw_text_aligned(ctx: &RenderCtx, rect: Rect, text: &const byte, len: usize, font: &Font, color: Color, align: TextAlign) void {`
 
 ## `gui/render/gpu.uya`
 
@@ -404,6 +456,77 @@
 - L156: `export fn pool_manager_new() PoolManager {`
 - L164: `export fn typed_pool<T>(pool: &MemPool) TypedPool<T> {`
 
+## `gui/sim/app.uya`
+
+- L91: `export struct SimApp {`
+- L751: `export fn sim_app_new() SimApp {`
+
+## `gui/sim/common.uya`
+
+- L1: `export const SIM_TEXT_CAPACITY: i32 = 160;`
+- L2: `export const SIM_PATH_CAPACITY: i32 = 256;`
+- L4: `export const SIM_KEY_ESCAPE: u16 = 27;`
+- L5: `export const SIM_KEY_ENTER: u16 = 13;`
+- L6: `export const SIM_KEY_SPACE: u16 = 32;`
+- L7: `export const SIM_KEY_LEFT: u16 = 1000;`
+- L8: `export const SIM_KEY_RIGHT: u16 = 1001;`
+- L9: `export const SIM_KEY_UP: u16 = 1002;`
+- L10: `export const SIM_KEY_DOWN: u16 = 1003;`
+- L11: `export const SIM_KEY_F11: u16 = 1011;`
+- L13: `export fn sim_cstr_empty(text: &const byte) bool {`
+- L17: `export fn sim_cstr_eq(a: &const byte, b: &const byte) bool {`
+- L33: `export fn sim_copy_cstr(dst: &byte, capacity: usize, src: &const byte) bool {`
+
+## `gui/sim/config.uya`
+
+- L15: `export enum SimDemoKind {`
+- L20: `export enum SimBackendKind {`
+- L25: `export struct SimConfig {`
+- L46: `export fn sim_demo_name(kind: SimDemoKind) &const byte {`
+- L53: `export fn sim_backend_name(kind: SimBackendKind) &const byte {`
+- L60: `export fn sim_config_default() SimConfig {`
+- L83: `export fn sim_config_from_runtime() SimConfig {`
+
+## `gui/sim/main.uya`
+
+- L3: `export fn sim_entry() i32 {`
+
+## `gui/sim/profiler.uya`
+
+- L3: `export struct ProfileStat {`
+- L30: `export struct ProfilerSnapshot {`
+- L39: `export struct SimProfiler {`
+- L88: `export fn profile_stat_new() ProfileStat {`
+- L98: `export fn sim_profiler_new(report_every_frames: u32) SimProfiler {`
+
+## `gui/sim/recorder.uya`
+
+- L10: `export const SIM_RECORDER_CAPACITY: i32 = 1024;`
+- L11: `export const SIM_RECORDER_MAGIC: u32 = 0x52435955u32;`
+- L12: `export const SIM_RECORDER_VERSION: u16 = 1u16;`
+- L17: `export enum RecorderEventKind {`
+- L27: `export struct RecordedEvent {`
+- L43: `export struct SimRecorder {`
+- L181: `export fn sim_recorder_new() SimRecorder {`
+
+## `gui/sim/runner.uya`
+
+- L236: `export fn run_simulator() i32 {`
+
+## `gui/sim/screenshot.uya`
+
+- L17: `export const SIM_SCREENSHOT_MAGIC: u32 = 0x46425559u32;`
+- L18: `export const SIM_SCREENSHOT_VERSION: u16 = 1u16;`
+- L51: `export fn screenshot_payload_bytes(fb: &FrameBuffer) usize {`
+- L229: `export fn screenshot_write_png(path: &const byte, fb: &FrameBuffer) !usize {`
+- L315: `export fn screenshot_write_bmp(path: &const byte, fb: &FrameBuffer) !usize {`
+- L380: `export fn screenshot_write_raw(path: &const byte, fb: &FrameBuffer) !usize {`
+- L412: `export fn screenshot_write(path: &const byte, fb: &FrameBuffer) !usize {`
+
+## `gui/sim_main.uya`
+
+- L5: `export fn main() i32 {`
+
 ## `gui/style/prop.uya`
 
 - L1: `export const MAX_STYLE_EXT_PROPS: i32 = 24;`
@@ -463,7 +586,7 @@
 
 ## `gui/tests/test_input_dev.uya`
 
-- L25: `export const TEST_INPUT_DEV_MODULE: i32 = 1;`
+- L34: `export const TEST_INPUT_DEV_MODULE: i32 = 1;`
 
 ## `gui/tests/test_layout.uya`
 
@@ -495,7 +618,7 @@
 
 ## `gui/tests/test_render_assets.uya`
 
-- L27: `export const TEST_RENDER_ASSETS_MODULE: i32 = 1;`
+- L34: `export const TEST_RENDER_ASSETS_MODULE: i32 = 1;`
 
 ## `gui/tests/test_render_ctx.uya`
 
@@ -504,6 +627,14 @@
 ## `gui/tests/test_render_pipeline.uya`
 
 - L23: `export const TEST_RENDER_PIPELINE_MODULE: i32 = 1;`
+
+## `gui/tests/test_sim_app.uya`
+
+- L16: `export const TEST_SIM_APP_MODULE: i32 = 1;`
+
+## `gui/tests/test_sim_tools.uya`
+
+- L22: `export const TEST_SIM_TOOLS_MODULE: i32 = 1;`
 
 ## `gui/tests/test_style.uya`
 
@@ -524,41 +655,41 @@
 
 ## `gui/widget/base.uya`
 
-- L22: `export const WIDGET_TYPE_WIDGET: u32 = 0x1000u32;`
-- L23: `export const WIDGET_TYPE_BUTTON: u32 = 0x1001u32;`
-- L24: `export const WIDGET_TYPE_LABEL: u32 = 0x1002u32;`
-- L25: `export const WIDGET_TYPE_IMAGE: u32 = 0x1003u32;`
-- L26: `export const WIDGET_TYPE_SLIDER: u32 = 0x1004u32;`
-- L27: `export const WIDGET_TYPE_SWITCH: u32 = 0x1005u32;`
-- L28: `export const WIDGET_TYPE_PAGE: u32 = 0x1006u32;`
-- L29: `export const WIDGET_TYPE_PANEL: u32 = 0x1007u32;`
-- L30: `export const WIDGET_TYPE_LIST: u32 = 0x1008u32;`
-- L31: `export const WIDGET_TYPE_GRID_VIEW: u32 = 0x1009u32;`
-- L32: `export const WIDGET_TYPE_CHART: u32 = 0x100Au32;`
-- L33: `export const WIDGET_TYPE_CANVAS: u32 = 0x100Bu32;`
-- L95: `export enum WidgetState {`
-- L104: `export enum WidgetOrientation {`
-- L109: `export interface IStyled {`
-- L115: `export interface IWidgetEventCallback {`
-- L119: `export interface IWidgetValueCallback {`
-- L123: `export interface IScrollable {`
-- L129: `export interface ISelectable {`
-- L136: `export struct AnimState {`
-- L141: `export struct WidgetEventSlot {`
-- L146: `export struct WidgetValueSlot {`
-- L151: `export struct Widget : IStyled {`
-- L310: `export fn widget_text_len(text: &const byte) usize {`
-- L317: `export fn widget_new(name_ptr: &const byte, type_tag: u32, clickable: bool, focusable: bool) Widget {`
-- L335: `export fn widget_bind_callbacks(base: &GuiObj, render_cb: &IGuiRenderCallback, input_cb: &IGuiInputCallback, user_data: &void) &GuiObj {`
-- L342: `export fn widget_font(style: &Style) &Font {`
-- L350: `export fn widget_text_color(style: &Style, state: WidgetState) Color {`
-- L365: `export fn widget_state_bg(style: &Style, state: WidgetState) Color {`
-- L382: `export fn widget_inner_rect(widget: &Widget) Rect {`
-- L404: `export fn widget_draw_surface(widget: &Widget, ctx: &RenderCtx) Rect {`
-- L431: `export fn widget_render_children(base: &GuiObj, ctx: &RenderCtx) void {`
-- L441: `export fn widget_measure_text(text: &const byte, font: &Font) i16 {`
-- L449: `export fn widget_clone_color(color: Color) Color {`
-- L453: `export fn widget_default_font() Font {`
+- L25: `export const WIDGET_TYPE_WIDGET: u32 = 0x1000u32;`
+- L26: `export const WIDGET_TYPE_BUTTON: u32 = 0x1001u32;`
+- L27: `export const WIDGET_TYPE_LABEL: u32 = 0x1002u32;`
+- L28: `export const WIDGET_TYPE_IMAGE: u32 = 0x1003u32;`
+- L29: `export const WIDGET_TYPE_SLIDER: u32 = 0x1004u32;`
+- L30: `export const WIDGET_TYPE_SWITCH: u32 = 0x1005u32;`
+- L31: `export const WIDGET_TYPE_PAGE: u32 = 0x1006u32;`
+- L32: `export const WIDGET_TYPE_PANEL: u32 = 0x1007u32;`
+- L33: `export const WIDGET_TYPE_LIST: u32 = 0x1008u32;`
+- L34: `export const WIDGET_TYPE_GRID_VIEW: u32 = 0x1009u32;`
+- L35: `export const WIDGET_TYPE_CHART: u32 = 0x100Au32;`
+- L36: `export const WIDGET_TYPE_CANVAS: u32 = 0x100Bu32;`
+- L114: `export enum WidgetState {`
+- L123: `export enum WidgetOrientation {`
+- L128: `export interface IStyled {`
+- L134: `export interface IWidgetEventCallback {`
+- L138: `export interface IWidgetValueCallback {`
+- L142: `export interface IScrollable {`
+- L148: `export interface ISelectable {`
+- L155: `export struct AnimState {`
+- L160: `export struct WidgetEventSlot {`
+- L165: `export struct WidgetValueSlot {`
+- L170: `export struct Widget : IStyled {`
+- L329: `export fn widget_text_len(text: &const byte) usize {`
+- L336: `export fn widget_new(name_ptr: &const byte, type_tag: u32, clickable: bool, focusable: bool) Widget {`
+- L354: `export fn widget_bind_callbacks(base: &GuiObj, render_cb: &IGuiRenderCallback, input_cb: &IGuiInputCallback, user_data: &void) &GuiObj {`
+- L361: `export fn widget_font(style: &Style) &Font {`
+- L369: `export fn widget_text_color(style: &Style, state: WidgetState) Color {`
+- L384: `export fn widget_state_bg(style: &Style, state: WidgetState) Color {`
+- L401: `export fn widget_inner_rect(widget: &Widget) Rect {`
+- L423: `export fn widget_draw_surface(widget: &Widget, ctx: &RenderCtx) Rect {`
+- L450: `export fn widget_render_children(base: &GuiObj, ctx: &RenderCtx) void {`
+- L460: `export fn widget_measure_text(text: &const byte, font: &Font) i16 {`
+- L468: `export fn widget_clone_color(color: Color) Color {`
+- L472: `export fn widget_default_font() Font {`
 
 ## `gui/widget/btn.uya`
 
