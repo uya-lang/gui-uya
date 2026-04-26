@@ -31,7 +31,7 @@
 
 ## `gui/benchmarks/core_bench.uya`
 
-- L306: `export fn run_core_bench() i32 {`
+- L331: `export fn run_core_bench() i32 {`
 
 ## `gui/core/bitmap.uya`
 
@@ -349,8 +349,8 @@
 - L11: `export const DRAW_BATCH_CAPACITY: i32 = 64;`
 - L13: `export enum DrawCmdKind {`
 - L20: `export struct DrawCmd {`
-- L106: `export struct DrawBatch {`
-- L215: `export fn draw_batch_new() DrawBatch {`
+- L237: `export struct DrawBatch {`
+- L399: `export fn draw_batch_new() DrawBatch {`
 
 ## `gui/render/ctx.uya`
 

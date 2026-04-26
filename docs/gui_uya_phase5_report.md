@@ -11,6 +11,7 @@
   - 增加 `coverage_percent()` 与 `merge_ops` 统计
 - `render/batch.uya`
   - 批处理优化从“同色矩形横向合并”扩展到“横向/纵向矩形合并 + 水平线段拼接”
+  - 新增安全重排与状态切换统计，按颜色/命令类型聚类非重叠不透明命令
 - `render/gpu.uya`
   - 新增 `gpu_execute_batch()`，按命令段批量下发到 GPU 接口，线段保留软件回退
 - `render/zerocopy.uya`
@@ -25,10 +26,10 @@
 ## 验证结果
 
 - `make test`
-  - 84 个 GUI/runtime 测试通过
-  - 7 个 render 测试通过
+  - 97 个 GUI/runtime 测试通过
+  - 22 个 render 测试通过
 - `make build`
-  - `build/phase4_smoke` 构建通过
+  - `build/phase6_smoke` 构建通过
 - `make bench`
   - O0 基准已通过
 - `make bench-report`
@@ -41,21 +42,23 @@
 | 项目 | 数值 |
 |------|------|
 | `DirtyRegion` 结构体大小 | `208 bytes` |
-| `DrawBatch` 结构体大小 | `4616 bytes` |
+| `DrawBatch` 结构体大小 | `4624 bytes` |
 | `RenderCtx` 结构体大小 | `408 bytes` |
 | `ZeroCopyCtx` 结构体大小 | `160 bytes` |
 | `ImageCache` 结构体大小 | `928 bytes` |
 | `FB 480x320 RGB565` | `307200 bytes` |
 | `FB 320x240 RGB565` | `153600 bytes` |
 | `obj_pool` | `1 ms` |
-| `allocator` | `0 ms` |
+| `allocator` | `1 ms` |
 | `layout+dirty` | `1 ms` |
 | `dispatcher` | `5 ms` |
-| `render prim` | `525 ms` |
-| `image+batch` | `125 ms` |
-| `gpu batch` | `51 ms` |
-| `cache churn` | `3 ms` |
-| `startup init` | `1019 us` |
+| `render prim` | `529 ms` |
+| `batch raw` | `67 ms` |
+| `batch opt` | `39 ms` |
+| `image+batch` | `126 ms` |
+| `gpu batch` | `50 ms` |
+| `cache churn` | `2 ms` |
+| `startup init` | `1074 us` |
 | `32 anims` | `13 ms` |
 
 ## 尚未完成

@@ -40,6 +40,66 @@ test "batch optimize merges adjacent rects and executes" {
     try assert_eq_i32(ctx.stats.batch_flushes as i32, 1);
 }
 
+test "batch optimize reorders safe commands and merges separated runs" {
+    var bytes: [byte: 1024] = [];
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 16, 16, 64, PixelFormat.ARGB8888));
+    var batch: DrawBatch = draw_batch_new();
+    const red_a: Color = Color{ r: 255, g: 0, b: 0, a: 255 };
+    const blue_a: Color = Color{ r: 0, g: 0, b: 255, a: 255 };
+    const red_b: Color = Color{ r: 255, g: 0, b: 0, a: 255 };
+    const white_a: Color = Color{ r: 255, g: 255, b: 255, a: 255 };
+    const green_a: Color = Color{ r: 0, g: 255, b: 0, a: 255 };
+    const white_b: Color = Color{ r: 255, g: 255, b: 255, a: 255 };
+    const red_expect: Color = Color{ r: 255, g: 0, b: 0, a: 255 };
+    const blue_expect: Color = Color{ r: 0, g: 0, b: 255, a: 255 };
+    const white_expect: Color = Color{ r: 255, g: 255, b: 255, a: 255 };
+    const green_expect: Color = Color{ r: 0, g: 255, b: 0, a: 255 };
+
+    batch.push_fill_rect(Rect{ x: 0, y: 0, w: 2, h: 2 }, red_a);
+    batch.push_fill_rect(Rect{ x: 10, y: 0, w: 2, h: 2 }, blue_a);
+    batch.push_fill_rect(Rect{ x: 2, y: 0, w: 2, h: 2 }, red_b);
+    batch.push_line(0, 6, 1, 6, white_a, 1);
+    batch.push_line(10, 6, 11, 6, green_a, 1);
+    batch.push_line(2, 6, 3, 6, white_b, 1);
+
+    const switches_before: i32 = batch.state_switch_count() as i32;
+    batch.optimize();
+    batch.execute(&ctx);
+
+    try assert_eq_i32(switches_before, 6);
+    try assert_eq_i32(batch.count as i32, 4);
+    try assert_eq_i32(batch.state_switches_after as i32, 4);
+    try assert_eq_bool(batch.state_switches_after < batch.state_switches_before, true);
+    try assert_eq_bool(batch.merge_count >= 2u16, true);
+    try assert_eq_bool(batch.reorder_count > 0u16, true);
+    try assert_eq_bool(ctx_pixel(&ctx, 3, 0) == red_expect, true);
+    try assert_eq_bool(ctx_pixel(&ctx, 10, 0) == blue_expect, true);
+    try assert_eq_bool(ctx_pixel(&ctx, 3, 6) == white_expect, true);
+    try assert_eq_bool(ctx_pixel(&ctx, 10, 6) == green_expect, true);
+}
+
+test "batch optimize keeps overlapping draws in original order" {
+    var bytes: [byte: 1024] = [];
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 16, 16, 64, PixelFormat.ARGB8888));
+    var batch: DrawBatch = draw_batch_new();
+    const blue_first: Color = Color{ r: 0, g: 0, b: 255, a: 255 };
+    const red_second: Color = Color{ r: 255, g: 0, b: 0, a: 255 };
+    const red_expect: Color = Color{ r: 255, g: 0, b: 0, a: 255 };
+
+    batch.push_fill_rect(Rect{ x: 2, y: 2, w: 4, h: 4 }, blue_first);
+    batch.push_fill_rect(Rect{ x: 0, y: 0, w: 8, h: 8 }, red_second);
+
+    const switches_before: i32 = batch.state_switch_count() as i32;
+    batch.optimize();
+    batch.execute(&ctx);
+
+    try assert_eq_i32(switches_before, 2);
+    try assert_eq_i32(batch.count as i32, 2);
+    try assert_eq_i32(batch.state_switches_after as i32, 2);
+    try assert_eq_i32(batch.reorder_count as i32, 0);
+    try assert_eq_bool(ctx_pixel(&ctx, 3, 3) == red_expect, true);
+}
+
 test "software gpu and zerocopy present rendered content" {
     var front_bytes: [byte: 256] = [];
     var back_bytes: [byte: 256] = [];

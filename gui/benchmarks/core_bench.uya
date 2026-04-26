@@ -165,6 +165,31 @@ fn bench_render_primitives() !u64 {
     return (try now_ms()) - start_ms;
 }
 
+fn bench_batch_compare_case(optimize: bool) !u64 {
+    var bytes: [byte: 4096] = [];
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 32, 32, 128, PixelFormat.ARGB8888));
+    var batch: DrawBatch = draw_batch_new();
+    var seg: i32 = 0;
+    while seg < 16 {
+        batch.push_fill_rect(Rect{ x: seg as i16, y: 0, w: 1, h: 2 }, Color{ r: 255, g: 0, b: 0, a: 255 });
+        batch.push_fill_rect(Rect{ x: seg as i16, y: 4, w: 1, h: 2 }, Color{ r: 0, g: 64, b: 255, a: 255 });
+        batch.push_line(seg as i16, 10, seg as i16, 10, Color{ r: 255, g: 255, b: 255, a: 255 }, 1);
+        batch.push_line(seg as i16, 12, seg as i16, 12, Color{ r: 0, g: 255, b: 0, a: 255 }, 1);
+        seg = seg + 1;
+    }
+    if optimize {
+        batch.optimize();
+    }
+
+    const start_ms: u64 = try now_ms();
+    var iter: i32 = 0;
+    while iter < BENCH_ITERATIONS {
+        batch.execute(&ctx);
+        iter = iter + 1;
+    }
+    return (try now_ms()) - start_ms;
+}
+
 fn bench_render_image_batch() !u64 {
     var bytes: [byte: 4096] = [];
     var img_bytes: [byte: 12] = [255, 0, 0,   0, 255, 0,   0, 0, 255,   255, 255, 255];
@@ -319,20 +344,26 @@ export fn run_core_bench() i32 {
     const render_ms: u64 = bench_render_primitives() catch {
         return 5;
     };
-    const image_batch_ms: u64 = bench_render_image_batch() catch {
+    const batch_raw_ms: u64 = bench_batch_compare_case(false) catch {
         return 6;
     };
-    const gpu_batch_ms: u64 = bench_gpu_batch() catch {
+    const batch_opt_ms: u64 = bench_batch_compare_case(true) catch {
         return 7;
     };
-    const cache_ms: u64 = bench_cache_pressure() catch {
+    const image_batch_ms: u64 = bench_render_image_batch() catch {
         return 8;
     };
-    const startup_us: u64 = bench_startup_init() catch {
+    const gpu_batch_ms: u64 = bench_gpu_batch() catch {
         return 9;
     };
-    const animation_ms: u64 = bench_animations() catch {
+    const cache_ms: u64 = bench_cache_pressure() catch {
         return 10;
+    };
+    const startup_us: u64 = bench_startup_init() catch {
+        return 11;
+    };
+    const animation_ms: u64 = bench_animations() catch {
+        return 12;
     };
 
     printf("Phase5 benchmark/report (%d iterations)\n" as *byte, BENCH_ITERATIONS);
@@ -348,6 +379,8 @@ export fn run_core_bench() i32 {
     printf("layout+dirty: %lu ms\n" as *byte, layout_ms);
     printf("dispatcher  : %lu ms\n" as *byte, dispatch_ms);
     printf("render prim : %lu ms\n" as *byte, render_ms);
+    printf("batch raw   : %lu ms\n" as *byte, batch_raw_ms);
+    printf("batch opt   : %lu ms\n" as *byte, batch_opt_ms);
     printf("image+batch : %lu ms\n" as *byte, image_batch_ms);
     printf("gpu batch   : %lu ms\n" as *byte, gpu_batch_ms);
     printf("cache churn : %lu ms\n" as *byte, cache_ms);
