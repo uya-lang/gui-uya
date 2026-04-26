@@ -10,6 +10,7 @@ use platform.indev.EncoderDriver;
 use platform.indev.encoder_driver_new;
 use platform.indev.input_manager_new;
 use platform.indev.key_driver_new;
+use platform.indev.touch_driver_configure_pointer_precision;
 use platform.indev.touch_driver_new;
 
 const SDL_EVT_NONE: u8 = 0;
@@ -47,6 +48,7 @@ export struct SdlInputSystem {
     pointer_down: bool,
 
     fn init(self: &Self) void {
+        touch_driver_configure_pointer_precision(&self.touch);
         var touch_iface: IInputDev = self.touch;
         var key_iface: IInputDev = self.key;
         var encoder_iface: IInputDev = self.encoder;

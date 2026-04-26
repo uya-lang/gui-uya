@@ -26,6 +26,7 @@ use platform.indev.input_manager_new;
 use platform.indev.key_driver_new;
 use platform.indev.mouse_driver_new;
 use platform.indev.touch_calibration_identity;
+use platform.indev.touch_driver_configure_pointer_precision;
 use platform.indev.touch_driver_new;
 use std.testing.assert_eq_bool;
 use std.testing.assert_eq_i32;
@@ -79,6 +80,34 @@ test "touch driver calibration and filter map raw samples" {
     try assert_eq_bool(driver.read(&evt), true);
     try expect(evt.point().x >= 39 && evt.point().x <= 41);
     try expect(evt.point().y >= 39 && evt.point().y <= 41);
+}
+
+test "desktop pointer profile avoids stale first hit after large jump" {
+    const first_x: i16 = 12;
+    const first_y: i16 = 18;
+    const second_x: i16 = 120;
+    const second_y: i16 = 18;
+    var evt: Event = event_none();
+
+    var filtered: TouchDriver = touch_driver_new();
+    filtered.feed(1, 1u32, Point{ x: first_x, y: first_y }, true);
+    try assert_eq_bool(filtered.read(&evt), true);
+    filtered.feed(1, 2u32, Point{ x: first_x, y: first_y }, false);
+    while filtered.read(&evt) {}
+    filtered.feed(2, 3u32, Point{ x: second_x, y: second_y }, true);
+    try assert_eq_bool(filtered.read(&evt), true);
+    try assert_eq_i32(evt.point().x as i32, first_x as i32);
+
+    var precise: TouchDriver = touch_driver_new();
+    touch_driver_configure_pointer_precision(&precise);
+    precise.feed(1, 1u32, Point{ x: first_x, y: first_y }, true);
+    try assert_eq_bool(precise.read(&evt), true);
+    precise.feed(1, 2u32, Point{ x: first_x, y: first_y }, false);
+    while precise.read(&evt) {}
+    precise.feed(2, 3u32, Point{ x: second_x, y: second_y }, true);
+    try assert_eq_bool(precise.read(&evt), true);
+    try assert_eq_i32(evt.point().x as i32, second_x as i32);
+    try assert_eq_i32(evt.target, 2);
 }
 
 test "input manager supports hotplug and edge gestures" {
