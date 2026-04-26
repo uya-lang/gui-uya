@@ -32,8 +32,89 @@ fn clamp_i32(v: i32, min: i32, max: i32) i32 {
     return v;
 }
 
+fn abs_f64(v: f64) f64 {
+    if v < 0.0 {
+        return 0.0 - v;
+    }
+    return v;
+}
+
+fn max_f64(a: f64, b: f64) f64 {
+    if a > b {
+        return a;
+    }
+    return b;
+}
+
+fn clamp_unit_f64(v: f64) f64 {
+    if v <= 0.0 {
+        return 0.0;
+    }
+    if v >= 1.0 {
+        return 1.0;
+    }
+    return v;
+}
+
+fn alpha_from_unit(v: f64) u8 {
+    const clamped: f64 = clamp_unit_f64(v);
+    return ((clamped * 255.0 + 0.5) as! u8).value;
+}
+
 fn degrees_to_radians(deg: i16) f64 {
     return (deg as f64) * 3.141592653589793 / 180.0;
+}
+
+fn smoothstep01(v: f64) f64 {
+    const t: f64 = clamp_unit_f64(v);
+    return t * t * (3.0 - 2.0 * t);
+}
+
+fn effective_round_radius(rect: Rect, radius: u8) u8 {
+    if rect.is_empty() || radius == 0u8 {
+        return 0u8;
+    }
+
+    var max_radius: i32 = rect.w as i32 / 2;
+    if rect.h as i32 / 2 < max_radius {
+        max_radius = rect.h as i32 / 2;
+    }
+    if max_radius <= 0 {
+        return 0u8;
+    }
+    if radius as i32 <= max_radius {
+        return radius;
+    }
+    return (max_radius as! u8).value;
+}
+
+fn signed_distance_round_rect(rect: Rect, radius: u8, px: f64, py: f64) f64 {
+    const rr: u8 = effective_round_radius(rect, radius);
+    const center_x: f64 = rect.x as f64 + rect.w as f64 * 0.5;
+    const center_y: f64 = rect.y as f64 + rect.h as f64 * 0.5;
+    const bound_x: f64 = rect.w as f64 * 0.5 - rr as f64;
+    const bound_y: f64 = rect.h as f64 * 0.5 - rr as f64;
+    const qx: f64 = abs_f64(px - center_x) - bound_x;
+    const qy: f64 = abs_f64(py - center_y) - bound_y;
+    const ox: f64 = max_f64(qx, 0.0);
+    const oy: f64 = max_f64(qy, 0.0);
+    var inner: f64 = max_f64(qx, qy);
+    if inner > 0.0 {
+        inner = 0.0;
+    }
+    return sqrt(ox * ox + oy * oy) + inner - rr as f64;
+}
+
+fn coverage_from_signed_distance(sd: f64) u8 {
+    return alpha_from_unit(0.5 - sd);
+}
+
+fn shadow_coverage_from_signed_distance(sd: f64, blur: u8) u8 {
+    if blur == 0u8 {
+        return coverage_from_signed_distance(sd);
+    }
+    const softness: f64 = blur as f64 + 0.5;
+    return alpha_from_unit(smoothstep01((softness - sd) / softness));
 }
 
 export enum RenderMode {
@@ -100,6 +181,18 @@ export struct RenderCtx {
         framebuffer_set_pixel(&self.fb, x as i32, y as i32, &color);
         self.stats.pixel_ops = self.stats.pixel_ops + 1u32;
         self.dirty.add(point_rect);
+    }
+
+    fn draw_pixel_coverage(self: &Self, x: i32, y: i32, color: Color, coverage: u8) void {
+        if coverage == 0u8 || color.a == 0u8 {
+            return;
+        }
+        const shaded: Color = color.modulate_alpha(coverage);
+        if shaded.a == 0u8 {
+            return;
+        }
+        framebuffer_set_pixel(&self.fb, x, y, &shaded);
+        self.stats.pixel_ops = self.stats.pixel_ops + 1u32;
     }
 
     fn fill_rect(self: &Self, rect: Rect, color: Color) void {
@@ -237,68 +330,196 @@ export struct RenderCtx {
     }
 
     fn fill_round_rect(self: &Self, rect: Rect, radius: u8, color: Color) void {
-        if radius == 0 {
+        if rect.is_empty() || color.a == 0u8 {
+            return;
+        }
+        if radius == 0u8 {
             self.fill_rect(rect, color);
             return;
         }
-        const r: i32 = radius as i32;
-        self.fill_rect(Rect{ x: rect.x + radius as i16, y: rect.y, w: rect.w - radius as u16 * 2, h: rect.h }, color);
-        self.fill_rect(Rect{ x: rect.x, y: rect.y + radius as i16, w: radius as u16, h: rect.h - radius as u16 * 2 }, color);
-        self.fill_rect(Rect{ x: rect.x + rect.w as i16 - radius as i16, y: rect.y + radius as i16, w: radius as u16, h: rect.h - radius as u16 * 2 }, color);
 
-        var y: i32 = 0;
-        while y < r {
-            var x: i32 = 0;
-            while x < r {
-                if (x - r + 1) * (x - r + 1) + (y - r + 1) * (y - r + 1) <= r * r {
-                    self.draw_pixel((rect.x as i32 + x) as i16, (rect.y as i32 + y) as i16, color);
-                    self.draw_pixel((rect.x as i32 + rect.w as i32 - 1 - x) as i16, (rect.y as i32 + y) as i16, color);
-                    self.draw_pixel((rect.x as i32 + x) as i16, (rect.y as i32 + rect.h as i32 - 1 - y) as i16, color);
-                    self.draw_pixel((rect.x as i32 + rect.w as i32 - 1 - x) as i16, (rect.y as i32 + rect.h as i32 - 1 - y) as i16, color);
+        const clip: Rect = self.current_clip();
+        const draw_rect: Rect = clip.intersect(rect);
+        if draw_rect.is_empty() {
+            return;
+        }
+        const rr: u8 = effective_round_radius(rect, radius);
+        if rr == 0u8 {
+            self.fill_rect(rect, color);
+            return;
+        }
+
+        var y: i32 = draw_rect.y as i32;
+        while y < draw_rect.y as i32 + draw_rect.h as i32 {
+            var x: i32 = draw_rect.x as i32;
+            while x < draw_rect.x as i32 + draw_rect.w as i32 {
+                const sd: f64 = signed_distance_round_rect(rect, rr, x as f64 + 0.5, y as f64 + 0.5);
+                self.draw_pixel_coverage(x, y, color, coverage_from_signed_distance(sd));
+                x = x + 1;
+            }
+            y = y + 1;
+        }
+        self.stats.rect_ops = self.stats.rect_ops + 1u32;
+        self.dirty.add(draw_rect);
+    }
+
+    fn fill_round_shadow(self: &Self, rect: Rect, radius: u8, blur: u8, color: Color) void {
+        if rect.is_empty() || color.a == 0u8 {
+            return;
+        }
+        if blur == 0u8 {
+            self.fill_round_rect(rect, radius, color);
+            return;
+        }
+
+        const shadow_bounds: Rect = rect.inflate(blur as i16, blur as i16);
+        const clip: Rect = self.current_clip();
+        const draw_rect: Rect = clip.intersect(shadow_bounds);
+        if draw_rect.is_empty() {
+            return;
+        }
+
+        var y: i32 = draw_rect.y as i32;
+        while y < draw_rect.y as i32 + draw_rect.h as i32 {
+            var x: i32 = draw_rect.x as i32;
+            while x < draw_rect.x as i32 + draw_rect.w as i32 {
+                const sd: f64 = signed_distance_round_rect(rect, radius, x as f64 + 0.5, y as f64 + 0.5);
+                self.draw_pixel_coverage(x, y, color, shadow_coverage_from_signed_distance(sd, blur));
+                x = x + 1;
+            }
+            y = y + 1;
+        }
+        self.stats.rect_ops = self.stats.rect_ops + 1u32;
+        self.dirty.add(draw_rect);
+    }
+
+    fn draw_round_rect(self: &Self, rect: Rect, radius: u8, color: Color, width: u8) void {
+        if rect.is_empty() || width == 0u8 || color.a == 0u8 {
+            return;
+        }
+        if radius == 0u8 {
+            self.draw_rect(rect, color, width);
+            return;
+        }
+        const outer_radius: u8 = effective_round_radius(rect, radius);
+        if width as i32 * 2 >= rect.w as i32 || width as i32 * 2 >= rect.h as i32 {
+            self.fill_round_rect(rect, outer_radius, color);
+            return;
+        }
+
+        const clip: Rect = self.current_clip();
+        const draw_rect: Rect = clip.intersect(rect);
+        if draw_rect.is_empty() {
+            return;
+        }
+
+        const inner_rect: Rect = Rect{
+            x: rect.x + width as i16,
+            y: rect.y + width as i16,
+            w: ((rect.w as i32) - (width as i32) * 2) as u16,
+            h: ((rect.h as i32) - (width as i32) * 2) as u16,
+        };
+        var inner_radius: u8 = 0u8;
+        if outer_radius > width {
+            inner_radius = outer_radius - width;
+        }
+
+        var y: i32 = draw_rect.y as i32;
+        while y < draw_rect.y as i32 + draw_rect.h as i32 {
+            var x: i32 = draw_rect.x as i32;
+            while x < draw_rect.x as i32 + draw_rect.w as i32 {
+                const px: f64 = x as f64 + 0.5;
+                const py: f64 = y as f64 + 0.5;
+                const outer_cov: u8 = coverage_from_signed_distance(signed_distance_round_rect(rect, outer_radius, px, py));
+                if outer_cov != 0u8 {
+                    const inner_cov: u8 = coverage_from_signed_distance(signed_distance_round_rect(inner_rect, inner_radius, px, py));
+                    if outer_cov > inner_cov {
+                        self.draw_pixel_coverage(x, y, color, outer_cov - inner_cov);
+                    }
                 }
                 x = x + 1;
             }
             y = y + 1;
         }
+        self.stats.rect_ops = self.stats.rect_ops + 1u32;
+        self.dirty.add(draw_rect);
     }
 
-    fn draw_round_rect(self: &Self, rect: Rect, radius: u8, color: Color, width: u8) void {
-        if radius == 0 {
-            self.draw_rect(rect, color, width);
+    fn fill_linear_gradient(self: &Self, rect: Rect, start: Color, end: Color, horizontal: bool) void {
+        if rect.is_empty() {
             return;
         }
-        self.draw_rect(Rect{ x: rect.x + radius as i16, y: rect.y, w: rect.w - radius as u16 * 2, h: rect.h }, color, width);
-        self.draw_rect(Rect{ x: rect.x, y: rect.y + radius as i16, w: rect.w, h: rect.h - radius as u16 * 2 }, color, width);
-        self.push_clip(Rect{ x: rect.x, y: rect.y, w: radius as u16 + 1u16, h: radius as u16 + 1u16 });
-        self.draw_circle((rect.x as i32 + radius as i32) as i16, (rect.y as i32 + radius as i32) as i16, radius as i16, color);
-        self.pop_clip();
+        const clip: Rect = self.current_clip();
+        const draw_rect: Rect = clip.intersect(rect);
+        if draw_rect.is_empty() {
+            return;
+        }
 
-        self.push_clip(Rect{
-            x: rect.x + rect.w as i16 - radius as i16 - 1,
-            y: rect.y,
-            w: radius as u16 + 1u16,
-            h: radius as u16 + 1u16,
-        });
-        self.draw_circle((rect.x as i32 + rect.w as i32 - radius as i32 - 1) as i16, (rect.y as i32 + radius as i32) as i16, radius as i16, color);
-        self.pop_clip();
+        var span: i32 = rect.h as i32 - 1;
+        if horizontal {
+            span = rect.w as i32 - 1;
+        }
+        if span <= 0 {
+            self.fill_rect(rect, start);
+            return;
+        }
 
-        self.push_clip(Rect{
-            x: rect.x,
-            y: rect.y + rect.h as i16 - radius as i16 - 1,
-            w: radius as u16 + 1u16,
-            h: radius as u16 + 1u16,
-        });
-        self.draw_circle((rect.x as i32 + radius as i32) as i16, (rect.y as i32 + rect.h as i32 - radius as i32 - 1) as i16, radius as i16, color);
-        self.pop_clip();
+        var y: i32 = draw_rect.y as i32;
+        while y < draw_rect.y as i32 + draw_rect.h as i32 {
+            var x: i32 = draw_rect.x as i32;
+            while x < draw_rect.x as i32 + draw_rect.w as i32 {
+                var offset: i32 = y - rect.y as i32;
+                if horizontal {
+                    offset = x - rect.x as i32;
+                }
+                const color: Color = start.lerp(end, offset as f64 / span as f64);
+                framebuffer_set_pixel(&self.fb, x, y, &color);
+                self.stats.pixel_ops = self.stats.pixel_ops + 1u32;
+                x = x + 1;
+            }
+            y = y + 1;
+        }
+        self.stats.rect_ops = self.stats.rect_ops + 1u32;
+        self.dirty.add(draw_rect);
+    }
 
-        self.push_clip(Rect{
-            x: rect.x + rect.w as i16 - radius as i16 - 1,
-            y: rect.y + rect.h as i16 - radius as i16 - 1,
-            w: radius as u16 + 1u16,
-            h: radius as u16 + 1u16,
-        });
-        self.draw_circle((rect.x as i32 + rect.w as i32 - radius as i32 - 1) as i16, (rect.y as i32 + rect.h as i32 - radius as i32 - 1) as i16, radius as i16, color);
-        self.pop_clip();
+    fn fill_radial_gradient(self: &Self, rect: Rect, inner: Color, outer: Color) void {
+        if rect.is_empty() {
+            return;
+        }
+        const clip: Rect = self.current_clip();
+        const draw_rect: Rect = clip.intersect(rect);
+        if draw_rect.is_empty() {
+            return;
+        }
+
+        const center_x: f64 = rect.x as f64 + rect.w as f64 * 0.5;
+        const center_y: f64 = rect.y as f64 + rect.h as f64 * 0.5;
+        var radius: f64 = rect.w as f64 * 0.5;
+        if rect.h as f64 * 0.5 < radius {
+            radius = rect.h as f64 * 0.5;
+        }
+        if radius <= 0.0 {
+            self.fill_rect(rect, inner);
+            return;
+        }
+
+        var y: i32 = draw_rect.y as i32;
+        while y < draw_rect.y as i32 + draw_rect.h as i32 {
+            var x: i32 = draw_rect.x as i32;
+            while x < draw_rect.x as i32 + draw_rect.w as i32 {
+                const dx: f64 = x as f64 + 0.5 - center_x;
+                const dy: f64 = y as f64 + 0.5 - center_y;
+                const dist: f64 = sqrt(dx * dx + dy * dy);
+                const color: Color = inner.lerp(outer, dist / radius);
+                framebuffer_set_pixel(&self.fb, x, y, &color);
+                self.stats.pixel_ops = self.stats.pixel_ops + 1u32;
+                x = x + 1;
+            }
+            y = y + 1;
+        }
+        self.stats.rect_ops = self.stats.rect_ops + 1u32;
+        self.dirty.add(draw_rect);
     }
 
     fn draw_arc(self: &Self, cx: i16, cy: i16, r: i16, start_deg: i16, end_deg: i16, width: u8, color: Color) void {

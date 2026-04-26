@@ -432,9 +432,10 @@ export fn widget_draw_surface(widget: &Widget, ctx: &RenderCtx) Rect {
     const border_width: u8 = (style.get_u32_or(StyleProp.BorderWidth, 0u32) as! u8).value;
     const shadow_x: i16 = (style.get_i32_or(StyleProp.ShadowOffsetX, 0) as! i16).value;
     const shadow_y: i16 = (style.get_i32_or(StyleProp.ShadowOffsetY, 0) as! i16).value;
+    const shadow_blur: u8 = (style.get_u32_or(StyleProp.ShadowBlur, 0u32) as! u8).value;
 
-    if shadow_color.a > 0 && (shadow_x != 0 || shadow_y != 0) {
-        ctx.fill_round_rect(area.offset(shadow_x, shadow_y), radius, shadow_color);
+    if shadow_color.a > 0 && (shadow_x != 0 || shadow_y != 0 || shadow_blur > 0u8) {
+        ctx.fill_round_shadow(area.offset(shadow_x, shadow_y), radius, shadow_blur, shadow_color);
     }
 
     if bg.a > 0 {

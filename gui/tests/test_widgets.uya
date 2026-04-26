@@ -244,3 +244,28 @@ test "page navigator supports push pop transitions and edge swipe" {
     nav.update(180u32);
     try assert_eq_bool(nav.top() == page_a.obj(), true);
 }
+
+test "widget surface applies blurred style shadows" {
+    var bytes: [byte: 8192] = [];
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 32, 24, 128, PixelFormat.ARGB8888));
+    var panel: Panel = Panel.new();
+    const black_clear: Color = Color{ r: 0, g: 0, b: 0, a: 255 };
+    const black_expect: Color = Color{ r: 0, g: 0, b: 0, a: 255 };
+
+    ctx.clear(black_clear);
+    panel.widget.at(4, 4);
+    panel.widget.size(12, 12);
+    panel.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 32, g: 48, b: 72, a: 255 });
+    panel.widget.base.style.set_u32(StyleProp.Radius, 4u32);
+    panel.widget.base.style.set_i32(StyleProp.ShadowOffsetX, 3);
+    panel.widget.base.style.set_i32(StyleProp.ShadowOffsetY, 1);
+    panel.widget.base.style.set_i32(StyleProp.ShadowBlur, 3);
+    panel.widget.base.style.set_color(StyleProp.ShadowColor, Color{ r: 255, g: 255, b: 255, a: 160 });
+
+    panel.render(&ctx);
+
+    const shadow: Color = ctx_pixel(&ctx, 19, 10);
+    try assert_eq_bool(shadow.r > 0u8, true);
+    try assert_eq_bool(shadow.r < 255u8, true);
+    try assert_eq_bool(ctx_pixel(&ctx, 1, 1) == black_expect, true);
+}

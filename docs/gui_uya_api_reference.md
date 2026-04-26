@@ -25,13 +25,13 @@
 - L440: `export fn anim_value_f32(value: f32) AnimValue {`
 - L444: `export fn anim_value_color(value: Color) AnimValue {`
 
-## `gui/benchmarks/core_bench.uya`
-
-- L306: `export fn run_core_bench() i32 {`
-
 ## `gui/bench_suite.uya`
 
 - L5: `export fn main() i32 {`
+
+## `gui/benchmarks/core_bench.uya`
+
+- L306: `export fn run_core_bench() i32 {`
 
 ## `gui/core/bitmap.uya`
 
@@ -41,14 +41,14 @@
 
 ## `gui/core/color.uya`
 
-- L21: `export struct Color {`
-- L28: `export const BLACK: Color = Color{ r: 0, g: 0, b: 0, a: 255 };`
-- L29: `export const WHITE: Color = Color{ r: 255, g: 255, b: 255, a: 255 };`
-- L30: `export const RED: Color = Color{ r: 255, g: 0, b: 0, a: 255 };`
-- L31: `export const GREEN: Color = Color{ r: 0, g: 255, b: 0, a: 255 };`
-- L32: `export const BLUE: Color = Color{ r: 0, g: 0, b: 255, a: 255 };`
-- L33: `export const TRANSPARENT: Color = Color{ r: 0, g: 0, b: 0, a: 0 };`
-- L35: `export mc COLOR(hex: expr) expr {`
+- L72: `export struct Color {`
+- L79: `export const BLACK: Color = Color{ r: 0, g: 0, b: 0, a: 255 };`
+- L80: `export const WHITE: Color = Color{ r: 255, g: 255, b: 255, a: 255 };`
+- L81: `export const RED: Color = Color{ r: 255, g: 0, b: 0, a: 255 };`
+- L82: `export const GREEN: Color = Color{ r: 0, g: 255, b: 0, a: 255 };`
+- L83: `export const BLUE: Color = Color{ r: 0, g: 0, b: 255, a: 255 };`
+- L84: `export const TRANSPARENT: Color = Color{ r: 0, g: 0, b: 0, a: 0 };`
+- L86: `export mc COLOR(hex: expr) expr {`
 
 ## `gui/core/dirty_region.uya`
 
@@ -57,11 +57,6 @@
 - L34: `export struct DirtyRegionView {`
 - L39: `export struct DirtyRegion {`
 - L237: `export fn dirty_region_new() DirtyRegion {`
-
-## `gui/core/event_dispatch.uya`
-
-- L35: `export struct EventDispatcher {`
-- L232: `export fn event_dispatcher_new() EventDispatcher {`
 
 ## `gui/core/event.uya`
 
@@ -89,20 +84,10 @@
 - L424: `export fn event_queue_new() EventQueue {`
 - L434: `export fn gesture_detector_new() GestureDetector {`
 
-## `gui/core/obj_pool.uya`
+## `gui/core/event_dispatch.uya`
 
-- L1: `export const OBJ_POOL_CAPACITY: i32 = 128;`
-- L5: `export enum ObjSlotState {`
-- L11: `export struct ObjPoolIndices {`
-- L16: `export struct ObjPool<T: IGuiObj> {`
-- L98: `export fn obj_pool_new<T: IGuiObj>() ObjPool<T> {`
-
-## `gui/core/obj_tree.uya`
-
-- L7: `export const OBJ_TREE_MAX_PATH: i32 = 64;`
-- L9: `export struct BubblePath {`
-- L22: `export struct ObjTree {`
-- L201: `export fn obj_tree_new() ObjTree {`
+- L35: `export struct EventDispatcher {`
+- L232: `export fn event_dispatcher_new() EventDispatcher {`
 
 ## `gui/core/obj.uya`
 
@@ -123,6 +108,21 @@
 - L488: `export fn gui_obj_get(idx: i32) &GuiObj {`
 - L499: `export fn gui_obj_unregister(idx: i32) void {`
 - L510: `export fn gui_obj_reset_registry() void {`
+
+## `gui/core/obj_pool.uya`
+
+- L1: `export const OBJ_POOL_CAPACITY: i32 = 128;`
+- L5: `export enum ObjSlotState {`
+- L11: `export struct ObjPoolIndices {`
+- L16: `export struct ObjPool<T: IGuiObj> {`
+- L98: `export fn obj_pool_new<T: IGuiObj>() ObjPool<T> {`
+
+## `gui/core/obj_tree.uya`
+
+- L7: `export const OBJ_TREE_MAX_PATH: i32 = 64;`
+- L9: `export struct BubblePath {`
+- L22: `export struct ObjTree {`
+- L201: `export fn obj_tree_new() ObjTree {`
 
 ## `gui/core/point.uya`
 
@@ -283,6 +283,12 @@
 - L123: `export fn fb_display_new() FbDisplay {`
 - L133: `export fn fb_display_last_error() &const byte {`
 
+## `gui/platform/fb/indev_fb.uya`
+
+- L22: `export struct FbInputSystem {`
+- L96: `export fn fb_input_system_new() FbInputSystem {`
+- L111: `export fn fb_input_last_error() &const byte {`
+
 ## `gui/platform/fb/indev_fb_common.uya`
 
 - L7: `export const FB_EVT_NONE: u8 = 0u8;`
@@ -296,12 +302,6 @@
 - L24: `export fn fb_host_event_none() FbHostEvent {`
 - L35: `export fn fb_feed_host_event(`
 - L86: `export fn fb_hover_point_default() Point {`
-
-## `gui/platform/fb/indev_fb.uya`
-
-- L22: `export struct FbInputSystem {`
-- L96: `export fn fb_input_system_new() FbInputSystem {`
-- L111: `export fn fb_input_last_error() &const byte {`
 
 ## `gui/platform/indev.uya`
 
@@ -355,14 +355,14 @@
 ## `gui/render/ctx.uya`
 
 - L19: `export const MAX_CLIP_STACK: i32 = 16;`
-- L39: `export enum RenderMode {`
-- L45: `export struct RenderStats {`
-- L56: `export struct RenderCtx {`
-- L327: `export fn empty_framebuffer_color() Color {`
-- L331: `export fn render_ctx_new(fb: FrameBuffer) RenderCtx {`
-- L353: `export fn empty_render_ctx() RenderCtx {`
-- L357: `export fn default_ctx() RenderCtx {`
-- L361: `export fn ctx_pixel(ctx: &RenderCtx, x: i16, y: i16) Color {`
+- L120: `export enum RenderMode {`
+- L126: `export struct RenderStats {`
+- L137: `export struct RenderCtx {`
+- L548: `export fn empty_framebuffer_color() Color {`
+- L552: `export fn render_ctx_new(fb: FrameBuffer) RenderCtx {`
+- L574: `export fn empty_render_ctx() RenderCtx {`
+- L578: `export fn default_ctx() RenderCtx {`
+- L582: `export fn ctx_pixel(ctx: &RenderCtx, x: i16, y: i16) Color {`
 
 ## `gui/render/font.uya`
 
@@ -506,10 +506,6 @@
 
 - L3: `export fn sim_entry() i32 {`
 
-## `gui/sim_main.uya`
-
-- L5: `export fn main() i32 {`
-
 ## `gui/sim/profiler.uya`
 
 - L3: `export struct ProfileStat {`
@@ -541,6 +537,10 @@
 - L315: `export fn screenshot_write_bmp(path: &const byte, fb: &FrameBuffer) !usize {`
 - L380: `export fn screenshot_write_raw(path: &const byte, fb: &FrameBuffer) !usize {`
 - L412: `export fn screenshot_write(path: &const byte, fb: &FrameBuffer) !usize {`
+
+## `gui/sim_main.uya`
+
+- L5: `export fn main() i32 {`
 
 ## `gui/style/prop.uya`
 
@@ -591,13 +591,13 @@
 
 - L8: `export const TEST_DIRTY_REGION_MODULE: i32 = 1;`
 
-## `gui/tests/test_event_dispatch.uya`
-
-- L20: `export const TEST_EVENT_DISPATCH_MODULE: i32 = 1;`
-
 ## `gui/tests/test_event.uya`
 
 - L17: `export const TEST_EVENT_MODULE: i32 = 1;`
+
+## `gui/tests/test_event_dispatch.uya`
+
+- L20: `export const TEST_EVENT_DISPATCH_MODULE: i32 = 1;`
 
 ## `gui/tests/test_input_dev.uya`
 
@@ -701,10 +701,10 @@
 - L385: `export fn widget_state_bg(style: &Style, state: WidgetState) Color {`
 - L402: `export fn widget_inner_rect(widget: &Widget) Rect {`
 - L424: `export fn widget_draw_surface(widget: &Widget, ctx: &RenderCtx) Rect {`
-- L451: `export fn widget_render_children(base: &GuiObj, ctx: &RenderCtx) void {`
-- L461: `export fn widget_measure_text(text: &const byte, font: &Font) i16 {`
-- L469: `export fn widget_clone_color(color: Color) Color {`
-- L473: `export fn widget_default_font() Font {`
+- L452: `export fn widget_render_children(base: &GuiObj, ctx: &RenderCtx) void {`
+- L462: `export fn widget_measure_text(text: &const byte, font: &Font) i16 {`
+- L470: `export fn widget_clone_color(color: Color) Color {`
+- L474: `export fn widget_default_font() Font {`
 
 ## `gui/widget/btn.uya`
 

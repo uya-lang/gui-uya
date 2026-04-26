@@ -47,3 +47,15 @@ test "color conversions and lerp" {
     try expect(RED.lerp(BLUE, 0.0) == RED);
     try expect(RED.lerp(BLUE, 1.0) == BLUE);
 }
+
+test "color alpha helpers support premultiplied effects" {
+    const translucent: Color = Color{ r: 200, g: 120, b: 40, a: 128 };
+    const modulated: Color = translucent.modulate_alpha(128u8);
+    const premul: Color = translucent.premultiply();
+
+    try assert_eq_i32(modulated.a as i32, 64);
+    try assert_eq_i32(premul.a as i32, 128);
+    try assert_eq_bool(premul.r < translucent.r, true);
+    try assert_eq_bool(premul.g < translucent.g, true);
+    try assert_eq_bool(premul.b < translucent.b, true);
+}

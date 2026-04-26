@@ -18,6 +18,57 @@ fn color_clamp_unit_f64(v: f64) f64 {
     return v;
 }
 
+fn clamp_channel_u32(v: u32) u8 {
+    if v >= 255u32 {
+        return 255u8;
+    }
+    return (v as! u8).value;
+}
+
+var _alpha_scale_lut: [u8: 65536] = [];
+var _alpha_scale_lut_ready: bool = false;
+
+fn alpha_scale_lut_init() void {
+    if _alpha_scale_lut_ready {
+        return;
+    }
+
+    var alpha: u32 = 0u32;
+    while alpha < 256u32 {
+        var value: u32 = 0u32;
+        while value < 256u32 {
+            const idx: usize = alpha as usize * 256usize + value as usize;
+            _alpha_scale_lut[idx] = (((value * alpha + 127u32) / 255u32) as! u8).value;
+            value = value + 1u32;
+        }
+        alpha = alpha + 1u32;
+    }
+
+    _alpha_scale_lut_ready = true;
+}
+
+fn alpha_scale(value: u8, alpha: u8) u8 {
+    if alpha == 0u8 || value == 0u8 {
+        return 0u8;
+    }
+    if alpha == 255u8 {
+        return value;
+    }
+    alpha_scale_lut_init();
+    return _alpha_scale_lut[alpha as usize * 256usize + value as usize];
+}
+
+fn alpha_unscale(value: u8, alpha: u8) u8 {
+    if alpha == 0u8 || value == 0u8 {
+        return 0u8;
+    }
+    if alpha == 255u8 {
+        return value;
+    }
+    const expanded: u32 = ((value as u32) * 255u32 + (alpha as u32 / 2u32)) / alpha as u32;
+    return clamp_channel_u32(expanded);
+}
+
 export struct Color {
     r: u8,
     g: u8,
@@ -42,6 +93,36 @@ export mc COLOR(hex: expr) expr {
 }
 
 Color {
+    fn modulate_alpha(self: &Self, alpha: u8) Color {
+        if alpha == 0u8 || self.a == 0u8 {
+            return TRANSPARENT;
+        }
+        if alpha == 255u8 {
+            return Color{ r: self.r, g: self.g, b: self.b, a: self.a };
+        }
+        return Color{
+            r: self.r,
+            g: self.g,
+            b: self.b,
+            a: alpha_scale(self.a, alpha),
+        };
+    }
+
+    fn premultiply(self: &Self) Color {
+        if self.a == 0u8 {
+            return TRANSPARENT;
+        }
+        if self.a == 255u8 {
+            return Color{ r: self.r, g: self.g, b: self.b, a: self.a };
+        }
+        return Color{
+            r: alpha_scale(self.r, self.a),
+            g: alpha_scale(self.g, self.a),
+            b: alpha_scale(self.b, self.a),
+            a: self.a,
+        };
+    }
+
     fn blend(self: &Self, src: Color) Color {
         if src.a == 255 {
             return src;
@@ -50,15 +131,24 @@ Color {
             return Color{ r: self.r, g: self.g, b: self.b, a: self.a };
         }
 
-        const sa: u32 = src.a as u32;
-        const inv_sa: u32 = 255u32 - sa;
-        const out_a: u32 = sa + (((self.a as u32) * inv_sa + 127u32) / 255u32);
+        const dst: Color = Color{ r: self.r, g: self.g, b: self.b, a: self.a };
+        const src_pm: Color = src.premultiply();
+        const dst_pm: Color = dst.premultiply();
+        const inv_sa: u8 = 255u8 - src.a;
+        const out_a: u8 = clamp_channel_u32(src.a as u32 + alpha_scale(dst.a, inv_sa) as u32);
+        if out_a == 0u8 {
+            return TRANSPARENT;
+        }
+
+        const out_r_pm: u8 = clamp_channel_u32(src_pm.r as u32 + alpha_scale(dst_pm.r, inv_sa) as u32);
+        const out_g_pm: u8 = clamp_channel_u32(src_pm.g as u32 + alpha_scale(dst_pm.g, inv_sa) as u32);
+        const out_b_pm: u8 = clamp_channel_u32(src_pm.b as u32 + alpha_scale(dst_pm.b, inv_sa) as u32);
 
         return Color{
-            r: (((src.r as u32) * sa + (self.r as u32) * inv_sa + 127u32) / 255u32) as u8,
-            g: (((src.g as u32) * sa + (self.g as u32) * inv_sa + 127u32) / 255u32) as u8,
-            b: (((src.b as u32) * sa + (self.b as u32) * inv_sa + 127u32) / 255u32) as u8,
-            a: out_a as u8,
+            r: alpha_unscale(out_r_pm, out_a),
+            g: alpha_unscale(out_g_pm, out_a),
+            b: alpha_unscale(out_b_pm, out_a),
+            a: out_a,
         };
     }
 
