@@ -16,6 +16,7 @@ SIM_BUILD_DIR ?= $(BUILD_DIR)/sim
 SIM_BIN ?= $(SIM_BUILD_DIR)/gui_uya_sim
 SIM_ARGS ?=
 SIM_HEADLESS_ARGS ?= --max-frames 3 --screenshot $(SIM_BUILD_DIR)/headless.uyafb
+SIM_FB_ARGS ?= --backend fb --max-frames 60
 
 BENCH_REPORT ?= $(BUILD_DIR)/phase5_bench.txt
 
@@ -78,3 +79,6 @@ sim-debug:
 
 sim-headless: sim-build
 	SDL_VIDEODRIVER=dummy $(SIM_BIN) $(SIM_HEADLESS_ARGS)
+
+sim-fb-run: sim-build
+	$(SIM_BIN) $(SIM_FB_ARGS)

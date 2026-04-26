@@ -10,7 +10,7 @@
 
 ## 0. 当前落地状态
 
-- 已有命令：`make sim-build`、`make sim-run`、`make sim-debug`
+- 已有命令：`make sim-build`、`make sim-run`、`make sim-debug`、`make sim-fb-run`
 - 已有 headless 命令：`make sim-headless`
 - 已有 SDL2 后端：`gui/platform/sdl2/{disp_sdl.uya, indev_sdl.uya, sdl_host.c}`
 - 已有调试工具：`gui/sim/{screenshot,profiler,recorder}.uya`
@@ -41,6 +41,9 @@ make sim-debug
 
 # 无窗口运行并导出截图
 make sim-headless
+
+# Linux framebuffer 运行（需要 /dev/fb0 权限）
+make sim-fb-run
 ```
 
 ## 0.1.1 已验证输出
@@ -70,6 +73,15 @@ make sim-headless
 - 可覆盖参数：`SIM_HEADLESS_ARGS="--max-frames 5 --screenshot build/sim/custom.uyafb"`
 - 实现方式：通过 `SDL_VIDEODRIVER=dummy` 复用 SDL2 主线，不额外分叉一套 headless runtime
 
+### Framebuffer 专用入口
+
+- `make sim-fb-run`
+- 默认参数：`SIM_FB_ARGS="--backend fb --max-frames 60"`
+- 可覆盖设备：
+  - `SIM_FB_ARGS="--backend fb --fb-dev /dev/fb1 --max-frames 60"`
+  - 或 `UYA_GUI_FB_DEV=/dev/fb1`
+- 当前实现只覆盖显示输出，不带 `indev_fb`
+
 ## 0.3 当前交互
 
 - 鼠标左键：通过 `TouchDriver` 进入现有事件系统
@@ -94,7 +106,8 @@ make sim-headless
 
 - `make sim-build` 仍会打印不少来自 Uya 生成 C 文件的 warning；当前不影响链接与运行
 - 截图目前是原始 framebuffer dump（`.uyafb`），还没有接 PNG/BMP 编码
-- Framebuffer 专用后端仍未开始做；当前“无窗口”模式优先复用 SDL2 dummy video
+- Framebuffer 专用后端已具备首版显示链路，但当前仍未实现 `indev_fb`
+- 当前机器上 `/dev/fb0` 存在但普通用户无权限，`--backend fb` 会清晰返回 `Permission denied`
 
 ---
 

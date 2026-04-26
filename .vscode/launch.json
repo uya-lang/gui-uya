@@ -42,6 +42,23 @@
       "MIMode": "gdb",
       "miDebuggerPath": "/usr/bin/gdb",
       "externalConsole": false
+    },
+    {
+      "name": "GUI Sim: Framebuffer",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/sim/gui_uya_sim",
+      "args": [
+        "--backend",
+        "fb",
+        "--max-frames",
+        "5"
+      ],
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "gui: sim-build",
+      "MIMode": "gdb",
+      "miDebuggerPath": "/usr/bin/gdb",
+      "externalConsole": false
     }
   ]
 }

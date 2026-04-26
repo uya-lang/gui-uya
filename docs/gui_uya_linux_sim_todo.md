@@ -60,7 +60,7 @@
 | S3 | 调试工具（截图/录制/Profiler） | 已完成 |
 | S4 | 资源/文件系统接线与 demo 扩展 | 已完成 |
 | S5 | 构建脚本、调试工作流、文档收尾 | 已完成 |
-| S6 | Framebuffer / Headless 扩展（可选） | 部分完成（headless 已落地，Framebuffer 未开始） |
+| S6 | Framebuffer / Headless 扩展（可选） | 部分完成（headless 已落地，Framebuffer 显示后端已落地首版） |
 
 ---
 
@@ -266,10 +266,10 @@
 
 ### TODO
 
-- [ ] `gui/platform/fb/disp_fb.uya`
+- [x] `gui/platform/fb/disp_fb.uya`
 - [ ] 评估是否真的需要 `indev_fb.uya`
 - [x] 评估 headless + 截图回归是否比 raw framebuffer 更实用
-- [ ] 若做 framebuffer 模式，补权限/设备节点说明
+- [x] 若做 framebuffer 模式，补权限/设备节点说明
 - [x] 若做 headless 模式，优先支持离屏渲染 + 导出截图
 
 ### 当前实现
@@ -278,6 +278,10 @@
   - [x] 使用 `SDL_VIDEODRIVER=dummy`
   - [x] 支持 `SIM_HEADLESS_ARGS`
   - [x] 默认导出 `build/sim/headless.uyafb`
+- [x] `make sim-fb-run`
+  - [x] 通过 `--backend fb` 复用同一套 simulator app/runtime
+  - [x] `disp_fb.uya` + `fb_host.c` 已可打开 `/dev/fb0`、查询分辨率并做 ARGB8888 -> 设备像素格式写回
+  - [x] 在当前机器上已验证“无权限访问 `/dev/fb0` 时返回清晰 `Permission denied`”
 
 ---
 
@@ -294,8 +298,7 @@ make sim-run SIM_ARGS="--max-frames 3 --screenshot build/sim/makerun.uyafb"
 ## 当前遗留项
 
 - `make sim-build` 仍会打印较多由 Uya 生成 C 代码带来的 warning，但不阻塞链接与运行
-- `Framebuffer / Headless` 专用模式还没有开始做
-- Framebuffer 后端仍未开始
+- `indev_fb` 仍未开始，当前 framebuffer 模式默认不带输入
 
 ### 验收
 
@@ -315,6 +318,7 @@ make sim-run SIM_ARGS="--max-frames 3 --screenshot build/sim/makerun.uyafb"
 | SDL2 模拟器构建 | [x] 已覆盖 | [x] `sim-build` |
 | SDL2 模拟器运行 | [x] 已覆盖 | [x] `sim-run` |
 | Headless 模拟器运行 | [x] 已覆盖 | [x] `sim-headless` |
+| Framebuffer 模拟器运行 | [x] 已具备入口 | [x] `sim-fb-run` |
 | 输入交互回归 | [x] 已覆盖 | [x] 点击/按键/滚轮 |
 | 截图导出 | [x] 已覆盖 | [x] 至少一条正向回归 |
 | 录制/回放 | [x] 已覆盖 | [x] 至少一条正向回归 |
@@ -334,6 +338,15 @@ make sim-run SIM_ARGS="--max-frames 3 --screenshot build/sim/makerun.uyafb"
 - 现有 `DisplayCtx` / `RenderCtx` 更偏离屏渲染，接入窗口 present 时可能需要额外胶水层。
 - 真实图片/字体解码链路仍不完整，模拟器首阶段不应把这部分当阻塞项。
 - Framebuffer 模式在 Linux 上涉及权限、设备节点和环境差异，不适合先做。
+
+## Framebuffer 模式说明
+
+- 默认设备节点：`/dev/fb0`
+- 可覆盖：`--fb-dev /dev/fb1` 或环境变量 `UYA_GUI_FB_DEV=/dev/fb1`
+- 当前机器实测：设备存在但普通用户权限不足，执行 `./build/sim/gui_uya_sim --backend fb --max-frames 1` 返回
+  - `[sim] backend=fb`
+  - `[sim] framebuffer init failed: Permission denied`
+- 若需要本地验证，通常需要把当前用户加入 `video` 组或临时提升权限
 
 ## 相关文件
 

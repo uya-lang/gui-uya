@@ -36,6 +36,20 @@
       },
       "dependsOn": "gui: sim-build",
       "problemMatcher": []
+    },
+    {
+      "label": "gui: sim-fb-run",
+      "type": "shell",
+      "command": "make",
+      "args": [
+        "sim-fb-run",
+        "SIM_FB_ARGS=--backend fb --max-frames 5"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "dependsOn": "gui: sim-build",
+      "problemMatcher": []
     }
   ]
 }

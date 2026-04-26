@@ -1,10 +1,11 @@
 use core.event.Event;
 use core.event.event_none;
-use core.point.POINT_ZERO;
-use core.point.Point;
 use libc.printf;
 use platform.disp.FrameBuffer;
 use platform.disp.framebuffer_new;
+use platform.fb.disp_fb.FbDisplay;
+use platform.fb.disp_fb.fb_display_last_error;
+use platform.fb.disp_fb.fb_display_new;
 use platform.sdl2.disp_sdl.SdlDisplay;
 use platform.sdl2.disp_sdl.sdl_display_last_error;
 use platform.sdl2.disp_sdl.sdl_display_new;
@@ -16,28 +17,28 @@ use render.ctx.RenderCtx;
 use render.ctx.render_ctx_new;
 use sim.app.SimApp;
 use sim.app.sim_app_new;
+use sim.config.SimBackendKind;
 use sim.config.SimConfig;
+use sim.config.sim_backend_name;
 use sim.config.sim_config_from_runtime;
 
 fn sim_print_usage() void {
     _ = printf(
         "UyaGUI Linux Simulator\n"
+        "  --backend sdl2|fb\n"
         "  --demo phase4|phase6\n"
         "  --width N --height N --scale N\n"
         "  --fullscreen | --windowed\n"
+        "  --fb-dev /dev/fb0\n"
         "  --root PATH --title TEXT\n"
         "  --screenshot PATH --record PATH --playback PATH\n"
         "  --max-frames N --profile-every N --hud --no-hud\n" as *byte
     );
 }
 
-export fn run_simulator() i32 {
-    const cfg: SimConfig = sim_config_from_runtime();
-    if cfg.show_help {
-        sim_print_usage();
-        return 0;
-    }
-
+fn run_simulator_sdl(cfg: SimConfig) i32 {
+    _ = printf("[sim] backend=%s\n" as *byte, sim_backend_name(cfg.backend));
+ 
     var display: SdlDisplay = sdl_display_new();
     if !display.init(cfg.width, cfg.height, cfg.scale, cfg.title, cfg.fullscreen) {
         _ = printf("[sim] SDL2 init failed: %s\n" as *byte, sdl_display_last_error());
@@ -127,4 +128,89 @@ export fn run_simulator() i32 {
 
     app.finish(display.get_front_buffer());
     return 0;
+}
+
+fn run_simulator_fb(cfg_in: SimConfig) i32 {
+    var cfg: SimConfig = cfg_in;
+    _ = printf("[sim] backend=%s\n" as *byte, sim_backend_name(cfg.backend));
+
+    var display: FbDisplay = fb_display_new();
+    if !display.init(cfg.width, cfg.height, cfg.fb_device_path) {
+        _ = printf("[sim] framebuffer init failed: %s\n" as *byte, fb_display_last_error());
+        return 4;
+    }
+    defer {
+        display.shutdown();
+    }
+
+    cfg.width = display.width();
+    cfg.height = display.height();
+    cfg.scale = 1;
+    cfg.fullscreen = true;
+    if cfg.max_frames == 0u32 {
+        cfg.max_frames = 300u32;
+    }
+
+    var app: SimApp = sim_app_new();
+    if !app.init(cfg) {
+        _ = printf("[sim] app init failed\n" as *byte);
+        return 3;
+    }
+
+    var last_tick_ms: u32 = get_tick_ms();
+    while true {
+        const frame_start_ms: u32 = get_tick_ms();
+        const delta_ms: u32 = frame_start_ms - last_tick_ms;
+        last_tick_ms = frame_start_ms;
+
+        app.update(delta_ms, frame_start_ms);
+        const after_update_ms: u32 = get_tick_ms();
+
+        const back_ref: &FrameBuffer = display.get_back_buffer();
+        var ctx: RenderCtx = render_ctx_new(framebuffer_new(back_ref.pixels, back_ref.size.w, back_ref.size.h, back_ref.stride, back_ref.format));
+        app.render(&ctx);
+        const after_render_ms: u32 = get_tick_ms();
+
+        if app.consume_screenshot_request() {
+            app.save_screenshot(display.get_back_buffer());
+        }
+
+        if !display.present() {
+            _ = printf("[sim] framebuffer present failed: %s\n" as *byte, fb_display_last_error());
+            break;
+        }
+        const after_present_ms: u32 = get_tick_ms();
+
+        app.record_frame(
+            &ctx,
+            after_update_ms - frame_start_ms,
+            after_render_ms - after_update_ms,
+            after_present_ms - after_render_ms,
+            after_present_ms - frame_start_ms
+        );
+
+        if app.should_exit() || display.ctx.frame_id >= cfg.max_frames {
+            break;
+        }
+
+        const frame_ms: u32 = after_present_ms - frame_start_ms;
+        if frame_ms < 16u32 {
+            sleep_ms(16u32 - frame_ms);
+        }
+    }
+
+    app.finish(display.get_front_buffer());
+    return 0;
+}
+
+export fn run_simulator() i32 {
+    const cfg: SimConfig = sim_config_from_runtime();
+    if cfg.show_help {
+        sim_print_usage();
+        return 0;
+    }
+    if cfg.backend == SimBackendKind.FrameBuffer {
+        return run_simulator_fb(cfg);
+    }
+    return run_simulator_sdl(cfg);
 }
