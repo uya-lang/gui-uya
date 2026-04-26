@@ -1,10 +1,14 @@
 use core.color.Color;
 use core.rect.Rect;
+use platform.disp.PixelFormat;
 use render.ctx.RenderCtx;
 
 const CJK_GLYPH_8X8_BYTES: &[const byte] = @embed("cjk_unifont_4e00_9fff_8x8.bin");
 const CJK_UNIFIED_START: u32 = 0x4E00u32;
 const CJK_UNIFIED_END: u32 = 0x9FFFu32;
+const GLYPH_EDGE_AA_ORTHO_ALPHA: i32 = 30;
+const GLYPH_EDGE_AA_DIAG_ALPHA: i32 = 12;
+const GLYPH_EDGE_AA_MAX_ALPHA: i32 = 96;
 
 export enum TextAlign {
     Start,
@@ -193,6 +197,86 @@ fn glyph_fallback_bits() u64 {
     return glyph_pack7(0x0Eu8, 0x11u8, 0x01u8, 0x02u8, 0x04u8, 0x00u8, 0x04u8);
 }
 
+fn glyph_alpha_color(color: &Color, coverage: u8) Color {
+    return Color{
+        r: color.r,
+        g: color.g,
+        b: color.b,
+        a: ((((color.a as u32) * coverage as u32) + 127u32) / 255u32) as u8,
+    };
+}
+
+fn glyph_antialias_enabled(ctx: &RenderCtx) bool {
+    return ctx.fb.format != PixelFormat.I1;
+}
+
+fn glyph_pixel_on(glyph: &Glyph, ascii_bits: u64, col: i32, row: i32) bool {
+    if col < 0 || row < 0 || col >= glyph.width as i32 || row >= glyph.height as i32 {
+        return false;
+    }
+    if glyph_is_cjk(glyph.codepoint) {
+        const row_bits_cjk: u8 = glyph_cjk_row(glyph.codepoint, row);
+        const mask_cjk: u8 = 1u8 << (glyph.width as i32 - 1 - col);
+        return (row_bits_cjk & mask_cjk) != 0u8;
+    }
+
+    const row_bits: u8 = glyph_row(ascii_bits, row);
+    const mask: u8 = 1u8 << (glyph.width as i32 - 1 - col);
+    return (row_bits & mask) != 0u8;
+}
+
+fn glyph_edge_alpha(glyph: &Glyph, ascii_bits: u64, col: i32, row: i32) u8 {
+    if glyph_pixel_on(glyph, ascii_bits, col, row) {
+        return 255u8;
+    }
+
+    const left_on: bool = glyph_pixel_on(glyph, ascii_bits, col - 1, row);
+    const right_on: bool = glyph_pixel_on(glyph, ascii_bits, col + 1, row);
+    const up_on: bool = glyph_pixel_on(glyph, ascii_bits, col, row - 1);
+    const down_on: bool = glyph_pixel_on(glyph, ascii_bits, col, row + 1);
+    const up_left_on: bool = glyph_pixel_on(glyph, ascii_bits, col - 1, row - 1);
+    const up_right_on: bool = glyph_pixel_on(glyph, ascii_bits, col + 1, row - 1);
+    const down_left_on: bool = glyph_pixel_on(glyph, ascii_bits, col - 1, row + 1);
+    const down_right_on: bool = glyph_pixel_on(glyph, ascii_bits, col + 1, row + 1);
+
+    var orthogonal: i32 = 0;
+    if left_on { orthogonal = orthogonal + 1; }
+    if right_on { orthogonal = orthogonal + 1; }
+    if up_on { orthogonal = orthogonal + 1; }
+    if down_on { orthogonal = orthogonal + 1; }
+
+    var diagonal: i32 = 0;
+    if up_left_on { diagonal = diagonal + 1; }
+    if up_right_on { diagonal = diagonal + 1; }
+    if down_left_on { diagonal = diagonal + 1; }
+    if down_right_on { diagonal = diagonal + 1; }
+
+    if orthogonal == 0 && diagonal == 0 {
+        return 0u8;
+    }
+
+    if orthogonal >= 3 {
+        return 0u8;
+    }
+    if orthogonal == 2 && ((left_on && right_on) || (up_on && down_on)) {
+        return 0u8;
+    }
+
+    var alpha: i32 = orthogonal * GLYPH_EDGE_AA_ORTHO_ALPHA + diagonal * GLYPH_EDGE_AA_DIAG_ALPHA;
+    if orthogonal == 0 && diagonal == 1 {
+        alpha = GLYPH_EDGE_AA_DIAG_ALPHA * 2;
+    }
+    if alpha > GLYPH_EDGE_AA_MAX_ALPHA {
+        alpha = GLYPH_EDGE_AA_MAX_ALPHA;
+    }
+    return (alpha as! u8).value;
+}
+
+fn draw_glyph_aa_pixel(ctx: &RenderCtx, x: i16, y: i16, color: &Color, coverage: u8) void {
+    const aa_color: Color = glyph_alpha_color(color, coverage);
+    ctx.draw_pixel(x, y, aa_color);
+}
+
 fn glyph_pattern_bits(codepoint: u32) u64 {
     const c: u32 = glyph_normalize_codepoint(codepoint);
     if c == ' ' as u32 {
@@ -320,36 +404,21 @@ fn draw_glyph(ctx: &RenderCtx, x: i16, y: i16, glyph: &Glyph, color: &Color) voi
         return;
     }
 
-    if glyph_is_cjk(glyph.codepoint) {
-        var row_cjk: i32 = 0;
-        while row_cjk < glyph.height as i32 {
-            const row_bits_cjk: u8 = glyph_cjk_row(glyph.codepoint, row_cjk);
-            var col_cjk: i32 = 0;
-            while col_cjk < glyph.width as i32 {
-                const mask_cjk: u8 = 1u8 << (glyph.width as i32 - 1 - col_cjk);
-                if (row_bits_cjk & mask_cjk) != 0u8 {
-                    ctx.draw_pixel(x + col_cjk as i16, y + row_cjk as i16, color[0]);
-                }
-                col_cjk = col_cjk + 1;
-            }
-            row_cjk = row_cjk + 1;
-        }
-        return;
-    }
-
     const bits: u64 = glyph_pattern_bits(glyph.codepoint);
-    if bits == 0u64 {
+    if !glyph_is_cjk(glyph.codepoint) && bits == 0u64 {
         return;
     }
 
+    const antialias: bool = glyph_antialias_enabled(ctx);
     var row: i32 = 0;
     while row < glyph.height as i32 {
-        const row_bits: u8 = glyph_row(bits, row);
         var col: i32 = 0;
         while col < glyph.width as i32 {
-            const mask: u8 = 1u8 << (glyph.width as i32 - 1 - col);
-            if (row_bits & mask) != 0u8 {
+            const coverage: u8 = glyph_edge_alpha(glyph, bits, col, row);
+            if coverage == 255u8 {
                 ctx.draw_pixel(x + col as i16, y + row as i16, color[0]);
+            } else if antialias && coverage != 0u8 {
+                draw_glyph_aa_pixel(ctx, x + col as i16, y + row as i16, color, coverage);
             }
             col = col + 1;
         }

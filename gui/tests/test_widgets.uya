@@ -92,6 +92,10 @@ test "panel renders child button and label through gui tree" {
 
     panel.widget.at(0, 0);
     panel.widget.size(32, 32);
+    panel.widget.base.style.set_u32(StyleProp.PaddingLeft, 0u32);
+    panel.widget.base.style.set_u32(StyleProp.PaddingRight, 0u32);
+    panel.widget.base.style.set_u32(StyleProp.PaddingTop, 0u32);
+    panel.widget.base.style.set_u32(StyleProp.PaddingBottom, 0u32);
     button.widget.at(4, 4);
     button.widget.size(20, 12);
     label.widget.at(4, 20);
@@ -101,7 +105,8 @@ test "panel renders child button and label through gui tree" {
     panel.add(label.obj());
     panel.render(&ctx);
 
-    try assert_eq_bool(ctx_pixel(&ctx, 16, 13) == Color{ r: 33, g: 126, b: 227, a: 255 }, true);
+    try assert_eq_bool(ctx_pixel(&ctx, 8, 10) == Color{ r: 33, g: 126, b: 227, a: 255 }, true);
+    try assert_eq_bool(ctx.stats.text_ops >= 2u32, true);
 }
 
 test "image widget scales source into target area" {
@@ -208,7 +213,8 @@ test "page can render nested widgets" {
     panel.add(button.obj());
     page.render(&ctx);
 
-    try assert_eq_bool(ctx_pixel(&ctx, 14, 12) == Color{ r: 33, g: 126, b: 227, a: 255 }, true);
+    try assert_eq_bool(ctx_pixel(&ctx, 9, 10) == Color{ r: 33, g: 126, b: 227, a: 255 }, true);
+    try assert_eq_bool(ctx.stats.text_ops > 0u32, true);
 }
 
 test "page navigator supports push pop transitions and edge swipe" {

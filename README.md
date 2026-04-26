@@ -127,7 +127,9 @@ make sim-headless SIM_HEADLESS_ARGS="--max-frames 5 --screenshot build/sim/headl
 - 默认字体为内置 `5x7` 位图字形
 - 英文、数字和常见标点可正常显示
 - 已支持 `U+4E00..U+9FFF` 常用 CJK 统一表意文字的内置 `8x8` 点阵显示
+- 彩色与灰度 framebuffer 上会对字形斜边做轻量 alpha 抗锯齿软化
 - 常见全角标点会归一化到 ASCII 标点显示
+- 单色 `I1` framebuffer 仍保持硬边渲染
 - 其余未覆盖的 Unicode 字符仍会回退为 `?`
 
 ## 交叉编译入口

@@ -111,7 +111,9 @@ make sim-fb-run
 - 默认文本渲染已切到内置位图字体，不再显示统一占位方框
   - ASCII：`5x7`
   - 中文常用字：`U+4E00..U+9FFF` 的 `8x8` 内置点阵
+  - 彩色与灰度 framebuffer 会对字形边缘做轻量 alpha 抗锯齿软化
   - 常见全角标点会归一化到 ASCII 标点
+  - 单色 `I1` framebuffer 仍保持硬边渲染
   - 其余未覆盖 Unicode 字符仍会退化为 `?`
 
 ---

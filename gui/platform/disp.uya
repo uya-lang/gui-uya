@@ -238,7 +238,7 @@ export fn framebuffer_set_pixel(fb: &FrameBuffer, x: i32, y: i32, color: &Color)
 
     const alpha: u8 = color.a;
     var write: Color = copy_color(color);
-    if alpha < 255 && fb.format != PixelFormat.A8 && fb.format != PixelFormat.I1 && fb.format != PixelFormat.I4 {
+    if alpha < 255 && fb.format != PixelFormat.I1 {
         const dst: Color = framebuffer_get_pixel(fb, x, y);
         const src_copy: Color = copy_color(color);
         write = dst.blend(src_copy);

@@ -67,3 +67,16 @@ test "draw round rect clips corner arcs to quadrants" {
     try assert_eq_bool(ctx_pixel(&ctx, 2, 4) == black_expect1, true);
     try assert_eq_bool(ctx_pixel(&ctx, 4, 4) == black_expect1, true);
 }
+
+test "render ctx blends alpha on i4 framebuffer" {
+    var bytes: [byte: 8] = [];
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 4, 4, 2, PixelFormat.I4));
+    const half_white: Color = Color{ r: 255, g: 255, b: 255, a: 96 };
+
+    ctx.clear(Color{ r: 0, g: 0, b: 0, a: 255 });
+    ctx.draw_pixel(1, 1, half_white);
+
+    const pixel: Color = ctx_pixel(&ctx, 1, 1);
+    try assert_eq_bool(pixel.r > 0u8, true);
+    try assert_eq_bool(pixel.r < 255u8, true);
+}
