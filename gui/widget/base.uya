@@ -13,6 +13,7 @@ use libc.strlen;
 use render.ctx.RenderCtx;
 use render.font.Font;
 use render.font.font_default;
+use render.font.text_width;
 use style.DEFAULT_STYLE;
 use style.Style;
 use style.StyleProp;
@@ -443,7 +444,7 @@ export fn widget_measure_text(text: &const byte, font: &Font) i16 {
     if len == 0 {
         return 0;
     }
-    return ((font.glyph_width as i32 + font.tracking as i32) * len as i32 - font.tracking as i32) as i16;
+    return text_width(text, len, font);
 }
 
 export fn widget_clone_color(color: Color) Color {

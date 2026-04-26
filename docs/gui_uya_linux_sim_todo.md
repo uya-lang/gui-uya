@@ -299,6 +299,7 @@ make sim-run SIM_ARGS="--max-frames 3 --screenshot build/sim/makerun.uyafb"
 
 - `make sim-build` 仍会打印较多由 Uya 生成 C 代码带来的 warning，但不阻塞链接与运行
 - `indev_fb` 仍未开始，当前 framebuffer 模式默认不带输入
+- 默认内置字体已修复占位方框问题，但当前仍只覆盖 ASCII 常用字符；中文/完整 Unicode 字体链路仍待后续补齐
 
 ### 验收
 

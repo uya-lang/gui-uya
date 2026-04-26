@@ -1,4 +1,5 @@
 use core.color.Color;
+use core.color.BLACK;
 use core.color.RED;
 use core.color.WHITE;
 use core.rect.Rect;
@@ -48,9 +49,10 @@ test "image draw and cache get work" {
 }
 
 test "font draws and measures text" {
-    var bytes: [byte: 512] = [];
+    var bytes: [byte: 1024] = [];
     var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 16, 16, 64, PixelFormat.ARGB8888));
     const font: Font = font_default();
+    ctx.clear(Color{ r: 0, g: 0, b: 0, a: 255 });
     const white0: Color = Color{ r: 255, g: 255, b: 255, a: 255 };
     const white1: Color = Color{ r: 255, g: 255, b: 255, a: 255 };
     const white2: Color = Color{ r: 255, g: 255, b: 255, a: 255 };
@@ -60,5 +62,19 @@ test "font draws and measures text" {
     draw_text_aligned(&ctx, Rect{ x: 0, y: 8, w: 16, h: 8 }, "A", 1usize, &font, white1, TextAlign.Center);
 
     try assert_eq_bool(ctx.stats.text_ops >= 2u32, true);
-    try assert_eq_bool(ctx_pixel(&ctx, 0, 0) == white2, true);
+    try assert_eq_bool(ctx_pixel(&ctx, 1, 0) == white2, true);
+}
+
+test "font glyphs are no longer placeholder boxes" {
+    var bytes: [byte: 1024] = [];
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 16, 16, 64, PixelFormat.ARGB8888));
+    ctx.clear(Color{ r: 0, g: 0, b: 0, a: 255 });
+    const font: Font = font_default();
+    const white_draw: Color = Color{ r: 255, g: 255, b: 255, a: 255 };
+    const white_expect: Color = Color{ r: 255, g: 255, b: 255, a: 255 };
+
+    draw_text(&ctx, 0, 0, "I", 1usize, &font, white_draw);
+
+    try assert_eq_bool(ctx_pixel(&ctx, 0, 3) == BLACK, true);
+    try assert_eq_bool(ctx_pixel(&ctx, 2, 3) == white_expect, true);
 }

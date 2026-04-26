@@ -15,7 +15,6 @@ export struct Glyph {
     advance: u8,
     offset_x: i8,
     offset_y: i8,
-    bitmap: &byte,
 }
 
 export struct Font {
@@ -27,23 +26,206 @@ export struct Font {
     tracking: i8,
 }
 
+fn glyph_pack7(r0: u8, r1: u8, r2: u8, r3: u8, r4: u8, r5: u8, r6: u8) u64 {
+    return (r0 as u64)
+        | ((r1 as u64) << 8)
+        | ((r2 as u64) << 16)
+        | ((r3 as u64) << 24)
+        | ((r4 as u64) << 32)
+        | ((r5 as u64) << 40)
+        | ((r6 as u64) << 48);
+}
+
+fn glyph_row(bits: u64, row: i32) u8 {
+    return (((bits >> ((row as u64) * 8u64)) & 0x1Fu64) as! u8).value;
+}
+
+fn utf8_span(first: u8) usize {
+    if first < 0x80u8 {
+        return 1usize;
+    }
+    if (first & 0xE0u8) == 0xC0u8 {
+        return 2usize;
+    }
+    if (first & 0xF0u8) == 0xE0u8 {
+        return 3usize;
+    }
+    if (first & 0xF8u8) == 0xF0u8 {
+        return 4usize;
+    }
+    return 1usize;
+}
+
+fn glyph_display_units(text: &const byte, len: usize) usize {
+    if text == null || len == 0usize {
+        return 0usize;
+    }
+
+    var units: usize = 0usize;
+    var i: usize = 0usize;
+    while i < len {
+        const span: usize = utf8_span(text[i]);
+        units = units + 1usize;
+        if span <= 1usize || i + span > len {
+            i = i + 1usize;
+        } else {
+            i = i + span;
+        }
+    }
+    return units;
+}
+
+fn glyph_normalize_code(code: u8) u8 {
+    if code >= 'a' as u8 && code <= 'z' as u8 {
+        return code - 32u8;
+    }
+    return code;
+}
+
+fn glyph_fallback_bits() u64 {
+    return glyph_pack7(0x0Eu8, 0x11u8, 0x01u8, 0x02u8, 0x04u8, 0x00u8, 0x04u8);
+}
+
+fn glyph_pattern_bits(code: u8) u64 {
+    const c: u8 = glyph_normalize_code(code);
+    if c == ' ' as u8 {
+        return 0u64;
+    }
+    if c == '!' as u8 {
+        return glyph_pack7(0x04u8, 0x04u8, 0x04u8, 0x04u8, 0x04u8, 0x00u8, 0x04u8);
+    }
+    if c == '"' as u8 {
+        return glyph_pack7(0x0Au8, 0x0Au8, 0x0Au8, 0x00u8, 0x00u8, 0x00u8, 0x00u8);
+    }
+    if c == '#' as u8 {
+        return glyph_pack7(0x0Au8, 0x0Au8, 0x1Fu8, 0x0Au8, 0x1Fu8, 0x0Au8, 0x0Au8);
+    }
+    if c == '%' as u8 {
+        return glyph_pack7(0x19u8, 0x19u8, 0x02u8, 0x04u8, 0x08u8, 0x13u8, 0x13u8);
+    }
+    if c == '&' as u8 {
+        return glyph_pack7(0x0Cu8, 0x12u8, 0x14u8, 0x08u8, 0x15u8, 0x12u8, 0x0Du8);
+    }
+    if c == '\'' as u8 {
+        return glyph_pack7(0x04u8, 0x04u8, 0x08u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8);
+    }
+    if c == '(' as u8 {
+        return glyph_pack7(0x02u8, 0x04u8, 0x08u8, 0x08u8, 0x08u8, 0x04u8, 0x02u8);
+    }
+    if c == ')' as u8 {
+        return glyph_pack7(0x08u8, 0x04u8, 0x02u8, 0x02u8, 0x02u8, 0x04u8, 0x08u8);
+    }
+    if c == '*' as u8 {
+        return glyph_pack7(0x00u8, 0x04u8, 0x15u8, 0x0Eu8, 0x15u8, 0x04u8, 0x00u8);
+    }
+    if c == '+' as u8 {
+        return glyph_pack7(0x00u8, 0x04u8, 0x04u8, 0x1Fu8, 0x04u8, 0x04u8, 0x00u8);
+    }
+    if c == ',' as u8 {
+        return glyph_pack7(0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x04u8, 0x04u8, 0x08u8);
+    }
+    if c == '-' as u8 {
+        return glyph_pack7(0x00u8, 0x00u8, 0x00u8, 0x1Fu8, 0x00u8, 0x00u8, 0x00u8);
+    }
+    if c == '.' as u8 {
+        return glyph_pack7(0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x04u8);
+    }
+    if c == '/' as u8 {
+        return glyph_pack7(0x01u8, 0x02u8, 0x04u8, 0x08u8, 0x10u8, 0x00u8, 0x00u8);
+    }
+    if c == ':' as u8 {
+        return glyph_pack7(0x00u8, 0x04u8, 0x00u8, 0x00u8, 0x04u8, 0x00u8, 0x00u8);
+    }
+    if c == ';' as u8 {
+        return glyph_pack7(0x00u8, 0x04u8, 0x00u8, 0x00u8, 0x04u8, 0x04u8, 0x08u8);
+    }
+    if c == '<' as u8 {
+        return glyph_pack7(0x02u8, 0x04u8, 0x08u8, 0x10u8, 0x08u8, 0x04u8, 0x02u8);
+    }
+    if c == '=' as u8 {
+        return glyph_pack7(0x00u8, 0x00u8, 0x1Fu8, 0x00u8, 0x1Fu8, 0x00u8, 0x00u8);
+    }
+    if c == '>' as u8 {
+        return glyph_pack7(0x08u8, 0x04u8, 0x02u8, 0x01u8, 0x02u8, 0x04u8, 0x08u8);
+    }
+    if c == '?' as u8 {
+        return glyph_fallback_bits();
+    }
+    if c == '[' as u8 {
+        return glyph_pack7(0x0Eu8, 0x08u8, 0x08u8, 0x08u8, 0x08u8, 0x08u8, 0x0Eu8);
+    }
+    if c == '\\' as u8 {
+        return glyph_pack7(0x10u8, 0x08u8, 0x04u8, 0x02u8, 0x01u8, 0x00u8, 0x00u8);
+    }
+    if c == ']' as u8 {
+        return glyph_pack7(0x0Eu8, 0x02u8, 0x02u8, 0x02u8, 0x02u8, 0x02u8, 0x0Eu8);
+    }
+    if c == '_' as u8 {
+        return glyph_pack7(0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x1Fu8);
+    }
+    if c == '|' as u8 {
+        return glyph_pack7(0x04u8, 0x04u8, 0x04u8, 0x04u8, 0x04u8, 0x04u8, 0x04u8);
+    }
+
+    if c == '0' as u8 { return glyph_pack7(0x0Eu8, 0x11u8, 0x13u8, 0x15u8, 0x19u8, 0x11u8, 0x0Eu8); }
+    if c == '1' as u8 { return glyph_pack7(0x04u8, 0x0Cu8, 0x04u8, 0x04u8, 0x04u8, 0x04u8, 0x0Eu8); }
+    if c == '2' as u8 { return glyph_pack7(0x0Eu8, 0x11u8, 0x01u8, 0x02u8, 0x04u8, 0x08u8, 0x1Fu8); }
+    if c == '3' as u8 { return glyph_pack7(0x1Eu8, 0x01u8, 0x01u8, 0x0Eu8, 0x01u8, 0x01u8, 0x1Eu8); }
+    if c == '4' as u8 { return glyph_pack7(0x02u8, 0x06u8, 0x0Au8, 0x12u8, 0x1Fu8, 0x02u8, 0x02u8); }
+    if c == '5' as u8 { return glyph_pack7(0x1Fu8, 0x10u8, 0x10u8, 0x1Eu8, 0x01u8, 0x01u8, 0x1Eu8); }
+    if c == '6' as u8 { return glyph_pack7(0x0Eu8, 0x10u8, 0x10u8, 0x1Eu8, 0x11u8, 0x11u8, 0x0Eu8); }
+    if c == '7' as u8 { return glyph_pack7(0x1Fu8, 0x01u8, 0x02u8, 0x04u8, 0x08u8, 0x08u8, 0x08u8); }
+    if c == '8' as u8 { return glyph_pack7(0x0Eu8, 0x11u8, 0x11u8, 0x0Eu8, 0x11u8, 0x11u8, 0x0Eu8); }
+    if c == '9' as u8 { return glyph_pack7(0x0Eu8, 0x11u8, 0x11u8, 0x0Fu8, 0x01u8, 0x01u8, 0x0Eu8); }
+
+    if c == 'A' as u8 { return glyph_pack7(0x0Eu8, 0x11u8, 0x11u8, 0x1Fu8, 0x11u8, 0x11u8, 0x11u8); }
+    if c == 'B' as u8 { return glyph_pack7(0x1Eu8, 0x11u8, 0x11u8, 0x1Eu8, 0x11u8, 0x11u8, 0x1Eu8); }
+    if c == 'C' as u8 { return glyph_pack7(0x0Eu8, 0x11u8, 0x10u8, 0x10u8, 0x10u8, 0x11u8, 0x0Eu8); }
+    if c == 'D' as u8 { return glyph_pack7(0x1Cu8, 0x12u8, 0x11u8, 0x11u8, 0x11u8, 0x12u8, 0x1Cu8); }
+    if c == 'E' as u8 { return glyph_pack7(0x1Fu8, 0x10u8, 0x10u8, 0x1Eu8, 0x10u8, 0x10u8, 0x1Fu8); }
+    if c == 'F' as u8 { return glyph_pack7(0x1Fu8, 0x10u8, 0x10u8, 0x1Eu8, 0x10u8, 0x10u8, 0x10u8); }
+    if c == 'G' as u8 { return glyph_pack7(0x0Eu8, 0x11u8, 0x10u8, 0x17u8, 0x11u8, 0x11u8, 0x0Fu8); }
+    if c == 'H' as u8 { return glyph_pack7(0x11u8, 0x11u8, 0x11u8, 0x1Fu8, 0x11u8, 0x11u8, 0x11u8); }
+    if c == 'I' as u8 { return glyph_pack7(0x1Fu8, 0x04u8, 0x04u8, 0x04u8, 0x04u8, 0x04u8, 0x1Fu8); }
+    if c == 'J' as u8 { return glyph_pack7(0x07u8, 0x02u8, 0x02u8, 0x02u8, 0x12u8, 0x12u8, 0x0Cu8); }
+    if c == 'K' as u8 { return glyph_pack7(0x11u8, 0x12u8, 0x14u8, 0x18u8, 0x14u8, 0x12u8, 0x11u8); }
+    if c == 'L' as u8 { return glyph_pack7(0x10u8, 0x10u8, 0x10u8, 0x10u8, 0x10u8, 0x10u8, 0x1Fu8); }
+    if c == 'M' as u8 { return glyph_pack7(0x11u8, 0x1Bu8, 0x15u8, 0x15u8, 0x11u8, 0x11u8, 0x11u8); }
+    if c == 'N' as u8 { return glyph_pack7(0x11u8, 0x11u8, 0x19u8, 0x15u8, 0x13u8, 0x11u8, 0x11u8); }
+    if c == 'O' as u8 { return glyph_pack7(0x0Eu8, 0x11u8, 0x11u8, 0x11u8, 0x11u8, 0x11u8, 0x0Eu8); }
+    if c == 'P' as u8 { return glyph_pack7(0x1Eu8, 0x11u8, 0x11u8, 0x1Eu8, 0x10u8, 0x10u8, 0x10u8); }
+    if c == 'Q' as u8 { return glyph_pack7(0x0Eu8, 0x11u8, 0x11u8, 0x11u8, 0x15u8, 0x12u8, 0x0Du8); }
+    if c == 'R' as u8 { return glyph_pack7(0x1Eu8, 0x11u8, 0x11u8, 0x1Eu8, 0x14u8, 0x12u8, 0x11u8); }
+    if c == 'S' as u8 { return glyph_pack7(0x0Fu8, 0x10u8, 0x10u8, 0x0Eu8, 0x01u8, 0x01u8, 0x1Eu8); }
+    if c == 'T' as u8 { return glyph_pack7(0x1Fu8, 0x04u8, 0x04u8, 0x04u8, 0x04u8, 0x04u8, 0x04u8); }
+    if c == 'U' as u8 { return glyph_pack7(0x11u8, 0x11u8, 0x11u8, 0x11u8, 0x11u8, 0x11u8, 0x0Eu8); }
+    if c == 'V' as u8 { return glyph_pack7(0x11u8, 0x11u8, 0x11u8, 0x11u8, 0x11u8, 0x0Au8, 0x04u8); }
+    if c == 'W' as u8 { return glyph_pack7(0x11u8, 0x11u8, 0x11u8, 0x15u8, 0x15u8, 0x15u8, 0x0Au8); }
+    if c == 'X' as u8 { return glyph_pack7(0x11u8, 0x11u8, 0x0Au8, 0x04u8, 0x0Au8, 0x11u8, 0x11u8); }
+    if c == 'Y' as u8 { return glyph_pack7(0x11u8, 0x11u8, 0x0Au8, 0x04u8, 0x04u8, 0x04u8, 0x04u8); }
+    if c == 'Z' as u8 { return glyph_pack7(0x1Fu8, 0x01u8, 0x02u8, 0x04u8, 0x08u8, 0x10u8, 0x1Fu8); }
+
+    return glyph_fallback_bits();
+}
+
 fn draw_glyph(ctx: &RenderCtx, x: i16, y: i16, glyph: &Glyph, color: &Color) void {
-    if glyph.code == 32u8 {
+    const bits: u64 = glyph_pattern_bits(glyph.code);
+    if glyph.code == 32u8 || bits == 0u64 {
         return;
     }
-    var w: u16 = glyph.width as u16;
-    var h: u16 = glyph.height as u16;
-    if glyph.width > 1 {
-        w = (glyph.width - 1) as u16;
-    }
-    if glyph.height > 1 {
-        h = (glyph.height - 1) as u16;
-    }
-    const outline: Color = Color{ r: color.r, g: color.g, b: color.b, a: color.a };
-    ctx.draw_rect(Rect{ x: x, y: y, w: w, h: h }, outline, 1);
-    if glyph.width > 2 && glyph.height > 2 {
-        const mid: Color = Color{ r: color.r, g: color.g, b: color.b, a: color.a };
-        ctx.draw_line(x + 1, y + glyph.height as i16 / 2, x + glyph.width as i16 - 2, y + glyph.height as i16 / 2, mid, 1);
+
+    var row: i32 = 0;
+    while row < glyph.height as i32 {
+        const row_bits: u8 = glyph_row(bits, row);
+        var col: i32 = 0;
+        while col < glyph.width as i32 {
+            const mask: u8 = 1u8 << (glyph.width as i32 - 1 - col);
+            if (row_bits & mask) != 0u8 {
+                ctx.draw_pixel(x + col as i16, y + row as i16, color[0]);
+            }
+            col = col + 1;
+        }
+        row = row + 1;
     }
 }
 
@@ -59,34 +241,44 @@ export fn font_default() Font {
 }
 
 export fn glyph_for_char(font: &Font, code: u8) Glyph {
+    const width: u8 = 5u8;
+    const height: u8 = 7u8;
     return Glyph{
         code: code,
-        width: font.glyph_width,
-        height: font.glyph_height,
+        width: width,
+        height: height,
         advance: (font.glyph_width as i32 + font.tracking as i32) as u8,
         offset_x: 0,
         offset_y: 0,
-        bitmap: null,
     };
 }
 
 export fn text_width(text: &const byte, len: usize, font: &Font) i16 {
-    _ = text;
-    if len == 0 {
+    const units: usize = glyph_display_units(text, len);
+    if units == 0usize {
         return 0;
     }
-    return ((font.glyph_width as i32 + font.tracking as i32) * len as i32 - font.tracking as i32) as i16;
+    return ((font.glyph_width as i32 + font.tracking as i32) * units as i32 - font.tracking as i32) as i16;
 }
 
 export fn draw_text(ctx: &RenderCtx, x: i16, y: i16, text: &const byte, len: usize, font: &Font, color: Color) void {
     var cursor: i16 = x;
     var i: usize = 0;
     while i < len {
-        const glyph: Glyph = glyph_for_char(font, text[i]);
+        const span: usize = utf8_span(text[i]);
+        var code: u8 = text[i];
+        if code >= 0x80u8 {
+            code = '?' as u8;
+        }
+        const glyph: Glyph = glyph_for_char(font, code);
         const advance: i16 = glyph.advance as i16;
         draw_glyph(ctx, cursor, y, &glyph, &color);
         cursor = cursor + advance;
-        i = i + 1;
+        if span <= 1usize || i + span > len {
+            i = i + 1usize;
+        } else {
+            i = i + span;
+        }
     }
     ctx.stats.text_ops = ctx.stats.text_ops + 1u32;
 }
