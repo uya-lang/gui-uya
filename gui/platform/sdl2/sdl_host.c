@@ -1,5 +1,6 @@
 #include <SDL2/SDL.h>
 #include <stdint.h>
+#include <dlfcn.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -37,6 +38,43 @@ enum {
 static int g_sdl_refcount = 0;
 static UyaGuiSimDisplay *g_active_display = NULL;
 static char g_last_error[256] = {0};
+static void *(*g_host_malloc_fn)(size_t) = NULL;
+static void *(*g_host_calloc_fn)(size_t, size_t) = NULL;
+static void *(*g_host_realloc_fn)(void *, size_t) = NULL;
+static void (*g_host_free_fn)(void *) = NULL;
+
+static void uya_gui_sim_init_host_allocators(void) {
+    if (g_host_malloc_fn != NULL && g_host_calloc_fn != NULL && g_host_realloc_fn != NULL && g_host_free_fn != NULL) {
+        return;
+    }
+
+    g_host_malloc_fn = (void *(*)(size_t))dlsym(RTLD_NEXT, "malloc");
+    g_host_calloc_fn = (void *(*)(size_t, size_t))dlsym(RTLD_NEXT, "calloc");
+    g_host_realloc_fn = (void *(*)(void *, size_t))dlsym(RTLD_NEXT, "realloc");
+    g_host_free_fn = (void (*)(void *))dlsym(RTLD_NEXT, "free");
+}
+
+static void *uya_gui_sim_host_malloc(size_t size) {
+    uya_gui_sim_init_host_allocators();
+    return g_host_malloc_fn != NULL ? g_host_malloc_fn(size) : NULL;
+}
+
+static void *uya_gui_sim_host_calloc(size_t nmemb, size_t size) {
+    uya_gui_sim_init_host_allocators();
+    return g_host_calloc_fn != NULL ? g_host_calloc_fn(nmemb, size) : NULL;
+}
+
+static void *uya_gui_sim_host_realloc(void *ptr, size_t size) {
+    uya_gui_sim_init_host_allocators();
+    return g_host_realloc_fn != NULL ? g_host_realloc_fn(ptr, size) : NULL;
+}
+
+static void uya_gui_sim_host_free(void *ptr) {
+    uya_gui_sim_init_host_allocators();
+    if (g_host_free_fn != NULL) {
+        g_host_free_fn(ptr);
+    }
+}
 
 static void uya_gui_sim_set_error(const char *message) {
     if (message == NULL || message[0] == '\0') {
@@ -96,7 +134,21 @@ static void uya_gui_sim_scale_point(const UyaGuiSimDisplay *display, int in_x, i
 }
 
 void *uya_gui_sim_sdl_display_open(int32_t width, int32_t height, int32_t scale, int32_t fullscreen, const uint8_t *title) {
+    uya_gui_sim_init_host_allocators();
     if (g_sdl_refcount == 0) {
+        if (g_host_malloc_fn == NULL || g_host_calloc_fn == NULL || g_host_realloc_fn == NULL || g_host_free_fn == NULL) {
+            uya_gui_sim_set_error("failed to resolve host allocator symbols");
+            return NULL;
+        }
+        if (SDL_SetMemoryFunctions(
+            uya_gui_sim_host_malloc,
+            uya_gui_sim_host_calloc,
+            uya_gui_sim_host_realloc,
+            uya_gui_sim_host_free
+        ) != 0) {
+            uya_gui_sim_set_error(SDL_GetError());
+            return NULL;
+        }
         if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) != 0) {
             uya_gui_sim_set_error(SDL_GetError());
             return NULL;
@@ -104,7 +156,7 @@ void *uya_gui_sim_sdl_display_open(int32_t width, int32_t height, int32_t scale,
     }
     g_sdl_refcount += 1;
 
-    UyaGuiSimDisplay *display = (UyaGuiSimDisplay *)calloc(1, sizeof(UyaGuiSimDisplay));
+    UyaGuiSimDisplay *display = (UyaGuiSimDisplay *)uya_gui_sim_host_calloc(1, sizeof(UyaGuiSimDisplay));
     if (display == NULL) {
         uya_gui_sim_set_error("calloc display failed");
         SDL_QuitSubSystem(SDL_INIT_VIDEO | SDL_INIT_EVENTS);
@@ -149,7 +201,7 @@ void *uya_gui_sim_sdl_display_open(int32_t width, int32_t height, int32_t scale,
     if (display->renderer == NULL) {
         uya_gui_sim_set_error(SDL_GetError());
         SDL_DestroyWindow(display->window);
-        free(display);
+        uya_gui_sim_host_free(display);
         g_sdl_refcount -= 1;
         if (g_sdl_refcount == 0) {
             SDL_Quit();
@@ -169,7 +221,7 @@ void *uya_gui_sim_sdl_display_open(int32_t width, int32_t height, int32_t scale,
         uya_gui_sim_set_error(SDL_GetError());
         SDL_DestroyRenderer(display->renderer);
         SDL_DestroyWindow(display->window);
-        free(display);
+        uya_gui_sim_host_free(display);
         g_sdl_refcount -= 1;
         if (g_sdl_refcount == 0) {
             SDL_Quit();
@@ -199,7 +251,7 @@ void uya_gui_sim_sdl_display_close(void *handle) {
     if (display->window != NULL) {
         SDL_DestroyWindow(display->window);
     }
-    free(display);
+    uya_gui_sim_host_free(display);
     if (g_sdl_refcount > 0) {
         g_sdl_refcount -= 1;
     }

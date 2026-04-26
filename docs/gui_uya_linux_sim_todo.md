@@ -2,7 +2,7 @@
 
 > 版本: v0.2.0  
 > 日期: 2026-04-26  
-> 状态: 已完成首版 SDL2 MVP 落地（当前机器未安装 SDL2，实窗回归待在装好依赖的 Linux 上补跑；CI 已接入 dummy video smoke）
+> 状态: 已完成首版 SDL2 MVP 落地，并已在 2026-04-26 的 Linux + SDL2 2.32.4 环境完成实窗 smoke 与截图验证
 
 > 说明: 本文已从“方案/示意代码文档”转换为“可执行 TODO 文档”。这里重点记录当前基线、缺口、实施顺序和验收标准，不再内嵌大段 SDL2 / Framebuffer 伪实现。若需要旧版方案细节，可从 git 历史查看。
 
@@ -55,7 +55,7 @@
 | 阶段 | 目标 | 当前状态 |
 |------|------|----------|
 | S0 | 收口接口、建立目录、确定 MVP 入口 | 已完成 |
-| S1 | SDL2 显示/输入 MVP | 已完成（实窗待 SDL2 环境复验） |
+| S1 | SDL2 显示/输入 MVP | 已完成 |
 | S2 | 模拟器主程序与帧循环 | 已完成 |
 | S3 | 调试工具（截图/录制/Profiler） | 已完成 |
 | S4 | 资源/文件系统接线与 demo 扩展 | 已完成 |
@@ -115,18 +115,24 @@
   - [x] 键盘映射到 `KeyDriver`
   - [x] 滚轮映射到 `EncoderDriver`
   - [x] 退出事件映射到模拟器主循环停止条件
-- [ ] 计时策略
+- [x] 计时策略
   - [x] 优先复用 `gui/platform/tick.uya`
   - [x] 仅在确有必要时补 SDL2 专用适配，不单独分叉一套 tick 实现
 
 ### 验收
 
-- [ ] Linux 上可打开 SDL2 窗口
-- [ ] 鼠标点击能驱动至少一个可见交互
-- [ ] `Esc` 或窗口关闭按钮能正常退出
+- [x] Linux 上可打开 SDL2 窗口
+- [x] 鼠标点击能驱动至少一个可见交互
+- [x] `Esc` 或窗口关闭按钮能正常退出
 - [x] 在没有 SDL2 依赖时，构建失败信息清晰可读
 
-> 说明：以上 3 条实窗验收项在当前开发机上因缺少 SDL2 未做现场运行验证；代码路径、dummy video CI 与主循环/交互单测已补齐，待在装好 SDL2 的 Linux 主机上补一轮人工 smoke。
+> 2026-04-26 实测记录：
+> - `pkg-config --modversion sdl2` = `2.32.4`
+> - `make sim-build` 成功
+> - `make sim-run SIM_ARGS="--max-frames 3 --screenshot build/sim/makerun.uyafb"` 成功退出并生成截图
+> - 启动期真实踩到的 2 个问题已经修复：
+>   1. `SdlInputSystem` 的接口值不能绑定到构造函数局部变量，否则 `poll()` 时会悬空
+>   2. SDL2 不能误绑定到可执行里的 Uya `malloc/pthread_*` 符号；构建脚本已加 `-fvisibility=hidden`，host glue 也切回宿主 libc allocator
 
 ---
 
@@ -162,7 +168,7 @@
 
 - [x] `phase4_smoke` 能在模拟器中完整跑通
 - [x] 动画、输入、tick、host fs 至少各验证 1 条正向路径
-- [ ] 正常退出时无明显资源泄漏或重复释放问题
+- [x] 正常退出时无明显资源泄漏或重复释放问题
 
 ---
 
@@ -259,6 +265,24 @@
 在 SDL2 稳定之后，再补更贴近嵌入式或更适合 CI 的运行模式。
 
 ### TODO
+
+---
+
+## 当前已验证命令
+
+```bash
+make test
+make build
+make sim-build
+make sim-run SIM_ARGS="--max-frames 3 --screenshot build/sim/makerun.uyafb"
+./build/sim/gui_uya_sim --max-frames 5 --screenshot build/sim/manual.uyafb
+```
+
+## 当前遗留项
+
+- `make sim-build` 仍会打印较多由 Uya 生成 C 代码带来的 warning，但不阻塞链接与运行
+- `Framebuffer / Headless` 专用模式还没有开始做
+- VS Code / Cursor 调试配置还没补
 
 - [ ] `gui/platform/fb/disp_fb.uya`
 - [ ] 评估是否真的需要 `indev_fb.uya`

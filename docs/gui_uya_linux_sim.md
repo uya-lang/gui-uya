@@ -6,7 +6,7 @@
 
 > 说明: 本文是 Linux 模拟器方案文档，不定义 Uya 语言语法。现行 Uya 语法以 `uya/docs/grammar_formal.md`、`uya/docs/uya.md` 和 `uya/tests/` 为准；本文中的导入、宿主 FFI 和调度片段主要用于表达方案结构。
 
-> 2026-04-26 实现更新：仓库里已经落下首版 SDL2 MVP。真实入口为 `gui/sim_main.uya`（为了让 Uya 模块根保持在 `gui/`），模拟器逻辑位于 `gui/sim/{runner,app,config}.uya`，SDL2 host glue 位于 `gui/platform/sdl2/sdl_host.c`。当前 CI 已通过 `SDL_VIDEODRIVER=dummy` 跑最小 smoke；若要在本地看到窗口，请先安装 SDL2 开发包后运行 `make sim-run`。
+> 2026-04-26 实现更新：仓库里已经落下首版 SDL2 MVP。真实入口为 `gui/sim_main.uya`（为了让 Uya 模块根保持在 `gui/`），模拟器逻辑位于 `gui/sim/{runner,app,config}.uya`，SDL2 host glue 位于 `gui/platform/sdl2/sdl_host.c`。当前 CI 已通过 `SDL_VIDEODRIVER=dummy` 跑最小 smoke；同一天也在本地 Linux + SDL2 2.32.4 完成了实窗 smoke，`make sim-run SIM_ARGS="--max-frames 3 --screenshot build/sim/makerun.uyafb"` 可成功退出并生成截图。
 
 ## 0. 当前落地状态
 
@@ -15,6 +15,9 @@
 - 已有调试工具：`gui/sim/{screenshot,profiler,recorder}.uya`
 - 已有无 SDL2 单测：`gui/tests/test_sim_app.uya`、`gui/tests/test_sim_tools.uya`
 - 已有 CI smoke：`.github/workflows/gui-phase0.yml` 会安装 `libsdl2-dev`，并在 dummy video 下跑 `make sim-run SIM_ARGS="--max-frames 2 --screenshot build/sim/ci.uyafb"`
+- 已有本地实机 smoke：
+  - `./build/sim/gui_uya_sim --max-frames 5 --screenshot build/sim/manual.uyafb`
+  - `make sim-run SIM_ARGS="--max-frames 3 --screenshot build/sim/makerun.uyafb"`
 
 ## 0.1 构建与运行
 
@@ -35,6 +38,12 @@ make sim-run SIM_ARGS="--demo phase6 --max-frames 120"
 # 打开调试 HUD / profiler
 make sim-debug
 ```
+
+## 0.1.1 已验证输出
+
+- `build/sim/manual.uyafb`
+- `build/sim/makerun.uyafb`
+- `build/sim/ci.uyafb`
 
 ## 0.2 运行参数
 
@@ -62,6 +71,18 @@ make sim-debug
   - `L` 读取并回放录制
   - `F11` 切换全屏
   - `1` / `6` 重新跑 `phase4_smoke` / `phase6_smoke`
+
+## 0.4 本次实机验证补到的兼容点
+
+- `SdlInputSystem` 里的 `IInputDev` 接口值必须在 `init()` 内绑定到 `self.touch/self.key/self.encoder`，不能引用构造函数的局部变量，否则第一次 `poll()` 就会读到悬空事件队列
+- SDL2 初始化期间不能误绑定到可执行里的 Uya `malloc/realloc/free/pthread_*` 符号
+  - `tools/build_gui_sim.sh` 现在会带 `-fvisibility=hidden`
+  - `gui/platform/sdl2/sdl_host.c` 会显式把 SDL2 内部内存分配切回宿主 libc allocator
+
+## 0.5 当前已知现象
+
+- `make sim-build` 仍会打印不少来自 Uya 生成 C 文件的 warning；当前不影响链接与运行
+- 截图目前是原始 framebuffer dump（`.uyafb`），还没有接 PNG/BMP 编码
 
 ---
 

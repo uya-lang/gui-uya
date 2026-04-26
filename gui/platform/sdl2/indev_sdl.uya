@@ -47,6 +47,12 @@ export struct SdlInputSystem {
     pointer_down: bool,
 
     fn init(self: &Self) void {
+        var touch_iface: IInputDev = self.touch;
+        var key_iface: IInputDev = self.key;
+        var encoder_iface: IInputDev = self.encoder;
+        self.touch_dev = touch_iface;
+        self.key_dev = key_iface;
+        self.encoder_dev = encoder_iface;
         self.manager = input_manager_new();
         _ = self.manager.attach(&self.touch_dev);
         _ = self.manager.attach(&self.key_dev);
@@ -133,20 +139,14 @@ export struct SdlInputSystem {
 }
 
 export fn sdl_input_system_new() SdlInputSystem {
-    var touch: TouchDriver = touch_driver_new();
-    var key: KeyDriver = key_driver_new();
-    var encoder: EncoderDriver = encoder_driver_new();
-    var touch_dev: IInputDev = touch;
-    var key_dev: IInputDev = key;
-    var encoder_dev: IInputDev = encoder;
     return SdlInputSystem{
         manager: input_manager_new(),
-        touch: touch,
-        key: key,
-        encoder: encoder,
-        touch_dev: touch_dev,
-        key_dev: key_dev,
-        encoder_dev: encoder_dev,
+        touch: touch_driver_new(),
+        key: key_driver_new(),
+        encoder: encoder_driver_new(),
+        touch_dev: touch_driver_new(),
+        key_dev: key_driver_new(),
+        encoder_dev: encoder_driver_new(),
         quit_requested: false,
         hover_pending: false,
         hover_point: POINT_ZERO,

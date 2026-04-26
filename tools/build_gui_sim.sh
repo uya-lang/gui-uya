@@ -39,12 +39,13 @@ read -r -a SDL_LIBS <<<"$SDL_LIBS_STR"
 "$UYA_BIN" build "$ROOT_DIR/gui/sim_main.uya" --c99 --no-split-c "$UYA_OPT" -o "$OUT_C"
 
 HOST_C="$ROOT_DIR/gui/platform/sdl2/sdl_host.c"
-"$CC_BIN" -std=c99 -Wall -Wextra -pedantic -g "$CC_OPT" \
+"$CC_BIN" -std=c99 -Wall -Wextra -pedantic -g "$CC_OPT" -fvisibility=hidden \
     "${SDL_CFLAGS[@]}" \
     "$OUT_C" \
     "$HOST_C" \
     -o "$OUT_BIN" \
     "${SDL_LIBS[@]}" \
+    -ldl \
     -lm
 
 echo "$OUT_BIN"
