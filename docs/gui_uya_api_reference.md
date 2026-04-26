@@ -366,28 +366,34 @@
 
 ## `gui/render/font.uya`
 
-- L16: `export const BITMAP_FONT_GLYPH_CAPACITY: i32 = 128;`
-- L17: `export const BITMAP_FONT_UNICODE_CAPACITY: i32 = 64;`
-- L18: `export const BITMAP_FONT_KERNING_CAPACITY: i32 = 64;`
-- L20: `export enum TextAlign {`
-- L26: `export enum FontBitmapFormat {`
-- L32: `export enum FontRenderKind {`
-- L43: `export struct Glyph {`
-- L53: `export struct GlyphLookupEntry {`
-- L58: `export struct GlyphLookupTable {`
-- L65: `export struct KerningPair {`
-- L71: `export struct Font {`
-- L91: `export struct BitmapFontAsset {`
-- L985: `export fn bitmap_font_asset_new() BitmapFontAsset {`
-- L1005: `export fn bitmap_font_load_bmfont(asset: &BitmapFontAsset, desc: &const byte, len: usize, bitmap_data: &const byte, bitmap_stride: u16) bool {`
-- L1109: `export fn font_system_default() Font {`
-- L1132: `export fn font_system_compact() Font {`
-- L1155: `export fn font_system_vector() Font {`
-- L1178: `export fn font_default() Font {`
-- L1182: `export fn glyph_for_char(font: &Font, code: u8) Glyph {`
-- L1186: `export fn text_width(text: &const byte, len: usize, font: &Font) i16 {`
-- L1190: `export fn draw_text(ctx: &RenderCtx, x: i16, y: i16, text: &const byte, len: usize, font: &Font, color: Color) void {`
-- L1216: `export fn draw_text_aligned(ctx: &RenderCtx, rect: Rect, text: &const byte, len: usize, font: &Font, color: Color, align: TextAlign) void {`
+- L17: `export const BITMAP_FONT_GLYPH_CAPACITY: i32 = 128;`
+- L18: `export const BITMAP_FONT_UNICODE_CAPACITY: i32 = 64;`
+- L19: `export const BITMAP_FONT_KERNING_CAPACITY: i32 = 64;`
+- L20: `export const TTF_POINT_CAPACITY: i32 = 2048;`
+- L21: `export const TTF_CONTOUR_CAPACITY: i32 = 256;`
+- L22: `export const TTF_EDGE_CAPACITY: i32 = 16384;`
+- L24: `export enum TextAlign {`
+- L30: `export enum FontBitmapFormat {`
+- L36: `export enum FontRenderKind {`
+- L48: `export struct Glyph {`
+- L58: `export struct GlyphLookupEntry {`
+- L63: `export struct GlyphLookupTable {`
+- L70: `export struct KerningPair {`
+- L76: `export struct Font {`
+- L97: `export struct BitmapFontAsset {`
+- L121: `export struct TtfFontAsset {`
+- L1418: `export fn ttf_font_asset_new() TtfFontAsset {`
+- L1715: `export fn ttf_font_load_memory(asset: &TtfFontAsset, name: &const byte, data: &const byte, len: usize, pixel_height: u16) bool {`
+- L1911: `export fn bitmap_font_asset_new() BitmapFontAsset {`
+- L1931: `export fn bitmap_font_load_bmfont(asset: &BitmapFontAsset, desc: &const byte, len: usize, bitmap_data: &const byte, bitmap_stride: u16) bool {`
+- L2036: `export fn font_system_default() Font {`
+- L2060: `export fn font_system_compact() Font {`
+- L2084: `export fn font_system_vector() Font {`
+- L2108: `export fn font_default() Font {`
+- L2112: `export fn glyph_for_char(font: &Font, code: u8) Glyph {`
+- L2116: `export fn text_width(text: &const byte, len: usize, font: &Font) i16 {`
+- L2120: `export fn draw_text(ctx: &RenderCtx, x: i16, y: i16, text: &const byte, len: usize, font: &Font, color: Color) void {`
+- L2146: `export fn draw_text_aligned(ctx: &RenderCtx, rect: Rect, text: &const byte, len: usize, font: &Font, color: Color, align: TextAlign) void {`
 
 ## `gui/render/gpu.uya`
 
@@ -618,7 +624,7 @@
 
 ## `gui/tests/test_render_assets.uya`
 
-- L34: `export const TEST_RENDER_ASSETS_MODULE: i32 = 1;`
+- L38: `export const TEST_RENDER_ASSETS_MODULE: i32 = 1;`
 
 ## `gui/tests/test_render_ctx.uya`
 
@@ -667,29 +673,29 @@
 - L34: `export const WIDGET_TYPE_GRID_VIEW: u32 = 0x1009u32;`
 - L35: `export const WIDGET_TYPE_CHART: u32 = 0x100Au32;`
 - L36: `export const WIDGET_TYPE_CANVAS: u32 = 0x100Bu32;`
-- L114: `export enum WidgetState {`
-- L123: `export enum WidgetOrientation {`
-- L128: `export interface IStyled {`
-- L134: `export interface IWidgetEventCallback {`
-- L138: `export interface IWidgetValueCallback {`
-- L142: `export interface IScrollable {`
-- L148: `export interface ISelectable {`
-- L155: `export struct AnimState {`
-- L160: `export struct WidgetEventSlot {`
-- L165: `export struct WidgetValueSlot {`
-- L170: `export struct Widget : IStyled {`
-- L329: `export fn widget_text_len(text: &const byte) usize {`
-- L336: `export fn widget_new(name_ptr: &const byte, type_tag: u32, clickable: bool, focusable: bool) Widget {`
-- L354: `export fn widget_bind_callbacks(base: &GuiObj, render_cb: &IGuiRenderCallback, input_cb: &IGuiInputCallback, user_data: &void) &GuiObj {`
-- L361: `export fn widget_font(style: &Style) &Font {`
-- L369: `export fn widget_text_color(style: &Style, state: WidgetState) Color {`
-- L384: `export fn widget_state_bg(style: &Style, state: WidgetState) Color {`
-- L401: `export fn widget_inner_rect(widget: &Widget) Rect {`
-- L423: `export fn widget_draw_surface(widget: &Widget, ctx: &RenderCtx) Rect {`
-- L450: `export fn widget_render_children(base: &GuiObj, ctx: &RenderCtx) void {`
-- L460: `export fn widget_measure_text(text: &const byte, font: &Font) i16 {`
-- L468: `export fn widget_clone_color(color: Color) Color {`
-- L472: `export fn widget_default_font() Font {`
+- L115: `export enum WidgetState {`
+- L124: `export enum WidgetOrientation {`
+- L129: `export interface IStyled {`
+- L135: `export interface IWidgetEventCallback {`
+- L139: `export interface IWidgetValueCallback {`
+- L143: `export interface IScrollable {`
+- L149: `export interface ISelectable {`
+- L156: `export struct AnimState {`
+- L161: `export struct WidgetEventSlot {`
+- L166: `export struct WidgetValueSlot {`
+- L171: `export struct Widget : IStyled {`
+- L330: `export fn widget_text_len(text: &const byte) usize {`
+- L337: `export fn widget_new(name_ptr: &const byte, type_tag: u32, clickable: bool, focusable: bool) Widget {`
+- L355: `export fn widget_bind_callbacks(base: &GuiObj, render_cb: &IGuiRenderCallback, input_cb: &IGuiInputCallback, user_data: &void) &GuiObj {`
+- L362: `export fn widget_font(style: &Style) &Font {`
+- L370: `export fn widget_text_color(style: &Style, state: WidgetState) Color {`
+- L385: `export fn widget_state_bg(style: &Style, state: WidgetState) Color {`
+- L402: `export fn widget_inner_rect(widget: &Widget) Rect {`
+- L424: `export fn widget_draw_surface(widget: &Widget, ctx: &RenderCtx) Rect {`
+- L451: `export fn widget_render_children(base: &GuiObj, ctx: &RenderCtx) void {`
+- L461: `export fn widget_measure_text(text: &const byte, font: &Font) i16 {`
+- L469: `export fn widget_clone_color(color: Color) Color {`
+- L473: `export fn widget_default_font() Font {`
 
 ## `gui/widget/btn.uya`
 

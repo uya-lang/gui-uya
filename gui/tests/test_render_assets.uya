@@ -10,6 +10,8 @@ use render.ctx.ctx_pixel;
 use render.ctx.render_ctx_new;
 use render.font.BitmapFontAsset;
 use render.font.Font;
+use render.font.Glyph;
+use render.font.TtfFontAsset;
 use render.font.bitmap_font_asset_new;
 use render.font.bitmap_font_load_bmfont;
 use render.font.TextAlign;
@@ -18,7 +20,10 @@ use render.font.draw_text_aligned;
 use render.font.font_default;
 use render.font.font_system_compact;
 use render.font.font_system_vector;
+use render.font.glyph_for_char;
 use render.font.text_width;
+use render.font.ttf_font_asset_new;
+use render.font.ttf_font_load_memory;
 use render.img.ImageData;
 use render.img.draw_image;
 use render.img.draw_image_clipped;
@@ -31,6 +36,7 @@ use std.testing.assert_eq_bool;
 use std.testing.assert_eq_i32;
 
 export const TEST_RENDER_ASSETS_MODULE: i32 = 1;
+const TEST_DEJAVU_TTF_BYTES: &[const byte] = @embed("../render/DejaVuSans.ttf");
 
 test "image draw and cache get work" {
     var dst_bytes: [byte: 256] = [];
@@ -160,4 +166,38 @@ test "vector system font rasterizes strokes" {
     try assert_eq_bool(ctx.stats.text_ops > 0u32, true);
     try assert_eq_bool(ctx.stats.line_ops > 0u32, true);
     try assert_eq_bool(ctx_pixel(&ctx, 3, 0) == white_expect, true);
+}
+
+test "ttf font asset loads and renders outlines in pure uya path" {
+    var asset: TtfFontAsset = ttf_font_asset_new();
+    try assert_eq_bool(
+        ttf_font_load_memory(&asset, "DejaVuSans", TEST_DEJAVU_TTF_BYTES.ptr, TEST_DEJAVU_TTF_BYTES.len, 18u16),
+        true
+    );
+
+    const glyph_a: Glyph = glyph_for_char(&asset.font, 'A' as u8);
+    try assert_eq_bool(glyph_a.width > 0u8, true);
+    try assert_eq_bool(text_width("AV", 2usize, &asset.font) < text_width("AA", 2usize, &asset.font), true);
+
+    var bytes: [byte: 4096] = [];
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 32, 32, 128, PixelFormat.ARGB8888));
+    ctx.clear(Color{ r: 0, g: 0, b: 0, a: 255 });
+    draw_text(&ctx, 1, 4, "AV0?", 4usize, &asset.font, Color{ r: 255, g: 255, b: 255, a: 255 });
+
+    var lit_pixels: i32 = 0;
+    var py: i32 = 0;
+    while py < 24 {
+        var px: i32 = 0;
+        while px < 28 {
+            const sampled: Color = ctx_pixel(&ctx, px as i16, py as i16);
+            if sampled.r > 0u8 {
+                lit_pixels = lit_pixels + 1;
+            }
+            px = px + 1;
+        }
+        py = py + 1;
+    }
+
+    try assert_eq_bool(ctx.stats.text_ops > 0u32, true);
+    try assert_eq_bool(lit_pixels > 40, true);
 }

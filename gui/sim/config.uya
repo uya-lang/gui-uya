@@ -63,7 +63,7 @@ export fn sim_config_default() SimConfig {
         demo: SimDemoKind.Phase4,
         width: 320,
         height: 240,
-        scale: 2,
+        scale: 3,
         fullscreen: false,
         hud_enabled: true,
         show_help: false,

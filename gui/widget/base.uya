@@ -53,6 +53,7 @@ var _widget_default_font: Font = Font{
     bitmap_format: FontBitmapFormat.None,
     render_kind: FontRenderKind.BuiltinBitmap,
     builtin_cjk: false,
+    backend: null,
 };
 
 fn widget_default_font_ref() &Font {

@@ -56,7 +56,7 @@ make sim-fb-run
 ## 0.2 运行参数
 
 - `--demo phase4|phase6`
-- `--width N --height N --scale N`
+- `--width N --height N --scale N`（默认 `scale=3`）
 - `--fullscreen | --windowed`
 - `--root PATH`
 - `--title TEXT`

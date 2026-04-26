@@ -513,6 +513,9 @@
 - [x] 将当前几何占位字形替换为真实字库渲染
   - [x] 默认字体已支持 ASCII `5x7`、常用 CJK `8x8`、BMFont Alpha atlas 与简化矢量描边回退
   - [x] 已补 `kerning`、BMFont 解析、系统字体变体与专项渲染回归
+  - [x] 已补 Uya 侧 TTF 运行时链路：`cmap4/cmap12`、`head/hhea/hmtx/maxp/loca/glyf/kern` 解析与 outline 扫描转换
+  - [x] SDL2 模拟器文本显示继续复用 Uya framebuffer，不依赖 `SDL_ttf`
+  - [ ] 后续增强项：复合字形、CFF/OTF、hinting 与更高性能 glyph cache
 
 #### Day 4: 抗锯齿与效果
 - [ ] Alpha 混合优化
