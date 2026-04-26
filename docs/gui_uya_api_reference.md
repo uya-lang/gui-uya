@@ -25,13 +25,13 @@
 - L440: `export fn anim_value_f32(value: f32) AnimValue {`
 - L444: `export fn anim_value_color(value: Color) AnimValue {`
 
-## `gui/bench_suite.uya`
-
-- L5: `export fn main() i32 {`
-
 ## `gui/benchmarks/core_bench.uya`
 
 - L306: `export fn run_core_bench() i32 {`
+
+## `gui/bench_suite.uya`
+
+- L5: `export fn main() i32 {`
 
 ## `gui/core/bitmap.uya`
 
@@ -57,6 +57,11 @@
 - L34: `export struct DirtyRegionView {`
 - L39: `export struct DirtyRegion {`
 - L237: `export fn dirty_region_new() DirtyRegion {`
+
+## `gui/core/event_dispatch.uya`
+
+- L35: `export struct EventDispatcher {`
+- L232: `export fn event_dispatcher_new() EventDispatcher {`
 
 ## `gui/core/event.uya`
 
@@ -84,10 +89,20 @@
 - L424: `export fn event_queue_new() EventQueue {`
 - L434: `export fn gesture_detector_new() GestureDetector {`
 
-## `gui/core/event_dispatch.uya`
+## `gui/core/obj_pool.uya`
 
-- L35: `export struct EventDispatcher {`
-- L232: `export fn event_dispatcher_new() EventDispatcher {`
+- L1: `export const OBJ_POOL_CAPACITY: i32 = 128;`
+- L5: `export enum ObjSlotState {`
+- L11: `export struct ObjPoolIndices {`
+- L16: `export struct ObjPool<T: IGuiObj> {`
+- L98: `export fn obj_pool_new<T: IGuiObj>() ObjPool<T> {`
+
+## `gui/core/obj_tree.uya`
+
+- L7: `export const OBJ_TREE_MAX_PATH: i32 = 64;`
+- L9: `export struct BubblePath {`
+- L22: `export struct ObjTree {`
+- L201: `export fn obj_tree_new() ObjTree {`
 
 ## `gui/core/obj.uya`
 
@@ -108,21 +123,6 @@
 - L488: `export fn gui_obj_get(idx: i32) &GuiObj {`
 - L499: `export fn gui_obj_unregister(idx: i32) void {`
 - L510: `export fn gui_obj_reset_registry() void {`
-
-## `gui/core/obj_pool.uya`
-
-- L1: `export const OBJ_POOL_CAPACITY: i32 = 128;`
-- L5: `export enum ObjSlotState {`
-- L11: `export struct ObjPoolIndices {`
-- L16: `export struct ObjPool<T: IGuiObj> {`
-- L98: `export fn obj_pool_new<T: IGuiObj>() ObjPool<T> {`
-
-## `gui/core/obj_tree.uya`
-
-- L7: `export const OBJ_TREE_MAX_PATH: i32 = 64;`
-- L9: `export struct BubblePath {`
-- L22: `export struct ObjTree {`
-- L201: `export fn obj_tree_new() ObjTree {`
 
 ## `gui/core/point.uya`
 
@@ -283,12 +283,6 @@
 - L123: `export fn fb_display_new() FbDisplay {`
 - L133: `export fn fb_display_last_error() &const byte {`
 
-## `gui/platform/fb/indev_fb.uya`
-
-- L22: `export struct FbInputSystem {`
-- L96: `export fn fb_input_system_new() FbInputSystem {`
-- L111: `export fn fb_input_last_error() &const byte {`
-
 ## `gui/platform/fb/indev_fb_common.uya`
 
 - L7: `export const FB_EVT_NONE: u8 = 0u8;`
@@ -302,6 +296,12 @@
 - L24: `export fn fb_host_event_none() FbHostEvent {`
 - L35: `export fn fb_feed_host_event(`
 - L86: `export fn fb_hover_point_default() Point {`
+
+## `gui/platform/fb/indev_fb.uya`
+
+- L22: `export struct FbInputSystem {`
+- L96: `export fn fb_input_system_new() FbInputSystem {`
+- L111: `export fn fb_input_last_error() &const byte {`
 
 ## `gui/platform/indev.uya`
 
@@ -372,28 +372,37 @@
 - L20: `export const TTF_POINT_CAPACITY: i32 = 2048;`
 - L21: `export const TTF_CONTOUR_CAPACITY: i32 = 256;`
 - L22: `export const TTF_EDGE_CAPACITY: i32 = 16384;`
-- L24: `export enum TextAlign {`
-- L30: `export enum FontBitmapFormat {`
-- L36: `export enum FontRenderKind {`
-- L48: `export struct Glyph {`
-- L58: `export struct GlyphLookupEntry {`
-- L63: `export struct GlyphLookupTable {`
-- L70: `export struct KerningPair {`
-- L76: `export struct Font {`
-- L97: `export struct BitmapFontAsset {`
-- L121: `export struct TtfFontAsset {`
-- L1418: `export fn ttf_font_asset_new() TtfFontAsset {`
-- L1715: `export fn ttf_font_load_memory(asset: &TtfFontAsset, name: &const byte, data: &const byte, len: usize, pixel_height: u16) bool {`
-- L1911: `export fn bitmap_font_asset_new() BitmapFontAsset {`
-- L1931: `export fn bitmap_font_load_bmfont(asset: &BitmapFontAsset, desc: &const byte, len: usize, bitmap_data: &const byte, bitmap_stride: u16) bool {`
-- L2036: `export fn font_system_default() Font {`
-- L2060: `export fn font_system_compact() Font {`
-- L2084: `export fn font_system_vector() Font {`
-- L2108: `export fn font_default() Font {`
-- L2112: `export fn glyph_for_char(font: &Font, code: u8) Glyph {`
-- L2116: `export fn text_width(text: &const byte, len: usize, font: &Font) i16 {`
-- L2120: `export fn draw_text(ctx: &RenderCtx, x: i16, y: i16, text: &const byte, len: usize, font: &Font, color: Color) void {`
-- L2146: `export fn draw_text_aligned(ctx: &RenderCtx, rect: Rect, text: &const byte, len: usize, font: &Font, color: Color, align: TextAlign) void {`
+- L23: `export const TTF_COMPOSITE_DEPTH_MAX: i32 = 8;`
+- L24: `export const TTF_CACHE_ENTRY_CAPACITY: i32 = 128;`
+- L25: `export const TTF_CACHE_SLOT_DIM: i32 = 64;`
+- L26: `export const TTF_CACHE_SLOT_BYTES: i32 = TTF_CACHE_SLOT_DIM * TTF_CACHE_SLOT_DIM;`
+- L27: `export const TTF_CACHE_STORAGE_BYTES: i32 = TTF_CACHE_ENTRY_CAPACITY * TTF_CACHE_SLOT_BYTES;`
+- L29: `export enum TextAlign {`
+- L35: `export enum FontBitmapFormat {`
+- L41: `export enum FontRenderKind {`
+- L53: `export struct Glyph {`
+- L63: `export struct GlyphLookupEntry {`
+- L68: `export struct GlyphLookupTable {`
+- L75: `export struct KerningPair {`
+- L81: `export struct Font {`
+- L102: `export struct BitmapFontAsset {`
+- L148: `export struct TtfFontAsset {`
+- L1550: `export fn ttf_cache_reset() void {`
+- L1572: `export fn ttf_cache_hit_count() u32 {`
+- L1576: `export fn ttf_cache_miss_count() u32 {`
+- L1649: `export fn ttf_font_set_hinting(asset: &TtfFontAsset, enabled: bool) void {`
+- L1736: `export fn ttf_font_asset_new() TtfFontAsset {`
+- L2029: `export fn ttf_font_load_memory(asset: &TtfFontAsset, name: &const byte, data: &const byte, len: usize, pixel_height: u16) bool {`
+- L2225: `export fn bitmap_font_asset_new() BitmapFontAsset {`
+- L2245: `export fn bitmap_font_load_bmfont(asset: &BitmapFontAsset, desc: &const byte, len: usize, bitmap_data: &const byte, bitmap_stride: u16) bool {`
+- L2350: `export fn font_system_default() Font {`
+- L2374: `export fn font_system_compact() Font {`
+- L2398: `export fn font_system_vector() Font {`
+- L2422: `export fn font_default() Font {`
+- L2426: `export fn glyph_for_char(font: &Font, code: u8) Glyph {`
+- L2430: `export fn text_width(text: &const byte, len: usize, font: &Font) i16 {`
+- L2434: `export fn draw_text(ctx: &RenderCtx, x: i16, y: i16, text: &const byte, len: usize, font: &Font, color: Color) void {`
+- L2460: `export fn draw_text_aligned(ctx: &RenderCtx, rect: Rect, text: &const byte, len: usize, font: &Font, color: Color, align: TextAlign) void {`
 
 ## `gui/render/gpu.uya`
 
@@ -497,6 +506,10 @@
 
 - L3: `export fn sim_entry() i32 {`
 
+## `gui/sim_main.uya`
+
+- L5: `export fn main() i32 {`
+
 ## `gui/sim/profiler.uya`
 
 - L3: `export struct ProfileStat {`
@@ -528,10 +541,6 @@
 - L315: `export fn screenshot_write_bmp(path: &const byte, fb: &FrameBuffer) !usize {`
 - L380: `export fn screenshot_write_raw(path: &const byte, fb: &FrameBuffer) !usize {`
 - L412: `export fn screenshot_write(path: &const byte, fb: &FrameBuffer) !usize {`
-
-## `gui/sim_main.uya`
-
-- L5: `export fn main() i32 {`
 
 ## `gui/style/prop.uya`
 
@@ -582,13 +591,13 @@
 
 - L8: `export const TEST_DIRTY_REGION_MODULE: i32 = 1;`
 
-## `gui/tests/test_event.uya`
-
-- L17: `export const TEST_EVENT_MODULE: i32 = 1;`
-
 ## `gui/tests/test_event_dispatch.uya`
 
 - L20: `export const TEST_EVENT_DISPATCH_MODULE: i32 = 1;`
+
+## `gui/tests/test_event.uya`
+
+- L17: `export const TEST_EVENT_MODULE: i32 = 1;`
 
 ## `gui/tests/test_input_dev.uya`
 
@@ -624,7 +633,7 @@
 
 ## `gui/tests/test_render_assets.uya`
 
-- L38: `export const TEST_RENDER_ASSETS_MODULE: i32 = 1;`
+- L42: `export const TEST_RENDER_ASSETS_MODULE: i32 = 1;`
 
 ## `gui/tests/test_render_ctx.uya`
 

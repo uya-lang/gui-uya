@@ -23,7 +23,11 @@ use render.font.font_system_vector;
 use render.font.glyph_for_char;
 use render.font.text_width;
 use render.font.ttf_font_asset_new;
+use render.font.ttf_cache_hit_count;
+use render.font.ttf_cache_miss_count;
+use render.font.ttf_cache_reset;
 use render.font.ttf_font_load_memory;
+use render.font.ttf_font_set_hinting;
 use render.img.ImageData;
 use render.img.draw_image;
 use render.img.draw_image_clipped;
@@ -169,6 +173,7 @@ test "vector system font rasterizes strokes" {
 }
 
 test "ttf font asset loads and renders outlines in pure uya path" {
+    ttf_cache_reset();
     var asset: TtfFontAsset = ttf_font_asset_new();
     try assert_eq_bool(
         ttf_font_load_memory(&asset, "DejaVuSans", TEST_DEJAVU_TTF_BYTES.ptr, TEST_DEJAVU_TTF_BYTES.len, 18u16),
@@ -200,4 +205,85 @@ test "ttf font asset loads and renders outlines in pure uya path" {
 
     try assert_eq_bool(ctx.stats.text_ops > 0u32, true);
     try assert_eq_bool(lit_pixels > 40, true);
+}
+
+test "ttf composite glyphs and cache work" {
+    ttf_cache_reset();
+    var asset: TtfFontAsset = ttf_font_asset_new();
+    try assert_eq_bool(
+        ttf_font_load_memory(&asset, "DejaVuSans", TEST_DEJAVU_TTF_BYTES.ptr, TEST_DEJAVU_TTF_BYTES.len, 20u16),
+        true
+    );
+
+    var bytes_a: [byte: 4096] = [];
+    var bytes_b: [byte: 4096] = [];
+    var bytes_c: [byte: 4096] = [];
+    var ctx_a: RenderCtx = render_ctx_new(framebuffer_new(&bytes_a[0], 32, 32, 128, PixelFormat.ARGB8888));
+    var ctx_b: RenderCtx = render_ctx_new(framebuffer_new(&bytes_b[0], 32, 32, 128, PixelFormat.ARGB8888));
+    var ctx_c: RenderCtx = render_ctx_new(framebuffer_new(&bytes_c[0], 32, 32, 128, PixelFormat.ARGB8888));
+    ctx_a.clear(Color{ r: 0, g: 0, b: 0, a: 255 });
+    ctx_b.clear(Color{ r: 0, g: 0, b: 0, a: 255 });
+    ctx_c.clear(Color{ r: 0, g: 0, b: 0, a: 255 });
+
+    draw_text(&ctx_a, 1, 3, "Ä", 2usize, &asset.font, Color{ r: 255, g: 255, b: 255, a: 255 });
+    try assert_eq_bool(ttf_cache_miss_count() > 0u32, true);
+    draw_text(&ctx_b, 1, 3, "Ä", 2usize, &asset.font, Color{ r: 255, g: 255, b: 255, a: 255 });
+    try assert_eq_bool(ttf_cache_hit_count() > 0u32, true);
+    draw_text(&ctx_c, 1, 3, "A", 1usize, &asset.font, Color{ r: 255, g: 255, b: 255, a: 255 });
+
+    var composite_lit: i32 = 0;
+    var base_lit: i32 = 0;
+    var y3: i32 = 0;
+    while y3 < 24 {
+        var x: i32 = 0;
+        while x < 24 {
+            if ctx_pixel(&ctx_b, x as i16, y3 as i16).r > 0u8 {
+                composite_lit = composite_lit + 1;
+            }
+            if ctx_pixel(&ctx_c, x as i16, y3 as i16).r > 0u8 {
+                base_lit = base_lit + 1;
+            }
+            x = x + 1;
+        }
+        y3 = y3 + 1;
+    }
+    try assert_eq_bool(composite_lit > base_lit, true);
+}
+
+test "ttf hinting toggle changes small glyph rasterization" {
+    var hinted_asset: TtfFontAsset = ttf_font_asset_new();
+    var plain_asset: TtfFontAsset = ttf_font_asset_new();
+    try assert_eq_bool(
+        ttf_font_load_memory(&hinted_asset, "DejaVuSans", TEST_DEJAVU_TTF_BYTES.ptr, TEST_DEJAVU_TTF_BYTES.len, 11u16),
+        true
+    );
+    try assert_eq_bool(
+        ttf_font_load_memory(&plain_asset, "DejaVuSans", TEST_DEJAVU_TTF_BYTES.ptr, TEST_DEJAVU_TTF_BYTES.len, 11u16),
+        true
+    );
+    ttf_font_set_hinting(&plain_asset, false);
+
+    var hinted_bytes: [byte: 1024] = [];
+    var plain_bytes: [byte: 1024] = [];
+    var hinted_ctx: RenderCtx = render_ctx_new(framebuffer_new(&hinted_bytes[0], 16, 16, 64, PixelFormat.ARGB8888));
+    var plain_ctx: RenderCtx = render_ctx_new(framebuffer_new(&plain_bytes[0], 16, 16, 64, PixelFormat.ARGB8888));
+    hinted_ctx.clear(Color{ r: 0, g: 0, b: 0, a: 255 });
+    plain_ctx.clear(Color{ r: 0, g: 0, b: 0, a: 255 });
+
+    draw_text(&hinted_ctx, 1, 2, "H", 1usize, &hinted_asset.font, Color{ r: 255, g: 255, b: 255, a: 255 });
+    draw_text(&plain_ctx, 1, 2, "H", 1usize, &plain_asset.font, Color{ r: 255, g: 255, b: 255, a: 255 });
+
+    var pixel_diff: i32 = 0;
+    var py2: i32 = 0;
+    while py2 < 16 {
+        var px2: i32 = 0;
+        while px2 < 16 {
+            if ctx_pixel(&hinted_ctx, px2 as i16, py2 as i16) != ctx_pixel(&plain_ctx, px2 as i16, py2 as i16) {
+                pixel_diff = pixel_diff + 1;
+            }
+            px2 = px2 + 1;
+        }
+        py2 = py2 + 1;
+    }
+    try assert_eq_bool(pixel_diff > 0, true);
 }
