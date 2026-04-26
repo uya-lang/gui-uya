@@ -18,17 +18,18 @@
 | Phase 3: 组件库 | 已实现（最小可编译/可测试基线） | 3 周 | - |
 | Phase 4: 高级特性 | 已实现（最小可编译/可测试基线） | 2 周 | - |
 | Phase 5: 优化与测试 | 基本完成（仓库内可验证项已完成；实机兼容待硬件） | 3 周 | - |
-| Phase 6: 文档与示例 | 未开始（已有 `phase0` / `phase1` smoke 示例） | 2 周 | - |
+| Phase 6: 文档与示例 | 进行中（文档/示例基线已完成，发布动作待收尾） | 2 周 | - |
 | **总计** | | **20 周** | |
 
 ## 当前实现快照
 
 - 2026-04-26 当前工作区已完成 Phase 4 最小基线: 在 Phase 3 组件库基础上，新增 `anim/{easing,tween,timeline}.uya`、`platform/tick.uya`、`res/fs.uya`，并增强 `platform/{disp,indev}.uya`、`res/cache.uya` 与 `widget/page.uya`，补齐页面导航、资源异步入口、输入校准/管理与平台 profile。
-- 2026-04-26 当前 `make test` / `make build` / `make bench` / `make bench-report` 可用；默认 smoke 入口已切换为 `gui/phase4_smoke.uya`，对应 `examples/phase4_smoke.uya`、`tests/test_anim.uya` 与 `tests/test_phase4_io.uya` 已接入。
+- 2026-04-26 当前 `make test` / `make build` / `make bench` / `make bench-report` / `make docs-api` 可用；默认 smoke 入口已切换为 `gui/phase6_smoke.uya`，对应 `examples/phase6_smoke.uya`、`tests/test_phase6_examples.uya` 与 Phase 4/5/6 demo 已接入。
 - 2026-04-26 已完成 Phase 5 仓库内闭环: 优化 `core/dirty_region.uya`、`render/{batch,gpu,zerocopy}.uya` 与 `res/cache.uya`，新增 `tests/test_phase5_runtime.uya`、CI benchmark、`build/phase5_bench.txt` 与 [gui_uya_phase5_report.md](./gui_uya_phase5_report.md)。
+- 2026-04-26 已完成 Phase 6 第一轮仓库内闭环: 新增 `phase6_smoke`、`tests/test_phase6_examples.uya`、`examples/demo_{clock,music,settings,dashboard,game,perf}.uya`，补齐快速入门/API 索引/主题/性能/移植/架构文档，并新增 [gui_uya_phase6_report.md](./gui_uya_phase6_report.md)。
 - Phase 1 已落地模块仍完整可见: `style/*`、`theme`、`event_dispatch`、`platform/indev`、`layout/*`、`dirty_region`、`benchmarks/core_bench.uya`、`examples/phase1_smoke.uya`。
 - 以下 Phase 2 条目中的 `[x]` 表示“代码/接口已经写出或已有测试草案”，不代表当前工作区已经恢复绿色构建。
-- 仍未开始或明显不足: 真实字体/图片解码链路、硬件 GPU / DMA 后端实装、与 LVGL 的对比基准、目标板/显示实机兼容验证。
+- 仍未开始或明显不足: 真实字体/图片解码链路、硬件 GPU / DMA 后端实装、与 LVGL 的对比基准、目标板/显示实机兼容验证、正式发布动作。
 
 ---
 
@@ -937,44 +938,46 @@
 
 ## Phase 6: 文档与示例 (Week 19-20)
 
+> 当前状态: 已完成当前仓库内可直接落地的文档、示例与演示基线，包含快速入门、API 索引生成、主题/性能/移植/架构文档，以及 6 个 demo 与 `phase6_smoke` 聚合入口。正式发布动作与硬件验证仍保留未完成。
+
 ### Week 19: 文档完善
 
 #### Day 1-2: API 文档
-- [ ] 自动生成 API 文档
+- [x] 自动生成 API 文档
 - [ ] 每个公共函数文档注释
-- [ ] 使用示例代码
-- [ ] 类型说明
+- [x] 使用示例代码
+- [x] 类型说明
 
 #### Day 3-4: 开发指南
-- [ ] 快速入门指南
-- [ ] 自定义组件教程
-- [ ] 主题定制指南
-- [ ] 性能优化指南
-- [ ] 移植指南
+- [x] 快速入门指南
+- [x] 自定义组件教程
+- [x] 主题定制指南
+- [x] 性能优化指南
+- [x] 移植指南
 
 #### Day 5: 架构文档
-- [ ] 系统架构图
-- [ ] 数据流图
-- [ ] 模块依赖图
-- [ ] 内存布局图
+- [x] 系统架构图
+- [x] 数据流图
+- [x] 模块依赖图
+- [x] 内存布局图
 
 ### Week 20: 示例与发布
 
 #### Day 1-3: 示例应用
-- [ ] `examples/demo_clock.uya` - 时钟应用
-- [ ] `examples/demo_music.uya` - 音乐播放器
-- [ ] `examples/demo_settings.uya` - 设置界面
-- [ ] `examples/demo_dashboard.uya` - 数据仪表板
-- [ ] `examples/demo_game.uya` - 简单游戏
+- [x] `examples/demo_clock.uya` - 时钟应用
+- [x] `examples/demo_music.uya` - 音乐播放器
+- [x] `examples/demo_settings.uya` - 设置界面
+- [x] `examples/demo_dashboard.uya` - 数据仪表板
+- [x] `examples/demo_game.uya` - 简单游戏
 
 #### Day 4: 性能演示
-- [ ] 帧率计数器
-- [ ] 内存使用显示
-- [ ] 渲染统计
+- [x] 帧率计数器
+- [x] 内存使用显示
+- [x] 渲染统计
 
 #### Day 5: 发布准备
 - [ ] 版本标记 v1.0.0
-- [ ] 发布说明
+- [x] 发布说明
 - [ ] 二进制分发
 - [ ] 社区公告
 
@@ -983,9 +986,9 @@
 ## 持续集成与质量保障
 
 ### 自动化测试
-- [ ] 每次提交自动运行单元测试
-- [ ] 每晚集成测试
-- [ ] 每周性能基准
+- [x] 每次提交自动运行单元测试
+- [x] 每晚集成测试
+- [x] 每周性能基准
 - [ ] 代码覆盖率报告
 
 ### 代码质量
@@ -995,10 +998,10 @@
 - [ ] API 兼容性检查
 
 ### 性能监控
-- [ ] 帧率追踪
-- [ ] 内存使用追踪
-- [ ] 渲染时间分析
-- [ ] 回归检测
+- [x] 帧率追踪
+- [x] 内存使用追踪
+- [x] 渲染时间分析
+- [x] 回归检测
 
 ---
 

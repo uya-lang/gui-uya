@@ -1,0 +1,70 @@
+use core.color.Color;
+use platform.disp.PixelFormat;
+use platform.disp.framebuffer_new;
+use render.ctx.RenderCtx;
+use render.ctx.render_ctx_new;
+use style.StyleProp;
+use widget.btn.Button;
+use widget.lbl.Label;
+use widget.list.ListView;
+use widget.page.Page;
+use widget.panel.Panel;
+use widget.slider.Slider;
+
+export fn run_demo_music() i32 {
+    var bytes: [byte: 32768] = [];
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 96, 80, 384, PixelFormat.ARGB8888));
+    ctx.clear(Color{ r: 247, g: 244, b: 255, a: 255 });
+
+    var page: Page = Page.new("Music");
+    page.widget.size(96, 80);
+    page.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 247, g: 244, b: 255, a: 255 });
+
+    var hero: Panel = Panel.new();
+    hero.widget.at(4, 4);
+    hero.widget.size(88, 34);
+
+    var title: Label = Label.new("Now Playing");
+    title.widget.at(8, 6);
+    title.widget.size(72, 10);
+    title.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 76, g: 29, b: 149, a: 255 });
+
+    var track: Label = Label.new("Night Transit");
+    track.widget.at(8, 18);
+    track.widget.size(72, 10);
+
+    var play: Button = Button.filled("Play");
+    play.widget.at(8, 40);
+    play.widget.size(26, 20);
+
+    var next: Button = Button.outlined("Next");
+    next.widget.at(38, 40);
+    next.widget.size(26, 20);
+
+    var progress: Slider = Slider.new(0, 100, 42);
+    progress.widget.at(68, 42);
+    progress.widget.size(20, 16);
+
+    var queue: ListView = ListView.new();
+    queue.widget.at(4, 62);
+    queue.widget.size(88, 14);
+    queue.item_height = 7;
+    queue.add_item("01 Night Transit");
+    queue.add_item("02 Soft Voltage");
+    queue.add_item("03 Dawn Drive");
+    queue.select(1);
+
+    page.add(hero.obj());
+    page.add(play.obj());
+    page.add(next.obj());
+    page.add(progress.obj());
+    page.add(queue.obj());
+    hero.add(title.obj());
+    hero.add(track.obj());
+    page.render(&ctx);
+
+    if ctx.stats.text_ops == 0u32 || ctx.stats.rect_ops == 0u32 {
+        return 1;
+    }
+    return 0;
+}

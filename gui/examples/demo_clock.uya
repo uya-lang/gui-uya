@@ -1,0 +1,59 @@
+use core.color.Color;
+use platform.disp.PixelFormat;
+use platform.disp.framebuffer_new;
+use render.ctx.RenderCtx;
+use render.ctx.render_ctx_new;
+use widget.canvas.Canvas;
+use widget.lbl.Label;
+use widget.lbl.TextAlign;
+use widget.page.Page;
+use widget.panel.Panel;
+
+export fn run_demo_clock() i32 {
+    var bytes: [byte: 24576] = [];
+    var face_bytes: [byte: 2304] = [];
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 96, 64, 384, PixelFormat.ARGB8888));
+    ctx.clear(Color{ r: 240, g: 246, b: 255, a: 255 });
+
+    var page: Page = Page.new("Clock");
+    page.widget.at(0, 0);
+    page.widget.size(96, 64);
+    page.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 240, g: 246, b: 255, a: 255 });
+
+    var panel: Panel = Panel.new();
+    panel.widget.at(4, 4);
+    panel.widget.size(88, 56);
+    panel.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 255, g: 255, b: 255, a: 255 });
+
+    var title: Label = Label.new("MON 08:45");
+    title.widget.at(8, 6);
+    title.widget.size(72, 12);
+    _ = title.set_align(TextAlign.Center);
+
+    var subtitle: Label = Label.new("UTC+08");
+    subtitle.widget.at(8, 18);
+    subtitle.widget.size(72, 10);
+    _ = subtitle.set_align(TextAlign.Center);
+    subtitle.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 91, g: 103, b: 122, a: 255 });
+
+    var face: Canvas = Canvas.with_buffer(&face_bytes[0], 24, 24, 96, PixelFormat.ARGB8888);
+    face.widget.at(28, 26);
+    face.widget.size(32, 24);
+    face.begin_draw().clear(Color{ r: 255, g: 255, b: 255, a: 0 });
+    face.begin_draw().draw_circle(12, 12, 10, Color{ r: 51, g: 65, b: 85, a: 255 });
+    face.begin_draw().draw_line(12, 12, 12, 5, Color{ r: 37, g: 99, b: 235, a: 255 }, 2);
+    face.begin_draw().draw_line(12, 12, 18, 14, Color{ r: 30, g: 41, b: 59, a: 255 }, 2);
+    face.begin_draw().fill_circle(12, 12, 2, Color{ r: 248, g: 113, b: 113, a: 255 });
+    face.end_draw();
+
+    page.add(panel.obj());
+    panel.add(title.obj());
+    panel.add(subtitle.obj());
+    panel.add(face.obj());
+    page.render(&ctx);
+
+    if ctx.stats.text_ops == 0u32 || ctx.stats.image_ops == 0u32 {
+        return 1;
+    }
+    return 0;
+}

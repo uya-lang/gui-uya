@@ -1,0 +1,73 @@
+use core.color.Color;
+use platform.disp.PixelFormat;
+use platform.disp.framebuffer_new;
+use render.ctx.RenderCtx;
+use render.ctx.render_ctx_new;
+use style.StyleProp;
+use style.theme.ThemeManager;
+use style.theme.ThemeVariant;
+use style.theme.material_dark_theme;
+use style.theme.theme_manager_new;
+use widget.btn.Button;
+use widget.chart.Chart;
+use widget.chart.ChartType;
+use widget.grid_view.GridView;
+use widget.lbl.Label;
+use widget.page.Page;
+use widget.panel.Panel;
+
+export fn run_demo_dashboard() i32 {
+    var bytes: [byte: 36864] = [];
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 112, 72, 448, PixelFormat.ARGB8888));
+    ctx.clear(Color{ r: 15, g: 23, b: 42, a: 255 });
+
+    var page: Page = Page.new("Dashboard");
+    page.widget.size(112, 72);
+
+    var shell: Panel = Panel.new();
+    shell.widget.at(4, 4);
+    shell.widget.size(104, 64);
+
+    var title: Label = Label.new("Ops Dashboard");
+    title.widget.at(8, 6);
+    title.widget.size(88, 10);
+
+    var chart: Chart = Chart.new();
+    chart.widget.at(8, 18);
+    chart.widget.size(58, 36);
+    chart.chart_type = ChartType.Area;
+    _ = chart.add_point(18);
+    _ = chart.add_point(26);
+    _ = chart.add_point(21);
+    _ = chart.add_point(34);
+    _ = chart.add_point(29);
+
+    var grid: GridView = GridView.new();
+    grid.widget.at(70, 18);
+    grid.widget.size(26, 36);
+    grid.columns = 1;
+    grid.item_size.w = 24;
+    grid.item_size.h = 12;
+    var cpu: Button = Button.outlined("CPU");
+    var net: Button = Button.outlined("NET");
+    var mem: Button = Button.outlined("MEM");
+    grid.add_child(cpu.obj());
+    grid.add_child(net.obj());
+    grid.add_child(mem.obj());
+
+    var manager: ThemeManager = theme_manager_new();
+    manager.register_theme(material_dark_theme());
+
+    page.add(shell.obj());
+    shell.add(title.obj());
+    shell.add(chart.obj());
+    shell.add(grid.obj());
+    manager.switch_theme(ThemeVariant.Dark);
+    manager.apply_to_tree(page.obj());
+    page.render(&ctx);
+
+    if ctx.stats.line_ops == 0u32 || ctx.stats.text_ops == 0u32 {
+        return 1;
+    }
+    return 0;
+}

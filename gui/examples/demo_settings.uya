@@ -1,0 +1,64 @@
+use core.color.Color;
+use platform.disp.PixelFormat;
+use platform.disp.framebuffer_new;
+use render.ctx.RenderCtx;
+use render.ctx.render_ctx_new;
+use style.StyleProp;
+use widget.lbl.Label;
+use widget.page.Page;
+use widget.panel.Panel;
+use widget.slider.Slider;
+use widget.switch.Switch;
+
+export fn run_demo_settings() i32 {
+    var bytes: [byte: 32768] = [];
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 96, 80, 384, PixelFormat.ARGB8888));
+    ctx.clear(Color{ r: 245, g: 248, b: 252, a: 255 });
+
+    var page: Page = Page.new("Settings");
+    page.widget.size(96, 80);
+    page.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 245, g: 248, b: 252, a: 255 });
+
+    var panel: Panel = Panel.new();
+    panel.widget.at(4, 4);
+    panel.widget.size(88, 72);
+
+    var title: Label = Label.new("Settings");
+    title.widget.at(8, 6);
+    title.widget.size(72, 10);
+    title.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 15, g: 23, b: 42, a: 255 });
+
+    var wifi_label: Label = Label.new("Wi-Fi");
+    wifi_label.widget.at(8, 20);
+    wifi_label.widget.size(28, 10);
+    var wifi: Switch = Switch.new(true);
+    wifi.widget.at(52, 16);
+
+    var notif_label: Label = Label.new("Alerts");
+    notif_label.widget.at(8, 38);
+    notif_label.widget.size(28, 10);
+    var notif: Switch = Switch.new(false);
+    notif.widget.at(52, 34);
+
+    var bright_label: Label = Label.new("Brightness");
+    bright_label.widget.at(8, 56);
+    bright_label.widget.size(40, 10);
+    var brightness: Slider = Slider.new(0, 100, 68);
+    brightness.widget.at(8, 66);
+    brightness.widget.size(72, 6);
+
+    page.add(panel.obj());
+    panel.add(title.obj());
+    panel.add(wifi_label.obj());
+    panel.add(wifi.obj());
+    panel.add(notif_label.obj());
+    panel.add(notif.obj());
+    panel.add(bright_label.obj());
+    panel.add(brightness.obj());
+    page.render(&ctx);
+
+    if ctx.stats.text_ops == 0u32 || ctx.stats.circle_ops == 0u32 {
+        return 1;
+    }
+    return 0;
+}

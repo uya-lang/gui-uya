@@ -23,17 +23,18 @@ fn render_gauge(ctx: &RenderCtx, area: Rect, value: i32) void {
     if clamped > 100 {
         clamped = 100;
     }
-    const color: Color = gauge_color_for_value(clamped);
+    const color_arc: Color = gauge_color_for_value(clamped);
+    const color_fill: Color = gauge_color_for_value(clamped);
     const cx: i16 = area.x + area.w as i16 / 2;
     const cy: i16 = area.y + area.h as i16 / 2;
-    const radius: i16 = (area.h as i32 / 2 - 2) as i16;
+    const radius: i16 = ((area.h as i32 / 2 - 2) as! i16).value;
     ctx.draw_arc(cx, cy, radius, 180, 360, 2, Color{ r: 226, g: 232, b: 240, a: 255 });
-    ctx.draw_arc(cx, cy, radius, 180, (180 + clamped * 180 / 100) as i16, 4, color);
-    ctx.fill_circle(cx, cy, 4, color);
+    ctx.draw_arc(cx, cy, radius, 180, ((180 + clamped * 180 / 100) as! i16).value, 4, color_arc);
+    ctx.fill_circle(cx, cy, 4, color_fill);
 }
 
 export fn run_custom_gauge_example() i32 {
-    var bytes: [byte: 4096] = [];
+    var bytes: [byte: 4608] = [];
     var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 48, 24, 192, PixelFormat.ARGB8888));
     ctx.clear(Color{ r: 248, g: 250, b: 252, a: 255 });
     render_gauge(&ctx, Rect{ x: 2, y: 2, w: 44, h: 20 }, 72);

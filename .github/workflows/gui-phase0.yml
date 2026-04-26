@@ -4,17 +4,17 @@ on:
   push:
     paths:
       - "gui/**"
-      - "docs/gui_uya_todo.md"
-      - "docs/development.md"
+      - "docs/**"
       - "Makefile"
+      - "tools/**"
       - "uya.toml"
       - ".github/workflows/gui-phase0.yml"
   pull_request:
     paths:
       - "gui/**"
-      - "docs/gui_uya_todo.md"
-      - "docs/development.md"
+      - "docs/**"
       - "Makefile"
+      - "tools/**"
       - "uya.toml"
       - ".github/workflows/gui-phase0.yml"
   workflow_dispatch:
@@ -34,3 +34,5 @@ jobs:
         run: make test
       - name: Run GUI benchmark
         run: make bench
+      - name: Generate API docs
+        run: make docs-api

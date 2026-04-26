@@ -1,0 +1,63 @@
+use core.color.Color;
+use platform.disp.PixelFormat;
+use platform.disp.framebuffer_new;
+use render.ctx.RenderCtx;
+use render.ctx.render_ctx_new;
+use style.StyleProp;
+use widget.chart.Chart;
+use widget.chart.ChartType;
+use widget.lbl.Label;
+use widget.page.Page;
+use widget.panel.Panel;
+
+export fn run_demo_perf() i32 {
+    var bytes: [byte: 32768] = [];
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 96, 80, 384, PixelFormat.ARGB8888));
+    ctx.clear(Color{ r: 248, g: 250, b: 252, a: 255 });
+
+    var page: Page = Page.new("Perf");
+    page.widget.size(96, 80);
+
+    var hud: Panel = Panel.new();
+    hud.widget.at(4, 4);
+    hud.widget.size(88, 72);
+    hud.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 15, g: 23, b: 42, a: 255 });
+
+    var fps: Label = Label.new("FPS 60");
+    fps.widget.at(8, 8);
+    fps.widget.size(20, 10);
+    fps.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 248, g: 250, b: 252, a: 255 });
+
+    var ram: Label = Label.new("RAM 928B");
+    ram.widget.at(34, 8);
+    ram.widget.size(24, 10);
+    ram.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 248, g: 250, b: 252, a: 255 });
+
+    var batch: Label = Label.new("BATCH 51ms");
+    batch.widget.at(58, 8);
+    batch.widget.size(22, 10);
+    batch.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 248, g: 250, b: 252, a: 255 });
+
+    var chart: Chart = Chart.new();
+    chart.widget.at(8, 24);
+    chart.widget.size(72, 34);
+    chart.chart_type = ChartType.Line;
+    _ = chart.add_point(48);
+    _ = chart.add_point(52);
+    _ = chart.add_point(49);
+    _ = chart.add_point(51);
+    _ = chart.add_point(50);
+    _ = chart.add_point(47);
+
+    page.add(hud.obj());
+    hud.add(fps.obj());
+    hud.add(ram.obj());
+    hud.add(batch.obj());
+    hud.add(chart.obj());
+    page.render(&ctx);
+
+    if ctx.stats.text_ops == 0u32 || ctx.stats.line_ops == 0u32 {
+        return 1;
+    }
+    return 0;
+}

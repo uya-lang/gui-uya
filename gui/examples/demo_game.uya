@@ -1,0 +1,65 @@
+use core.color.Color;
+use platform.disp.PixelFormat;
+use platform.disp.framebuffer_new;
+use render.ctx.RenderCtx;
+use render.ctx.render_ctx_new;
+use style.StyleProp;
+use widget.btn.Button;
+use widget.canvas.Canvas;
+use widget.lbl.Label;
+use widget.page.Page;
+use widget.panel.Panel;
+
+export fn run_demo_game() i32 {
+    var bytes: [byte: 32768] = [];
+    var board_bytes: [byte: 4096] = [];
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 96, 80, 384, PixelFormat.ARGB8888));
+    ctx.clear(Color{ r: 252, g: 248, b: 241, a: 255 });
+
+    var page: Page = Page.new("Game");
+    page.widget.size(96, 80);
+    page.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 252, g: 248, b: 241, a: 255 });
+
+    var board: Panel = Panel.new();
+    board.widget.at(4, 4);
+    board.widget.size(88, 72);
+
+    var title: Label = Label.new("Pocket Grid");
+    title.widget.at(8, 6);
+    title.widget.size(50, 10);
+
+    var score: Label = Label.new("Score 128");
+    score.widget.at(58, 6);
+    score.widget.size(22, 10);
+    score.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 217, g: 119, b: 6, a: 255 });
+
+    var canvas: Canvas = Canvas.with_buffer(&board_bytes[0], 16, 16, 64, PixelFormat.ARGB8888);
+    canvas.widget.at(10, 20);
+    canvas.widget.size(44, 44);
+    canvas.begin_draw().clear(Color{ r: 255, g: 255, b: 255, a: 255 });
+    canvas.begin_draw().fill_rect(Rect{ x: 0, y: 0, w: 16, h: 16 }, Color{ r: 241, g: 245, b: 249, a: 255 });
+    canvas.begin_draw().fill_rect(Rect{ x: 2, y: 2, w: 4, h: 4 }, Color{ r: 37, g: 99, b: 235, a: 255 });
+    canvas.begin_draw().fill_rect(Rect{ x: 10, y: 10, w: 4, h: 4 }, Color{ r: 34, g: 197, b: 94, a: 255 });
+    canvas.begin_draw().draw_rect(Rect{ x: 1, y: 1, w: 14, h: 14 }, Color{ r: 148, g: 163, b: 184, a: 255 }, 1);
+    canvas.end_draw();
+
+    var restart: Button = Button.filled("Restart");
+    restart.widget.at(58, 26);
+    restart.widget.size(22, 18);
+    var pause: Button = Button.outlined("Pause");
+    pause.widget.at(58, 48);
+    pause.widget.size(22, 18);
+
+    page.add(board.obj());
+    board.add(title.obj());
+    board.add(score.obj());
+    board.add(canvas.obj());
+    board.add(restart.obj());
+    board.add(pause.obj());
+    page.render(&ctx);
+
+    if ctx.stats.image_ops == 0u32 || ctx.stats.text_ops == 0u32 {
+        return 1;
+    }
+    return 0;
+}
