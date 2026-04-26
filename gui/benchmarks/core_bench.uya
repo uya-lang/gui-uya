@@ -23,13 +23,19 @@ use core.rect.Rect;
 use layout.auto.AutoLayout;
 use layout.auto.LayoutMode;
 use layout.auto.auto_layout_new;
+use platform.tick.get_tick_us;
 use platform.disp.FrameBuffer;
 use platform.disp.PixelFormat;
+use platform.disp.framebuffer_required_bytes;
 use platform.disp.framebuffer_new;
 use render.batch.DrawBatch;
 use render.batch.draw_batch_new;
 use render.ctx.RenderCtx;
 use render.ctx.render_ctx_new;
+use render.gpu.IGpuCtx;
+use render.gpu.SoftwareGpuCtx;
+use render.gpu.gpu_execute_batch;
+use render.gpu.software_gpu_new;
 use render.img.ImageData;
 use render.img.draw_image_scaled;
 use render.img.image_data_new;
@@ -37,6 +43,8 @@ use render.zerocopy.ZeroCopyCtx;
 use render.zerocopy.zerocopy_ctx_new;
 use platform.disp.DisplayCtx;
 use platform.disp.display_ctx_new;
+use res.cache.ImageCache;
+use res.cache.image_cache_new;
 use std.mem.allocator.MallocAllocator;
 use std.mem.allocator.g_allocator;
 use std.time.now_ms;
@@ -184,6 +192,76 @@ fn bench_render_image_batch() !u64 {
     return (try now_ms()) - start_ms;
 }
 
+fn bench_gpu_batch() !u64 {
+    var bytes: [byte: 4096] = [];
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 32, 32, 128, PixelFormat.ARGB8888));
+    var batch: DrawBatch = draw_batch_new();
+    const fill_a: Color = Color{ r: 48, g: 124, b: 255, a: 255 };
+    const fill_b: Color = Color{ r: 48, g: 124, b: 255, a: 255 };
+    const stroke_a: Color = Color{ r: 255, g: 255, b: 255, a: 255 };
+    const stroke_b: Color = Color{ r: 255, g: 255, b: 255, a: 255 };
+    const stroke_c: Color = Color{ r: 255, g: 255, b: 255, a: 255 };
+    batch.push_fill_rect(Rect{ x: 0, y: 0, w: 8, h: 4 }, fill_a);
+    batch.push_fill_rect(Rect{ x: 8, y: 0, w: 8, h: 4 }, fill_b);
+    batch.push_draw_rect(Rect{ x: 1, y: 6, w: 10, h: 8 }, stroke_a, 1);
+    batch.push_line(0, 20, 15, 20, stroke_b, 1);
+    batch.push_line(16, 20, 31, 20, stroke_c, 1);
+    batch.optimize();
+
+    var gpu: SoftwareGpuCtx = software_gpu_new(&ctx);
+    var gpu_iface: IGpuCtx = gpu;
+    const start_ms: u64 = try now_ms();
+    var i: i32 = 0;
+    while i < BENCH_ITERATIONS {
+        gpu_execute_batch(&gpu_iface, &ctx, &batch);
+        i = i + 1;
+    }
+    return (try now_ms()) - start_ms;
+}
+
+fn bench_cache_pressure() !u64 {
+    var img_a_bytes: [byte: 12] = [255, 0, 0,   0, 255, 0,   0, 0, 255,   255, 255, 255];
+    var img_b_bytes: [byte: 12] = [0, 0, 0,   128, 128, 128,   255, 255, 255,   64, 64, 64];
+    var img_c_bytes: [byte: 12] = [10, 20, 30,   40, 50, 60,   70, 80, 90,   100, 110, 120];
+    var img_d_bytes: [byte: 12] = [5, 15, 25,   35, 45, 55,   65, 75, 85,   95, 105, 115];
+    var cache: ImageCache = image_cache_new(4, 24u32);
+    var out: ImageData = image_data_new(&img_a_bytes[0], 2, 2, 6, PixelFormat.RGB888);
+    const start_ms: u64 = try now_ms();
+    var i: i32 = 0;
+    while i < BENCH_ITERATIONS {
+        cache.put(1u32, image_data_new(&img_a_bytes[0], 2, 2, 6, PixelFormat.RGB888));
+        cache.put(2u32, image_data_new(&img_b_bytes[0], 2, 2, 6, PixelFormat.RGB888));
+        cache.put(3u32, image_data_new(&img_c_bytes[0], 2, 2, 6, PixelFormat.RGB888));
+        cache.put(4u32, image_data_new(&img_d_bytes[0], 2, 2, 6, PixelFormat.RGB888));
+        _ = cache.get(2u32, &out);
+        _ = cache.get(9u32, &out);
+        i = i + 1;
+    }
+    return (try now_ms()) - start_ms;
+}
+
+fn bench_startup_init() !u64 {
+    var fb_bytes: [byte: 4096] = [];
+    var front_bytes: [byte: 4096] = [];
+    var back_bytes: [byte: 4096] = [];
+    const start_us: u64 = get_tick_us();
+    var checksum: i32 = 0;
+    var i: i32 = 0;
+    while i < BENCH_ITERATIONS {
+        var ctx: RenderCtx = render_ctx_new(framebuffer_new(&fb_bytes[0], 32, 32, 128, PixelFormat.ARGB8888));
+        var display: DisplayCtx = display_ctx_new(
+            framebuffer_new(&front_bytes[0], 32, 32, 128, PixelFormat.ARGB8888),
+            framebuffer_new(&back_bytes[0], 32, 32, 128, PixelFormat.ARGB8888)
+        );
+        var zc: ZeroCopyCtx = zerocopy_ctx_new(&display);
+        var cache: ImageCache = image_cache_new(4, 64u32);
+        checksum = checksum + ctx.clip_len + zc.pending_count as i32 + cache.capacity as i32;
+        i = i + 1;
+    }
+    _ = checksum;
+    return get_tick_us() - start_us;
+}
+
 fn bench_animations() !u64 {
     gui_obj_reset_registry();
 
@@ -244,17 +322,36 @@ export fn run_core_bench() i32 {
     const image_batch_ms: u64 = bench_render_image_batch() catch {
         return 6;
     };
-    const animation_ms: u64 = bench_animations() catch {
+    const gpu_batch_ms: u64 = bench_gpu_batch() catch {
         return 7;
     };
+    const cache_ms: u64 = bench_cache_pressure() catch {
+        return 8;
+    };
+    const startup_us: u64 = bench_startup_init() catch {
+        return 9;
+    };
+    const animation_ms: u64 = bench_animations() catch {
+        return 10;
+    };
 
-    printf("Phase4 benchmark (%d iterations)\n" as *byte, BENCH_ITERATIONS);
+    printf("Phase5 benchmark/report (%d iterations)\n" as *byte, BENCH_ITERATIONS);
+    printf("DirtyRegion : %lu bytes\n" as *byte, @size_of(DirtyRegion) as u64);
+    printf("DrawBatch   : %lu bytes\n" as *byte, @size_of(DrawBatch) as u64);
+    printf("RenderCtx   : %lu bytes\n" as *byte, @size_of(RenderCtx) as u64);
+    printf("ZeroCopyCtx : %lu bytes\n" as *byte, @size_of(ZeroCopyCtx) as u64);
+    printf("ImageCache  : %lu bytes\n" as *byte, @size_of(ImageCache) as u64);
+    printf("FB 480x320 RGB565: %lu bytes\n" as *byte, framebuffer_required_bytes(480, 320, PixelFormat.RGB565) as u64);
+    printf("FB 320x240 RGB565: %lu bytes\n" as *byte, framebuffer_required_bytes(320, 240, PixelFormat.RGB565) as u64);
     printf("obj_pool : %lu ms\n" as *byte, pool_ms);
     printf("allocator: %lu ms\n" as *byte, heap_ms);
     printf("layout+dirty: %lu ms\n" as *byte, layout_ms);
     printf("dispatcher  : %lu ms\n" as *byte, dispatch_ms);
     printf("render prim : %lu ms\n" as *byte, render_ms);
     printf("image+batch : %lu ms\n" as *byte, image_batch_ms);
+    printf("gpu batch   : %lu ms\n" as *byte, gpu_batch_ms);
+    printf("cache churn : %lu ms\n" as *byte, cache_ms);
+    printf("startup init: %lu us\n" as *byte, startup_us);
     printf("32 anims    : %lu ms\n" as *byte, animation_ms);
     return 0;
 }

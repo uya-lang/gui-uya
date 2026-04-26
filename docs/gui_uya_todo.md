@@ -2,7 +2,7 @@
 
 > 版本: v0.1.0  
 > 日期: 2026-04-26  
-> 状态: Phase 4 高级特性已实现（最小可编译/可测试基线）
+> 状态: Phase 5 仓库内优化/测试闭环已实现（目标板兼容待实机）
 
 > 说明: 本文中的类型与函数签名默认以当前 Uya 语法为准；涉及未来 API 形态时，会显式写成“提案”而不是直接当成现行语法。
 
@@ -17,17 +17,18 @@
 | Phase 2: 渲染引擎 | 已实现（最小可编译/可测试基线） | 3 周 | - |
 | Phase 3: 组件库 | 已实现（最小可编译/可测试基线） | 3 周 | - |
 | Phase 4: 高级特性 | 已实现（最小可编译/可测试基线） | 2 周 | - |
-| Phase 5: 优化与测试 | 未开始（已具备基础测试/基准框架） | 3 周 | - |
+| Phase 5: 优化与测试 | 基本完成（仓库内可验证项已完成；实机兼容待硬件） | 3 周 | - |
 | Phase 6: 文档与示例 | 未开始（已有 `phase0` / `phase1` smoke 示例） | 2 周 | - |
 | **总计** | | **20 周** | |
 
 ## 当前实现快照
 
 - 2026-04-26 当前工作区已完成 Phase 4 最小基线: 在 Phase 3 组件库基础上，新增 `anim/{easing,tween,timeline}.uya`、`platform/tick.uya`、`res/fs.uya`，并增强 `platform/{disp,indev}.uya`、`res/cache.uya` 与 `widget/page.uya`，补齐页面导航、资源异步入口、输入校准/管理与平台 profile。
-- 2026-04-26 当前 `make test` / `make build` / `make bench` 可用；默认 smoke 入口已切换为 `gui/phase4_smoke.uya`，对应 `examples/phase4_smoke.uya`、`tests/test_anim.uya` 与 `tests/test_phase4_io.uya` 已接入。
+- 2026-04-26 当前 `make test` / `make build` / `make bench` / `make bench-report` 可用；默认 smoke 入口已切换为 `gui/phase4_smoke.uya`，对应 `examples/phase4_smoke.uya`、`tests/test_anim.uya` 与 `tests/test_phase4_io.uya` 已接入。
+- 2026-04-26 已完成 Phase 5 仓库内闭环: 优化 `core/dirty_region.uya`、`render/{batch,gpu,zerocopy}.uya` 与 `res/cache.uya`，新增 `tests/test_phase5_runtime.uya`、CI benchmark、`build/phase5_bench.txt` 与 [gui_uya_phase5_report.md](./gui_uya_phase5_report.md)。
 - Phase 1 已落地模块仍完整可见: `style/*`、`theme`、`event_dispatch`、`platform/indev`、`layout/*`、`dirty_region`、`benchmarks/core_bench.uya`、`examples/phase1_smoke.uya`。
 - 以下 Phase 2 条目中的 `[x]` 表示“代码/接口已经写出或已有测试草案”，不代表当前工作区已经恢复绿色构建。
-- 仍未开始或明显不足: 真实字体/图片解码链路、硬件 GPU 后端实装、完整渲染性能优化与更深入的平台外设适配。
+- 仍未开始或明显不足: 真实字体/图片解码链路、硬件 GPU / DMA 后端实装、与 LVGL 的对比基准、目标板/显示实机兼容验证。
 
 ---
 
@@ -854,17 +855,19 @@
 
 ## Phase 5: 优化与测试 (Week 16-18)
 
+> 当前状态: 已完成当前仓库内可直接验证的 Phase 5 子项，包括脏区/批处理/加速渲染/零拷贝调度优化、缓存与内存可观测性、运行时回归/交错场景测试、benchmark/report 与 CI 补齐。仍待硬件环境完成的条目会继续保留未勾选状态。
+
 ### Week 16: 性能优化
 
 #### Day 1-2: 渲染优化
-- [ ] 脏矩形合并算法优化
-- [ ] 绘制批处理增强
-- [ ] GPU 加速集成
-- [ ] DMA 零拷贝
+- [x] 脏矩形合并算法优化
+- [x] 绘制批处理增强
+- [x] GPU 加速集成（软件 GPU 批执行路径）
+- [x] DMA 零拷贝（部分刷新/传输队列基线，待真实 DMA 后端）
 - [ ] 目标: 60fps @ 480x320 (120MHz MCU)
 
 #### Day 3-4: 内存优化
-- [ ] 内存占用分析
+- [x] 内存占用分析
 - [ ] 结构体字段对齐优化
 - [ ] 位域使用
 - [ ] 只读数据放 Flash
@@ -879,6 +882,8 @@
 ### Week 17: 全面测试
 
 #### Day 1-2: 单元测试
+- [x] Phase 5 运行时回归用例 (`tests/test_phase5_runtime.uya`)
+- [x] 组件状态/事件/缓存/渲染加速回归
 - [ ] 核心模块测试 (覆盖率 > 90%)
   - [ ] Rect 运算 (50+ 用例)
   - [ ] Color 混合 (30+ 用例)
@@ -897,7 +902,7 @@
   - [ ] 内存泄漏检测
 - [ ] 并发安全测试
   - [ ] 多线程事件注入
-  - [ ] 动画 + 输入并发
+  - [x] 动画 + 输入并发
 
 #### Day 5: 性能基准
 - [ ] 与 LVGL 对比测试
@@ -905,7 +910,7 @@
   - [ ] 内存占用对比
   - [ ] 启动时间对比
   - [ ] 代码体积对比
-- [ ] 编写性能报告
+- [x] 编写性能报告
 
 ### Week 18: 兼容性测试
 
@@ -924,9 +929,9 @@
 - [ ] 800x480 (5" RGB)
 
 #### Day 5: 修复与稳定
-- [ ] Bug 修复
-- [ ] 回归测试
-- [ ] 性能微调
+- [x] Bug 修复
+- [x] 回归测试
+- [x] 性能微调
 
 ---
 
@@ -1032,4 +1037,4 @@
 
 ---
 
-*TODO 文档结束 - 最后更新: 2026-04-24*
+*TODO 文档结束 - 最后更新: 2026-04-26*

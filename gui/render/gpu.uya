@@ -1,5 +1,6 @@
 use core.color.Color;
 use core.rect.Rect;
+use render.batch.DrawBatch;
 use render.batch.DrawCmd;
 use render.batch.DrawCmdKind;
 use render.ctx.RenderCtx;
@@ -58,4 +59,48 @@ export fn software_gpu_new(ctx: &RenderCtx) SoftwareGpuCtx {
         ctx: ctx,
         sync_count: 0u32,
     };
+}
+
+export fn gpu_execute_batch(gpu: &IGpuCtx, ctx: &RenderCtx, batch: &DrawBatch) void {
+    var rects: [Rect: 64] = [];
+    var colors: [Color: 64] = [];
+    var images: [DrawCmd: 64] = [];
+    var i: i32 = 0;
+    while i < batch.count as i32 {
+        const kind: DrawCmdKind = batch.cmds[i].kind;
+        if kind == DrawCmdKind.FillRect || kind == DrawCmdKind.DrawRect {
+            var count: i32 = 0;
+            while i + count < batch.count as i32 && batch.cmds[i + count].kind == kind {
+                rects[count] = batch.cmds[i + count].rect;
+                colors[count] = batch.cmds[i + count].color;
+                count = count + 1;
+            }
+            if kind == DrawCmdKind.FillRect {
+                gpu.fill_rects(&rects[0], &colors[0], count);
+            } else {
+                gpu.draw_rects(&rects[0], &colors[0], count);
+            }
+            i = i + count;
+            continue;
+        }
+
+        if kind == DrawCmdKind.Image {
+            var count: i32 = 0;
+            while i + count < batch.count as i32 && batch.cmds[i + count].kind == DrawCmdKind.Image {
+                images[count] = batch.cmds[i + count];
+                count = count + 1;
+            }
+            gpu.draw_images(&images[0], count);
+            i = i + count;
+            continue;
+        }
+
+        const cmd: DrawCmd = batch.cmds[i];
+        ctx.draw_line(cmd.x1, cmd.y1, cmd.x2, cmd.y2, cmd.color, cmd.width);
+        i = i + 1;
+    }
+
+    gpu.sync();
+    ctx.stats.batch_flushes = ctx.stats.batch_flushes + 1u32;
+    ctx.stats.gpu_flushes = ctx.stats.gpu_flushes + 1u32;
 }

@@ -8,6 +8,7 @@ use tests.test_input_dev;
 use tests.test_layout;
 use tests.test_obj_tree;
 use tests.test_phase4_io;
+use tests.test_phase5_runtime;
 use tests.test_pool;
 use tests.test_rect;
 use tests.test_style;
@@ -25,6 +26,7 @@ test "phase4 suite loads" {
         + TEST_LAYOUT_MODULE
         + TEST_OBJ_TREE_MODULE
         + TEST_PHASE4_IO_MODULE
+        + TEST_PHASE5_RUNTIME_MODULE
         + TEST_POOL_MODULE
         + TEST_RECT_MODULE
         + TEST_STYLE_MODULE

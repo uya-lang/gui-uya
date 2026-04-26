@@ -12,6 +12,8 @@ UYA_OPT := $(if $(filter release,$(MODE)),-O3,-O0)
 
 .PHONY: build test bench clean hooks build-arm build-riscv build-esp32
 
+BENCH_REPORT ?= $(BUILD_DIR)/phase5_bench.txt
+
 build:
 	@mkdir -p $(BUILD_DIR)
 	$(UYA) build $(SMOKE_APP) $(UYA_OPT) -o $(BUILD_DIR)/phase4_smoke
@@ -23,6 +25,16 @@ test:
 bench:
 	@mkdir -p $(BUILD_DIR)
 	$(UYA) run $(BENCH_APP) $(UYA_OPT)
+
+bench-report:
+	@mkdir -p $(BUILD_DIR)
+	$(UYA) run $(BENCH_APP) -O3 | tail -n 18 > $(BENCH_REPORT)
+	@sed -n '1,160p' $(BENCH_REPORT)
+
+ci:
+	$(MAKE) build
+	$(MAKE) test
+	$(MAKE) bench
 
 clean:
 	rm -rf $(BUILD_DIR) .uyacache

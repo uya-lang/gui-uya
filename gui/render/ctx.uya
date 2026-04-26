@@ -50,6 +50,7 @@ export struct RenderStats {
     image_ops: u32,
     text_ops: u32,
     batch_flushes: u32,
+    gpu_flushes: u32,
 }
 
 export struct RenderCtx {
@@ -316,6 +317,7 @@ export fn render_ctx_new(fb: FrameBuffer) RenderCtx {
             image_ops: 0u32,
             text_ops: 0u32,
             batch_flushes: 0u32,
+            gpu_flushes: 0u32,
         },
         mode: RenderMode.Immediate,
         clear_color: empty_framebuffer_color(),

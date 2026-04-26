@@ -154,6 +154,38 @@ export struct ImageCache {
         return slot >= 0 && self.entries[slot].state == CacheEntryState.Loading;
     }
 
+    fn budget_remaining(self: &Self) u32 {
+        if self.used_bytes >= self.budget_bytes {
+            return 0u32;
+        }
+        return self.budget_bytes - self.used_bytes;
+    }
+
+    fn pressure_percent(self: &Self) u8 {
+        if self.budget_bytes == 0u32 {
+            return 0;
+        }
+        var percent: u32 = (self.used_bytes * 100u32) / self.budget_bytes;
+        if percent > 100u32 {
+            percent = 100u32;
+        }
+        return (percent as! u8).value;
+    }
+
+    fn hit_rate_percent(self: &Self) u8 {
+        const total: u32 = self.hit_count + self.miss_count;
+        if total == 0u32 {
+            return 0;
+        }
+        return (((self.hit_count * 100u32) / total) as! u8).value;
+    }
+
+    fn reset_stats(self: &Self) void {
+        self.hit_count = 0u32;
+        self.miss_count = 0u32;
+        self.eviction_count = 0u32;
+    }
+
     fn put(self: &Self, key: u32, image: ImageData) void {
         if !self.begin_load(key) {
             return;
