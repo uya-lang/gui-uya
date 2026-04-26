@@ -27,6 +27,7 @@
 - 2026-04-26 当前 `make test` / `make build` / `make bench` / `make bench-report` / `make docs-api` 可用；默认 smoke 入口已切换为 `gui/phase6_smoke.uya`，对应 `examples/phase6_smoke.uya`、`tests/test_phase6_examples.uya` 与 Phase 4/5/6 demo 已接入。
 - 2026-04-26 已完成 Phase 5 仓库内闭环: 优化 `core/{color,dirty_region}.uya`、`platform/disp.uya`、`render/{ctx,img,batch,gpu,zerocopy}.uya` 与 `res/cache.uya`，新增 `tests/test_phase5_runtime.uya`、旋转图像回归、CI benchmark、`build/phase5_bench.txt` 与 [gui_uya_phase5_report.md](./gui_uya_phase5_report.md)。
 - 2026-04-26 已完成 Phase 6 第一轮仓库内闭环: 新增 `phase6_smoke`、`tests/test_phase6_examples.uya`、`examples/demo_{clock,music,settings,dashboard,game,perf}.uya`，补齐快速入门/API 索引/主题/性能/移植/架构文档，并新增 [gui_uya_phase6_report.md](./gui_uya_phase6_report.md)。
+- 2026-04-26 已补文字渲染效果对比基线: 新增 `make text-compare`、`gui/text_render_compare.uya`、`examples/text_render_compare.uya` 与 [gui_uya_text_vs_lvgl.md](./gui_uya_text_vs_lvgl.md)，完成仓库内可复现样张；完整帧率/内存/体积对比仍待后续补齐。
 - Phase 1 已落地模块仍完整可见: `style/*`、`theme`、`event_dispatch`、`platform/indev`、`layout/*`、`dirty_region`、`benchmarks/core_bench.uya`、`examples/phase1_smoke.uya`。
 - 以下 Phase 2 条目中的 `[x]` 表示“代码/接口已经写出或已有测试草案”，不代表当前工作区已经恢复绿色构建。
 - 仍未开始或明显不足: 完整图片解码链路、硬件 GPU / DMA 后端实装、与 LVGL 的对比基准、目标板/显示实机兼容验证、正式发布动作。
@@ -915,6 +916,7 @@
 
 #### Day 5: 性能基准
 - [ ] 与 LVGL 对比测试
+  - [x] 文字渲染效果对比样张与报告
   - [ ] 相同场景帧率对比
   - [ ] 内存占用对比
   - [ ] 启动时间对比

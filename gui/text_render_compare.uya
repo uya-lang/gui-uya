@@ -1,0 +1,7 @@
+use std.runtime.entry;
+
+use examples.text_render_compare.run_text_render_compare;
+
+export fn main() i32 {
+    return run_text_render_compare();
+}

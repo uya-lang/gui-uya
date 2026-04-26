@@ -7,10 +7,11 @@ SMOKE_APP ?= gui/phase6_smoke.uya
 BENCH_APP ?= gui/bench_suite.uya
 TEST_ENTRY ?= gui/test_suite.uya
 RENDER_TEST_ENTRY ?= gui/render_test_suite.uya
+TEXT_COMPARE_APP ?= gui/text_render_compare.uya
 MODE ?= debug
 UYA_OPT := $(if $(filter release,$(MODE)),-O3,-O0)
 
-.PHONY: build test bench bench-report docs-api ci clean hooks build-arm build-riscv build-esp32 sim-build sim-run sim-debug sim-headless
+.PHONY: build test bench bench-report docs-api ci clean hooks build-arm build-riscv build-esp32 sim-build sim-run sim-debug sim-headless text-compare
 
 SIM_BUILD_DIR ?= $(BUILD_DIR)/sim
 SIM_BIN ?= $(SIM_BUILD_DIR)/gui_uya_sim
@@ -36,6 +37,10 @@ bench-report:
 	@mkdir -p $(BUILD_DIR)
 	$(UYA) run $(BENCH_APP) -O3 2>&1 | sed -n '/^Phase5 benchmark\/report/,$$p' > $(BENCH_REPORT)
 	@sed -n '1,240p' $(BENCH_REPORT)
+
+text-compare:
+	@mkdir -p $(BUILD_DIR)/text_compare
+	$(UYA) run $(TEXT_COMPARE_APP) $(UYA_OPT)
 
 docs-api:
 	bash tools/gen_gui_api_docs.sh

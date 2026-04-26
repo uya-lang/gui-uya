@@ -1,0 +1,23 @@
+use examples.text_render_compare.run_text_render_compare;
+use libc.O_RDONLY;
+use libc.sys_close;
+use libc.sys_open;
+use libc.sys_read;
+use std.testing.assert_eq_i32;
+
+export const TEST_TEXT_COMPARE_MODULE: i32 = 1;
+
+test "text compare sample renders and writes png" {
+    try assert_eq_i32(run_text_render_compare(), 0);
+
+    const fd: i32 = try sys_open("build/text_compare/uya_text_render_samples.png\0" as *const byte, O_RDONLY as i32, 0);
+    var raw: [byte: 8] = [];
+    const n: isize = try sys_read(fd, &raw[0], 8usize);
+    _ = sys_close(fd) catch {};
+
+    try assert_eq_i32(n as i32, 8);
+    try assert_eq_i32(raw[0] as i32, 137);
+    try assert_eq_i32(raw[1] as i32, 'P' as i32);
+    try assert_eq_i32(raw[2] as i32, 'N' as i32);
+    try assert_eq_i32(raw[3] as i32, 'G' as i32);
+}
