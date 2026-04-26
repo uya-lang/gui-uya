@@ -1,6 +1,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/fb.h>
+#include <linux/input.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -21,23 +22,42 @@ typedef struct UyaGuiSimFbDisplay {
 } UyaGuiSimFbDisplay;
 
 typedef struct UyaGuiSimFbInput {
-    int fd;
+    int tty_fd;
+    int evdev_fd;
     int opened;
     int esc_state;
     int termios_saved;
+    int screen_w;
+    int screen_h;
+    int pointer_x;
+    int pointer_y;
+    int pointer_down;
+    int abs_min_x;
+    int abs_max_x;
+    int abs_min_y;
+    int abs_max_y;
     struct termios saved_termios;
-    char device_path[256];
+    char tty_device_path[256];
+    char evdev_device_path[256];
 } UyaGuiSimFbInput;
 
 typedef struct FbHostEvent {
     uint8_t kind;
+    int16_t x;
+    int16_t y;
+    int32_t value;
     uint16_t key_code;
-    uint8_t reserved;
+    uint16_t reserved;
 } FbHostEvent;
 
 enum {
     FB_EVT_NONE = 0,
     FB_EVT_KEY_DOWN = 1,
+    FB_EVT_HOVER_MOVE = 2,
+    FB_EVT_TOUCH_DOWN = 3,
+    FB_EVT_TOUCH_UP = 4,
+    FB_EVT_TOUCH_MOVE = 5,
+    FB_EVT_WHEEL = 6,
 };
 
 static UyaGuiSimFbDisplay g_fb_display = {
@@ -46,11 +66,22 @@ static UyaGuiSimFbDisplay g_fb_display = {
     .mapped_len = 0u,
     .opened = 0,
 };
+
 static UyaGuiSimFbInput g_fb_input = {
-    .fd = -1,
+    .tty_fd = -1,
+    .evdev_fd = -1,
     .opened = 0,
     .esc_state = 0,
     .termios_saved = 0,
+    .screen_w = 320,
+    .screen_h = 240,
+    .pointer_x = 160,
+    .pointer_y = 120,
+    .pointer_down = 0,
+    .abs_min_x = 0,
+    .abs_max_x = 319,
+    .abs_min_y = 0,
+    .abs_max_y = 239,
 };
 
 static char g_fb_last_error[256] = {0};
@@ -70,6 +101,36 @@ static void uya_gui_sim_fb_input_set_error(const char *message) {
     (void)snprintf(g_fb_input_last_error, sizeof(g_fb_input_last_error), "%s", message);
 }
 
+static int uya_gui_sim_fb_clamp_i32(int value, int min_v, int max_v) {
+    if (value < min_v) {
+        return min_v;
+    }
+    if (value > max_v) {
+        return max_v;
+    }
+    return value;
+}
+
+static int16_t uya_gui_sim_fb_map_abs(int raw, int raw_min, int raw_max, int screen_size) {
+    int mapped;
+    int clamped;
+    if (screen_size <= 1 || raw_max <= raw_min) {
+        return 0;
+    }
+    clamped = uya_gui_sim_fb_clamp_i32(raw, raw_min, raw_max);
+    mapped = ((clamped - raw_min) * (screen_size - 1)) / (raw_max - raw_min);
+    return (int16_t)uya_gui_sim_fb_clamp_i32(mapped, 0, screen_size - 1);
+}
+
+static void uya_gui_sim_fb_set_host_event(FbHostEvent *out_evt, uint8_t kind, int16_t x, int16_t y, int32_t value, uint16_t key_code) {
+    out_evt->kind = kind;
+    out_evt->x = x;
+    out_evt->y = y;
+    out_evt->value = value;
+    out_evt->key_code = key_code;
+    out_evt->reserved = 0u;
+}
+
 static int uya_gui_sim_fb_tty_keycode(uint8_t ch) {
     if (ch >= 32u && ch < 127u) {
         return (int)ch;
@@ -81,6 +142,30 @@ static int uya_gui_sim_fb_tty_keycode(uint8_t ch) {
         return 27;
     }
     return 0;
+}
+
+static int uya_gui_sim_fb_linux_keycode(uint16_t code) {
+    if (code >= KEY_A && code <= KEY_Z) {
+        return 'A' + (int)(code - KEY_A);
+    }
+    if (code >= KEY_1 && code <= KEY_9) {
+        return '1' + (int)(code - KEY_1);
+    }
+    if (code == KEY_0) {
+        return '0';
+    }
+    switch (code) {
+        case KEY_ESC: return 27;
+        case KEY_ENTER: return 13;
+        case KEY_SPACE: return 32;
+        case KEY_LEFT: return 1000;
+        case KEY_RIGHT: return 1001;
+        case KEY_UP: return 1002;
+        case KEY_DOWN: return 1003;
+        case KEY_F11: return 1011;
+        default:
+            return 0;
+    }
 }
 
 static int uya_gui_sim_fb_tty_configure(int fd, struct termios *saved) {
@@ -111,18 +196,17 @@ static uint32_t uya_gui_sim_scale_component(uint8_t value, uint32_t length) {
 }
 
 static void uya_gui_sim_write_pixel(const UyaGuiSimFbDisplay *display, int x, int y, uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
+    uint32_t pixel = 0u;
     const uint32_t bits_per_pixel = display->vinfo.bits_per_pixel;
     const uint32_t bytes_per_pixel = bits_per_pixel / 8u;
+    const size_t offset = (size_t)y * (size_t)display->finfo.line_length + (size_t)x * bytes_per_pixel;
     if (bytes_per_pixel == 0u) {
         return;
     }
-
-    const size_t offset = (size_t)y * (size_t)display->finfo.line_length + (size_t)x * bytes_per_pixel;
     if (offset + bytes_per_pixel > display->mapped_len) {
         return;
     }
 
-    uint32_t pixel = 0u;
     pixel |= uya_gui_sim_scale_component(r, display->vinfo.red.length) << display->vinfo.red.offset;
     pixel |= uya_gui_sim_scale_component(g, display->vinfo.green.length) << display->vinfo.green.offset;
     pixel |= uya_gui_sim_scale_component(b, display->vinfo.blue.length) << display->vinfo.blue.offset;
@@ -137,12 +221,11 @@ static void uya_gui_sim_write_pixel(const UyaGuiSimFbDisplay *display, int x, in
 
 void *uya_gui_sim_fb_open(const uint8_t *path) {
     UyaGuiSimFbDisplay *display = &g_fb_display;
+    const char *env_path = getenv("UYA_GUI_FB_DEV");
+    const char *dev_path = "/dev/fb0";
     if (display->opened) {
         return display;
     }
-
-    const char *env_path = getenv("UYA_GUI_FB_DEV");
-    const char *dev_path = "/dev/fb0";
     if (path != NULL && path[0] != '\0') {
         dev_path = (const char *)path;
     } else if (env_path != NULL && env_path[0] != '\0') {
@@ -160,13 +243,13 @@ void *uya_gui_sim_fb_open(const uint8_t *path) {
     }
     if (ioctl(display->fd, FBIOGET_FSCREENINFO, &display->finfo) != 0) {
         uya_gui_sim_fb_set_error(strerror(errno));
-        close(display->fd);
+        (void)close(display->fd);
         display->fd = -1;
         return NULL;
     }
     if (ioctl(display->fd, FBIOGET_VSCREENINFO, &display->vinfo) != 0) {
         uya_gui_sim_fb_set_error(strerror(errno));
-        close(display->fd);
+        (void)close(display->fd);
         display->fd = -1;
         return NULL;
     }
@@ -176,7 +259,7 @@ void *uya_gui_sim_fb_open(const uint8_t *path) {
     if (display->mapped == MAP_FAILED) {
         display->mapped = NULL;
         uya_gui_sim_fb_set_error(strerror(errno));
-        close(display->fd);
+        (void)close(display->fd);
         display->fd = -1;
         return NULL;
     }
@@ -203,6 +286,8 @@ void uya_gui_sim_fb_close(void *handle) {
 
 int32_t uya_gui_sim_fb_present(void *handle, const uint8_t *pixels, int32_t pitch, int32_t width, int32_t height, int32_t format_tag) {
     UyaGuiSimFbDisplay *display = (UyaGuiSimFbDisplay *)handle;
+    int copy_w;
+    int copy_h;
     if (display == NULL || !display->opened || pixels == NULL) {
         uya_gui_sim_fb_set_error("framebuffer display not initialized");
         return 0;
@@ -212,8 +297,8 @@ int32_t uya_gui_sim_fb_present(void *handle, const uint8_t *pixels, int32_t pitc
         return 0;
     }
 
-    const int copy_w = width < (int)display->vinfo.xres ? width : (int)display->vinfo.xres;
-    const int copy_h = height < (int)display->vinfo.yres ? height : (int)display->vinfo.yres;
+    copy_w = width < (int)display->vinfo.xres ? width : (int)display->vinfo.xres;
+    copy_h = height < (int)display->vinfo.yres ? height : (int)display->vinfo.yres;
     for (int y = 0; y < copy_h; ++y) {
         const uint8_t *row = pixels + (size_t)y * (size_t)pitch;
         for (int x = 0; x < copy_w; ++x) {
@@ -244,39 +329,82 @@ const uint8_t *uya_gui_sim_fb_last_error(void) {
     return (const uint8_t *)g_fb_last_error;
 }
 
-void *uya_gui_sim_fb_input_open(const uint8_t *path) {
+static void uya_gui_sim_fb_try_open_evdev(UyaGuiSimFbInput *input, const char *path) {
+    struct input_absinfo absinfo;
+    input->evdev_fd = open(path, O_RDONLY | O_NONBLOCK);
+    if (input->evdev_fd < 0) {
+        uya_gui_sim_fb_input_set_error(strerror(errno));
+        return;
+    }
+    if (ioctl(input->evdev_fd, EVIOCGABS(ABS_X), &absinfo) == 0 || ioctl(input->evdev_fd, EVIOCGABS(ABS_MT_POSITION_X), &absinfo) == 0) {
+        input->abs_min_x = absinfo.minimum;
+        input->abs_max_x = absinfo.maximum;
+    }
+    if (ioctl(input->evdev_fd, EVIOCGABS(ABS_Y), &absinfo) == 0 || ioctl(input->evdev_fd, EVIOCGABS(ABS_MT_POSITION_Y), &absinfo) == 0) {
+        input->abs_min_y = absinfo.minimum;
+        input->abs_max_y = absinfo.maximum;
+    }
+}
+
+static void uya_gui_sim_fb_try_open_tty(UyaGuiSimFbInput *input, const char *path) {
+    input->tty_fd = open(path, O_RDONLY | O_NONBLOCK);
+    if (input->tty_fd < 0) {
+        return;
+    }
+    if (!uya_gui_sim_fb_tty_configure(input->tty_fd, &input->saved_termios)) {
+        (void)close(input->tty_fd);
+        input->tty_fd = -1;
+        return;
+    }
+    input->termios_saved = 1;
+}
+
+void *uya_gui_sim_fb_input_open(const uint8_t *input_path, const uint8_t *tty_path, int32_t width, int32_t height) {
     UyaGuiSimFbInput *input = &g_fb_input;
+    const char *env_input_path = getenv("UYA_GUI_FB_INPUT");
+    const char *env_tty_path = getenv("UYA_GUI_FB_TTY");
+    const char *resolved_input_path = NULL;
+    const char *resolved_tty_path = "/dev/tty";
     if (input->opened) {
         return input;
     }
-
-    const char *env_path = getenv("UYA_GUI_FB_TTY");
-    const char *dev_path = "/dev/tty";
-    if (path != NULL && path[0] != '\0') {
-        dev_path = (const char *)path;
-    } else if (env_path != NULL && env_path[0] != '\0') {
-        dev_path = env_path;
+    if (input_path != NULL && input_path[0] != '\0') {
+        resolved_input_path = (const char *)input_path;
+    } else if (env_input_path != NULL && env_input_path[0] != '\0') {
+        resolved_input_path = env_input_path;
+    }
+    if (tty_path != NULL && tty_path[0] != '\0') {
+        resolved_tty_path = (const char *)tty_path;
+    } else if (env_tty_path != NULL && env_tty_path[0] != '\0') {
+        resolved_tty_path = env_tty_path;
     }
 
     memset(input, 0, sizeof(*input));
-    input->fd = -1;
-    (void)snprintf(input->device_path, sizeof(input->device_path), "%s", dev_path);
+    input->tty_fd = -1;
+    input->evdev_fd = -1;
+    input->screen_w = width > 0 ? width : 320;
+    input->screen_h = height > 0 ? height : 240;
+    input->pointer_x = input->screen_w / 2;
+    input->pointer_y = input->screen_h / 2;
+    input->abs_min_x = 0;
+    input->abs_max_x = input->screen_w > 1 ? input->screen_w - 1 : 0;
+    input->abs_min_y = 0;
+    input->abs_max_y = input->screen_h > 1 ? input->screen_h - 1 : 0;
+    (void)snprintf(input->tty_device_path, sizeof(input->tty_device_path), "%s", resolved_tty_path);
+    if (resolved_input_path != NULL) {
+        (void)snprintf(input->evdev_device_path, sizeof(input->evdev_device_path), "%s", resolved_input_path);
+        uya_gui_sim_fb_try_open_evdev(input, resolved_input_path);
+    }
+    uya_gui_sim_fb_try_open_tty(input, resolved_tty_path);
 
-    input->fd = open(dev_path, O_RDONLY | O_NONBLOCK);
-    if (input->fd < 0) {
-        uya_gui_sim_fb_input_set_error(strerror(errno));
+    if (input->evdev_fd < 0 && input->tty_fd < 0) {
+        if (g_fb_input_last_error[0] == '\0') {
+            uya_gui_sim_fb_input_set_error("no framebuffer input source available");
+        }
         return NULL;
     }
 
-    if (!uya_gui_sim_fb_tty_configure(input->fd, &input->saved_termios)) {
-        uya_gui_sim_fb_input_set_error(strerror(errno));
-        (void)close(input->fd);
-        input->fd = -1;
-        return NULL;
-    }
-    input->termios_saved = 1;
     input->opened = 1;
-    input->esc_state = 0;
     g_fb_input_last_error[0] = '\0';
     return input;
 }
@@ -286,37 +414,140 @@ void uya_gui_sim_fb_input_close(void *handle) {
     if (input == NULL || !input->opened) {
         return;
     }
-    if (input->termios_saved) {
-        (void)tcsetattr(input->fd, TCSANOW, &input->saved_termios);
+    if (input->termios_saved && input->tty_fd >= 0) {
+        (void)tcsetattr(input->tty_fd, TCSANOW, &input->saved_termios);
     }
-    if (input->fd >= 0) {
-        (void)close(input->fd);
+    if (input->tty_fd >= 0) {
+        (void)close(input->tty_fd);
+    }
+    if (input->evdev_fd >= 0) {
+        (void)close(input->evdev_fd);
     }
     memset(input, 0, sizeof(*input));
-    input->fd = -1;
+    input->tty_fd = -1;
+    input->evdev_fd = -1;
 }
 
-int32_t uya_gui_sim_fb_input_poll_event(void *handle, FbHostEvent *out_evt) {
-    UyaGuiSimFbInput *input = (UyaGuiSimFbInput *)handle;
-    if (out_evt == NULL) {
+static int32_t uya_gui_sim_fb_input_poll_evdev(UyaGuiSimFbInput *input, FbHostEvent *out_evt) {
+    if (input == NULL || input->evdev_fd < 0) {
         return 0;
     }
-    out_evt->kind = FB_EVT_NONE;
-    out_evt->key_code = 0u;
-    out_evt->reserved = 0u;
 
-    if (input == NULL || !input->opened) {
+    while (1) {
+        struct input_event ev;
+        const ssize_t n = read(input->evdev_fd, &ev, sizeof(ev));
+        if (n == 0 || (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))) {
+            return 0;
+        }
+        if (n < 0) {
+            uya_gui_sim_fb_input_set_error(strerror(errno));
+            return 0;
+        }
+        if ((size_t)n != sizeof(ev)) {
+            continue;
+        }
+
+        if (ev.type == EV_KEY) {
+            if (ev.code == BTN_TOUCH || ev.code == BTN_LEFT) {
+                input->pointer_down = ev.value != 0;
+                uya_gui_sim_fb_set_host_event(
+                    out_evt,
+                    ev.value ? FB_EVT_TOUCH_DOWN : FB_EVT_TOUCH_UP,
+                    (int16_t)input->pointer_x,
+                    (int16_t)input->pointer_y,
+                    0,
+                    0u
+                );
+                return 1;
+            }
+            if (ev.value == 1) {
+                const int keycode = uya_gui_sim_fb_linux_keycode(ev.code);
+                if (keycode != 0) {
+                    uya_gui_sim_fb_set_host_event(out_evt, FB_EVT_KEY_DOWN, 0, 0, 0, (uint16_t)keycode);
+                    return 1;
+                }
+            }
+            continue;
+        }
+
+        if (ev.type == EV_REL) {
+            if (ev.code == REL_X) {
+                input->pointer_x = uya_gui_sim_fb_clamp_i32(input->pointer_x + (int)ev.value, 0, input->screen_w - 1);
+                uya_gui_sim_fb_set_host_event(
+                    out_evt,
+                    input->pointer_down ? FB_EVT_TOUCH_MOVE : FB_EVT_HOVER_MOVE,
+                    (int16_t)input->pointer_x,
+                    (int16_t)input->pointer_y,
+                    0,
+                    0u
+                );
+                return 1;
+            }
+            if (ev.code == REL_Y) {
+                input->pointer_y = uya_gui_sim_fb_clamp_i32(input->pointer_y + (int)ev.value, 0, input->screen_h - 1);
+                uya_gui_sim_fb_set_host_event(
+                    out_evt,
+                    input->pointer_down ? FB_EVT_TOUCH_MOVE : FB_EVT_HOVER_MOVE,
+                    (int16_t)input->pointer_x,
+                    (int16_t)input->pointer_y,
+                    0,
+                    0u
+                );
+                return 1;
+            }
+            if (ev.code == REL_WHEEL) {
+                uya_gui_sim_fb_set_host_event(out_evt, FB_EVT_WHEEL, 0, 0, (int32_t)ev.value, 0u);
+                return 1;
+            }
+            continue;
+        }
+
+        if (ev.type == EV_ABS) {
+            if (ev.code == ABS_X || ev.code == ABS_MT_POSITION_X) {
+                input->pointer_x = uya_gui_sim_fb_map_abs((int)ev.value, input->abs_min_x, input->abs_max_x, input->screen_w);
+                uya_gui_sim_fb_set_host_event(
+                    out_evt,
+                    input->pointer_down ? FB_EVT_TOUCH_MOVE : FB_EVT_HOVER_MOVE,
+                    (int16_t)input->pointer_x,
+                    (int16_t)input->pointer_y,
+                    0,
+                    0u
+                );
+                return 1;
+            }
+            if (ev.code == ABS_Y || ev.code == ABS_MT_POSITION_Y) {
+                input->pointer_y = uya_gui_sim_fb_map_abs((int)ev.value, input->abs_min_y, input->abs_max_y, input->screen_h);
+                uya_gui_sim_fb_set_host_event(
+                    out_evt,
+                    input->pointer_down ? FB_EVT_TOUCH_MOVE : FB_EVT_HOVER_MOVE,
+                    (int16_t)input->pointer_x,
+                    (int16_t)input->pointer_y,
+                    0,
+                    0u
+                );
+                return 1;
+            }
+            if (ev.code == ABS_WHEEL) {
+                uya_gui_sim_fb_set_host_event(out_evt, FB_EVT_WHEEL, 0, 0, (int32_t)ev.value, 0u);
+                return 1;
+            }
+            continue;
+        }
+    }
+}
+
+static int32_t uya_gui_sim_fb_input_poll_tty(UyaGuiSimFbInput *input, FbHostEvent *out_evt) {
+    if (input == NULL || input->tty_fd < 0) {
         return 0;
     }
 
     while (1) {
         uint8_t ch = 0u;
-        const ssize_t n = read(input->fd, &ch, 1u);
+        const ssize_t n = read(input->tty_fd, &ch, 1u);
         if (n == 0 || (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))) {
             if (input->esc_state == 1) {
                 input->esc_state = 0;
-                out_evt->kind = FB_EVT_KEY_DOWN;
-                out_evt->key_code = 27u;
+                uya_gui_sim_fb_set_host_event(out_evt, FB_EVT_KEY_DOWN, 0, 0, 0, 27u);
                 return 1;
             }
             return 0;
@@ -333,8 +564,7 @@ int32_t uya_gui_sim_fb_input_poll_event(void *handle, FbHostEvent *out_evt) {
             }
             const int keycode = uya_gui_sim_fb_tty_keycode(ch);
             if (keycode != 0) {
-                out_evt->kind = FB_EVT_KEY_DOWN;
-                out_evt->key_code = (uint16_t)keycode;
+                uya_gui_sim_fb_set_host_event(out_evt, FB_EVT_KEY_DOWN, 0, 0, 0, (uint16_t)keycode);
                 return 1;
             }
             continue;
@@ -346,33 +576,43 @@ int32_t uya_gui_sim_fb_input_poll_event(void *handle, FbHostEvent *out_evt) {
                 continue;
             }
             input->esc_state = 0;
-            out_evt->kind = FB_EVT_KEY_DOWN;
-            out_evt->key_code = 27u;
+            uya_gui_sim_fb_set_host_event(out_evt, FB_EVT_KEY_DOWN, 0, 0, 0, 27u);
             return 1;
         }
 
         input->esc_state = 0;
         switch (ch) {
             case 'A':
-                out_evt->kind = FB_EVT_KEY_DOWN;
-                out_evt->key_code = 1002u;
+                uya_gui_sim_fb_set_host_event(out_evt, FB_EVT_KEY_DOWN, 0, 0, 0, 1002u);
                 return 1;
             case 'B':
-                out_evt->kind = FB_EVT_KEY_DOWN;
-                out_evt->key_code = 1003u;
+                uya_gui_sim_fb_set_host_event(out_evt, FB_EVT_KEY_DOWN, 0, 0, 0, 1003u);
                 return 1;
             case 'C':
-                out_evt->kind = FB_EVT_KEY_DOWN;
-                out_evt->key_code = 1001u;
+                uya_gui_sim_fb_set_host_event(out_evt, FB_EVT_KEY_DOWN, 0, 0, 0, 1001u);
                 return 1;
             case 'D':
-                out_evt->kind = FB_EVT_KEY_DOWN;
-                out_evt->key_code = 1000u;
+                uya_gui_sim_fb_set_host_event(out_evt, FB_EVT_KEY_DOWN, 0, 0, 0, 1000u);
                 return 1;
             default:
                 break;
         }
     }
+}
+
+int32_t uya_gui_sim_fb_input_poll_event(void *handle, FbHostEvent *out_evt) {
+    UyaGuiSimFbInput *input = (UyaGuiSimFbInput *)handle;
+    if (out_evt == NULL) {
+        return 0;
+    }
+    uya_gui_sim_fb_set_host_event(out_evt, FB_EVT_NONE, 0, 0, 0, 0u);
+    if (input == NULL || !input->opened) {
+        return 0;
+    }
+    if (uya_gui_sim_fb_input_poll_evdev(input, out_evt) != 0) {
+        return 1;
+    }
+    return uya_gui_sim_fb_input_poll_tty(input, out_evt);
 }
 
 const uint8_t *uya_gui_sim_fb_input_last_error(void) {

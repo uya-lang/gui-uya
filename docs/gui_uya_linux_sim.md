@@ -80,9 +80,11 @@ make sim-fb-run
 - 可覆盖设备：
   - `SIM_FB_ARGS="--backend fb --fb-dev /dev/fb1 --max-frames 60"`
   - `SIM_FB_ARGS="--backend fb --fb-dev /dev/fb1 --fb-tty /dev/tty1 --max-frames 60"`
+  - `SIM_FB_ARGS="--backend fb --fb-dev /dev/fb1 --fb-input /dev/input/event3 --fb-tty /dev/tty1 --max-frames 60"`
   - 或 `UYA_GUI_FB_DEV=/dev/fb1`
 - 也可通过 `UYA_GUI_FB_TTY=/dev/tty1` 覆盖输入终端
-- 当前 `fb` 输入已支持控制终端键盘热键与方向键；`evdev` 指针/触摸仍未接入
+- 也可通过 `UYA_GUI_FB_INPUT=/dev/input/event3` 指定 `evdev` 输入设备
+- 当前 `fb` 输入已支持控制终端键盘热键与方向键，以及可选 `evdev` 指针/触摸/滚轮
 
 ## 0.3 当前交互
 
@@ -99,6 +101,10 @@ make sim-fb-run
 - Framebuffer 控制终端：
   - 支持上述键盘热键
   - 支持方向键调节 slider
+- Framebuffer `evdev` 设备：
+  - 支持指针/触摸位置更新
+  - 支持按下/抬起点击
+  - 支持滚轮映射到 `EncoderDriver`
 
 ## 0.4 本次实机验证补到的兼容点
 
@@ -111,7 +117,7 @@ make sim-fb-run
 
 - `make sim-build` 仍会打印不少来自 Uya 生成 C 文件的 warning；当前不影响链接与运行
 - 截图目前已支持 `BMP` 与原始 framebuffer dump（`.uyafb`）；`PNG` 仍未接入
-- Framebuffer 专用后端已具备首版显示链路，并已支持控制终端键盘热键与方向键；`evdev` 指针/触摸仍未实现
+- Framebuffer 专用后端已具备首版显示链路，并已支持控制终端键盘热键与方向键，以及可选 `evdev` 指针/触摸/滚轮；更完整校准与多点手势仍未实现
 - 当前机器上 `/dev/fb0` 存在但普通用户无权限，`--backend fb` 会清晰返回 `Permission denied`
 - 默认文本渲染已切到内置位图字体，不再显示统一占位方框
   - ASCII：`5x7`
@@ -229,7 +235,7 @@ gui/
 │   │   └── sdl_common.uya   # SDL2 公共代码
 │   ├── fb/                  # Framebuffer 后端
 │   │   ├── disp_fb.uya      # FB 显示
-│   │   ├── indev_fb.uya     # FB 输入（控制终端键盘，后续可扩 evdev）
+│   │   ├── indev_fb.uya     # FB 输入（TTY 键盘 + 可选 evdev）
 │   │   └── tick_linux.uya   # Linux 时钟
 │   └── raw/                 # 裸机接口 (嵌入式用)
 │       ├── disp_raw.uya

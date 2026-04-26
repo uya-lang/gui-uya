@@ -4,9 +4,15 @@ use core.event.EventType;
 use core.event.InputDev;
 use core.event.event_none;
 use core.event.gesture_config_default;
+use core.point.POINT_ZERO;
 use core.point.Point;
+use platform.fb.indev_fb_common.FB_EVT_HOVER_MOVE;
 use platform.fb.indev_fb_common.FB_EVT_KEY_DOWN;
+use platform.fb.indev_fb_common.FB_EVT_TOUCH_DOWN;
+use platform.fb.indev_fb_common.FB_EVT_TOUCH_UP;
+use platform.fb.indev_fb_common.FB_EVT_WHEEL;
 use platform.fb.indev_fb_common.FbHostEvent;
+use platform.fb.indev_fb_common.fb_hover_point_default;
 use platform.fb.indev_fb_common.fb_feed_host_event;
 use platform.indev.EncoderDriver;
 use platform.indev.IInputDev;
@@ -103,17 +109,84 @@ test "input manager supports hotplug and edge gestures" {
 }
 
 test "fb input system translates tty key events" {
+    var touch: TouchDriver = touch_driver_new();
     var key: KeyDriver = key_driver_new();
+    var encoder: EncoderDriver = encoder_driver_new();
+    var hover_pending: bool = false;
+    var hover_point: Point = fb_hover_point_default();
 
     var raw: FbHostEvent = FbHostEvent{
         kind: FB_EVT_KEY_DOWN,
+        x: 0,
+        y: 0,
+        value: 0,
         key_code: 'P' as u16,
-        reserved: 0u8,
+        reserved: 0u16,
     };
-    fb_feed_host_event(&key, &raw, 44u32);
+    fb_feed_host_event(&touch, &key, &encoder, &raw, 44u32, &hover_pending, &hover_point);
 
     var evt: Event = event_none();
     try assert_eq_bool(key.read(&evt), true);
     try expect(evt.event_type == EventType.KeyDown);
     try assert_eq_i32(evt.key_code() as i32, 'P' as i32);
+}
+
+test "fb input common translates hover touch and wheel" {
+    var touch: TouchDriver = touch_driver_new();
+    var key: KeyDriver = key_driver_new();
+    var encoder: EncoderDriver = encoder_driver_new();
+    var hover_pending: bool = false;
+    var hover_point: Point = POINT_ZERO;
+    var evt: Event = event_none();
+
+    var hover_raw: FbHostEvent = FbHostEvent{
+        kind: FB_EVT_HOVER_MOVE,
+        x: 12,
+        y: 18,
+        value: 0,
+        key_code: 0u16,
+        reserved: 0u16,
+    };
+    fb_feed_host_event(&touch, &key, &encoder, &hover_raw, 1u32, &hover_pending, &hover_point);
+    try assert_eq_bool(hover_pending, true);
+    try assert_eq_i32(hover_point.x as i32, 12);
+    try assert_eq_i32(hover_point.y as i32, 18);
+
+    touch.set_filter_enabled(false);
+    var down_raw: FbHostEvent = FbHostEvent{
+        kind: FB_EVT_TOUCH_DOWN,
+        x: 20,
+        y: 22,
+        value: 0,
+        key_code: 0u16,
+        reserved: 0u16,
+    };
+    fb_feed_host_event(&touch, &key, &encoder, &down_raw, 2u32, &hover_pending, &hover_point);
+    try assert_eq_bool(touch.read(&evt), true);
+    try expect(evt.event_type == EventType.Press);
+    try assert_eq_i32(evt.point().x as i32, 20);
+
+    var up_raw: FbHostEvent = FbHostEvent{
+        kind: FB_EVT_TOUCH_UP,
+        x: 20,
+        y: 22,
+        value: 0,
+        key_code: 0u16,
+        reserved: 0u16,
+    };
+    fb_feed_host_event(&touch, &key, &encoder, &up_raw, 3u32, &hover_pending, &hover_point);
+    try assert_eq_bool(touch.read(&evt), true);
+    try expect(evt.event_type == EventType.Release);
+
+    var wheel_raw: FbHostEvent = FbHostEvent{
+        kind: FB_EVT_WHEEL,
+        x: 0,
+        y: 0,
+        value: -2,
+        key_code: 0u16,
+        reserved: 0u16,
+    };
+    fb_feed_host_event(&touch, &key, &encoder, &wheel_raw, 4u32, &hover_pending, &hover_point);
+    try assert_eq_bool(encoder.read(&evt), true);
+    try assert_eq_i32(evt.value(), -2);
 }

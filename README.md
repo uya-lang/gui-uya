@@ -21,7 +21,7 @@
 - `make sim-build` 通过
 - `make sim-run SIM_ARGS="--max-frames 2 --screenshot build/sim/readme_check.bmp"` 通过，并生成截图
 - `make test` 通过
-  - `gui/test_suite.uya` 的 `93` 个测试通过
+  - `gui/test_suite.uya` 的 `94` 个测试通过
   - `gui/render_test_suite.uya` 的 `12` 个测试通过
 
 如果你当前只是想验证 GUI 核心与模拟器相关逻辑，可先单独执行：
@@ -210,7 +210,7 @@ make build-esp32
 
 - `make sim-build` 能完成链接，但由 Uya 生成的 C 文件仍会产生较多编译 warning；目前不影响 `make sim-run` 正常使用。
 - 当前截图已支持 `BMP` 导出；如需原始 framebuffer dump，可显式使用 `.uyafb`；`PNG` 仍未接入。
-- Framebuffer 后端现已支持控制终端键盘热键与方向键；`evdev` 指针/触摸输入仍未补齐。
+- Framebuffer 后端现已支持控制终端键盘热键，以及可选 `evdev` 指针/触摸/滚轮输入；更完整校准与多点手势仍未补齐。
 - 默认内置字体已支持 ASCII 与 `U+4E00..U+9FFF` 中文常用字，但仍未覆盖完整 Unicode 字体排版链路。
 
 ## 相关文件

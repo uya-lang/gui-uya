@@ -32,7 +32,7 @@ fn sim_print_usage() void {
         "  --demo phase4|phase6\n"
         "  --width N --height N --scale N\n"
         "  --fullscreen | --windowed\n"
-        "  --fb-dev /dev/fb0 --fb-tty /dev/tty\n"
+        "  --fb-dev /dev/fb0 --fb-tty /dev/tty --fb-input /dev/input/eventX\n"
         "  --root PATH --title TEXT\n"
         "  --screenshot PATH --record PATH --playback PATH\n"
         "  --max-frames N --profile-every N --hud --no-hud\n" as *byte
@@ -155,7 +155,7 @@ fn run_simulator_fb(cfg_in: SimConfig) i32 {
     }
 
     var input: FbInputSystem = fb_input_system_new();
-    if !input.init(cfg.fb_input_device_path) {
+    if !input.init(cfg.fb_input_device_path, cfg.fb_tty_device_path, cfg.width, cfg.height) {
         _ = printf("[sim] framebuffer input unavailable: %s\n" as *byte, fb_input_last_error());
     }
     defer {
@@ -175,6 +175,16 @@ fn run_simulator_fb(cfg_in: SimConfig) i32 {
         last_tick_ms = frame_start_ms;
 
         _ = input.pump(frame_start_ms);
+        var has_hover: bool = true;
+        while has_hover {
+            var hover_x: i16 = 0;
+            var hover_y: i16 = 0;
+            has_hover = input.poll_hover_coords(&hover_x, &hover_y);
+            if !has_hover {
+                break;
+            }
+            app.handle_hover_coords(hover_x, hover_y, frame_start_ms, true);
+        }
         var evt: Event = event_none();
         var has_evt: bool = input.poll(&evt);
         while has_evt {

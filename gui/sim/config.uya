@@ -37,6 +37,7 @@ export struct SimConfig {
     resource_root: &const byte,
     fb_device_path: &const byte,
     fb_input_device_path: &const byte,
+    fb_tty_device_path: &const byte,
     screenshot_path: &const byte,
     record_path: &const byte,
     playback_path: &const byte,
@@ -72,6 +73,7 @@ export fn sim_config_default() SimConfig {
         resource_root: "." as &const byte,
         fb_device_path: "" as &const byte,
         fb_input_device_path: "" as &const byte,
+        fb_tty_device_path: "" as &const byte,
         screenshot_path: "" as &const byte,
         record_path: "" as &const byte,
         playback_path: "" as &const byte,
@@ -141,6 +143,9 @@ export fn sim_config_from_runtime() SimConfig {
                 cfg.fb_device_path = next as &const byte;
                 i = i + 1;
             } else if sim_cstr_eq(arg as &const byte, "--fb-tty") && next != null {
+                cfg.fb_tty_device_path = next as &const byte;
+                i = i + 1;
+            } else if sim_cstr_eq(arg as &const byte, "--fb-input") && next != null {
                 cfg.fb_input_device_path = next as &const byte;
                 i = i + 1;
             } else if sim_cstr_eq(arg as &const byte, "--screenshot") && next != null {
