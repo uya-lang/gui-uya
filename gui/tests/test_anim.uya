@@ -16,6 +16,9 @@ use core.obj.gui_obj_default;
 use core.obj.gui_obj_register;
 use core.obj.gui_obj_reset_registry;
 use style.StyleProp;
+use std.async.Future;
+use std.async.Poll;
+use std.async.Waker;
 use std.testing.assert_eq_bool;
 use std.testing.assert_eq_i32;
 use std.testing.expect;
@@ -88,4 +91,22 @@ test "anim manager sustains 32 concurrent tweens" {
         try assert_eq_i32(objects[i].x as i32, 32 + i);
         i = i + 1;
     }
+}
+
+test "anim manager async loop compiles with future err void" {
+    var manager: AnimManager = anim_manager_new();
+    const future: Future<!void> = manager.animation_loop(1u32);
+    const waker: Waker = Waker{};
+    const poll: Poll<!void> = future.poll(&waker);
+    match poll {
+        .Ready(result) => {
+            _ = result catch {
+                return error.AssertionFailed;
+            };
+        },
+        .Pending(_) => {
+            return error.AssertionFailed;
+        },
+    };
+    try assert_eq_i32(manager.frame_count as i32, 0);
 }

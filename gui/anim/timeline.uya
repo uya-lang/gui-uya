@@ -71,7 +71,7 @@ export struct AnimManager {
     }
 
     @async_fn
-    fn animation_loop(self: &Self, tick_ms: u32) Future<!usize> {
+    fn animation_loop(self: &Self, tick_ms: u32) Future<!void> {
         var last_tick: u32 = get_tick_ms();
         var sleep_tick: u32 = tick_ms;
         if sleep_tick == 0u32 {
@@ -84,7 +84,7 @@ export struct AnimManager {
             self.update_all(now - last_tick);
             last_tick = now;
         }
-        return 0usize;
+        return {};
     }
 }
 

@@ -95,6 +95,10 @@ export interface IFileSystem {
     fn read(self: &Self, path: &const byte, out: &byte, capacity: usize) !usize;
 }
 
+export @async_fn fn fs_read_async<T: IFileSystem>(fs: &T, path: &const byte, out: &byte, capacity: usize) Future<!usize> {
+    return try fs.read(path, out, capacity);
+}
+
 export struct RomFsEntry {
     path: &const byte,
     data: &const byte,
@@ -150,11 +154,6 @@ export struct RomFileSystem : IFileSystem {
         }
         return error.FsNotFound;
     }
-
-    @async_fn
-    fn read_async(self: &Self, path: &const byte, out: &byte, capacity: usize) Future<!usize> {
-        return try self.read(path, out, capacity);
-    }
 }
 
 export struct FatFileSystem : IFileSystem {
@@ -191,11 +190,6 @@ export struct FatFileSystem : IFileSystem {
             return error.FsReadFailed;
         }
         return n as usize;
-    }
-
-    @async_fn
-    fn read_async(self: &Self, path: &const byte, out: &byte, capacity: usize) Future<!usize> {
-        return try self.read(path, out, capacity);
     }
 }
 

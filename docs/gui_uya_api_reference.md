@@ -37,13 +37,7 @@
 
 - L6: `export const BITMAP_ALLOCATOR_MAX_BITS: i32 = 256;`
 - L31: `export struct BitmapAllocator {`
-- L116: `export fn bitmap_allocator_new(capacity: i32) BitmapAllocator {`
-- L133: `export fn bitmap_allocator_alloc(bitmap: &BitmapAllocator) i32 {`
-- L137: `export fn bitmap_allocator_free(bitmap: &BitmapAllocator, idx: i32) void {`
-- L141: `export fn bitmap_allocator_is_used(bitmap: &BitmapAllocator, idx: i32) bool {`
-- L145: `export fn bitmap_allocator_find_first_zero(bitmap: &BitmapAllocator) i32 {`
-- L149: `export fn bitmap_allocator_used(bitmap: &BitmapAllocator) i32 {`
-- L153: `export fn bitmap_allocator_free_slots(bitmap: &BitmapAllocator) i32 {`
+- L124: `export fn bitmap_allocator_new(capacity: i32) BitmapAllocator {`
 
 ## `gui/core/color.uya`
 
@@ -197,7 +191,7 @@
 
 ## `gui/examples/phase4_smoke.uya`
 
-- L44: `export fn run_phase4_smoke() i32 {`
+- L45: `export fn run_phase4_smoke() i32 {`
 
 ## `gui/examples/phase6_smoke.uya`
 
@@ -392,12 +386,13 @@
 - L8: `export const ROM_FS_CAPACITY: i32 = 16;`
 - L9: `export const FS_PATH_CAPACITY: i32 = 256;`
 - L93: `export interface IFileSystem {`
-- L98: `export struct RomFsEntry {`
-- L105: `export struct RomFileSystem : IFileSystem {`
-- L160: `export struct FatFileSystem : IFileSystem {`
-- L202: `export fn rom_fs_new() RomFileSystem {`
-- L209: `export fn fat_fs_new(base_dir: &const byte) FatFileSystem {`
-- L213: `export fn fs_path_len(path: &const byte) usize {`
+- L98: `export @async_fn fn fs_read_async<T: IFileSystem>(fs: &T, path: &const byte, out: &byte, capacity: usize) Future<!usize> {`
+- L102: `export struct RomFsEntry {`
+- L109: `export struct RomFileSystem : IFileSystem {`
+- L159: `export struct FatFileSystem : IFileSystem {`
+- L196: `export fn rom_fs_new() RomFileSystem {`
+- L203: `export fn fat_fs_new(base_dir: &const byte) FatFileSystem {`
+- L207: `export fn fs_path_len(path: &const byte) usize {`
 
 ## `gui/res/pool.uya`
 
@@ -440,11 +435,11 @@
 
 ## `gui/tests/test_anim.uya`
 
-- L23: `export const TEST_ANIM_MODULE: i32 = 1;`
+- L26: `export const TEST_ANIM_MODULE: i32 = 1;`
 
 ## `gui/tests/test_bitmap.uya`
 
-- L13: `export const TEST_BITMAP_MODULE: i32 = 1;`
+- L7: `export const TEST_BITMAP_MODULE: i32 = 1;`
 
 ## `gui/tests/test_color.uya`
 
@@ -480,7 +475,7 @@
 
 ## `gui/tests/test_phase4_io.uya`
 
-- L22: `export const TEST_PHASE4_IO_MODULE: i32 = 1;`
+- L23: `export const TEST_PHASE4_IO_MODULE: i32 = 1;`
 
 ## `gui/tests/test_phase5_runtime.uya`
 

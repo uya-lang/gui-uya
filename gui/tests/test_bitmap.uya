@@ -1,11 +1,5 @@
 use core.bitmap.BitmapAllocator;
-use core.bitmap.bitmap_allocator_alloc;
-use core.bitmap.bitmap_allocator_find_first_zero;
-use core.bitmap.bitmap_allocator_free;
-use core.bitmap.bitmap_allocator_free_slots;
-use core.bitmap.bitmap_allocator_is_used;
 use core.bitmap.bitmap_allocator_new;
-use core.bitmap.bitmap_allocator_used;
 use libc.pthread;
 use std.testing.assert_eq_bool;
 use std.testing.assert_eq_i32;
@@ -28,7 +22,8 @@ fn bitmap_alloc_worker(arg: &void) &void {
 
     var local_count: i32 = 0;
     while true {
-        const idx: i32 = bitmap_allocator_alloc(_bitmap_shared);
+        const shared: &BitmapAllocator = _bitmap_shared;
+        const idx: i32 = shared.alloc_slot();
         if idx < 0 {
             break;
         }
@@ -42,30 +37,30 @@ fn bitmap_alloc_worker(arg: &void) &void {
 test "bitmap allocator alloc free cycle" {
     var bitmap: BitmapAllocator = bitmap_allocator_new(8);
 
-    try assert_eq_i32(bitmap_allocator_find_first_zero(&bitmap), 0);
-    try assert_eq_i32(bitmap_allocator_used(&bitmap), 0);
-    try assert_eq_i32(bitmap_allocator_free_slots(&bitmap), 8);
+    try assert_eq_i32(bitmap.find_first_zero(), 0);
+    try assert_eq_i32(bitmap.used(), 0);
+    try assert_eq_i32(bitmap.free_slots(), 8);
 
-    try assert_eq_i32(bitmap_allocator_alloc(&bitmap), 0);
-    try assert_eq_i32(bitmap_allocator_alloc(&bitmap), 1);
-    try assert_eq_i32(bitmap_allocator_alloc(&bitmap), 2);
-    try assert_eq_bool(bitmap_allocator_is_used(&bitmap, 1), true);
-    try assert_eq_i32(bitmap_allocator_used(&bitmap), 3);
+    try assert_eq_i32(bitmap.alloc(), 0);
+    try assert_eq_i32(bitmap.alloc(), 1);
+    try assert_eq_i32(bitmap.alloc(), 2);
+    try assert_eq_bool(bitmap.is_used(1), true);
+    try assert_eq_i32(bitmap.used(), 3);
 
-    bitmap_allocator_free(&bitmap, 1);
-    try assert_eq_bool(bitmap_allocator_is_used(&bitmap, 1), false);
-    try assert_eq_i32(bitmap_allocator_alloc(&bitmap), 1);
-    try assert_eq_i32(bitmap_allocator_used(&bitmap), 3);
+    bitmap.free_slot(1);
+    try assert_eq_bool(bitmap.is_used(1), false);
+    try assert_eq_i32(bitmap.alloc(), 1);
+    try assert_eq_i32(bitmap.used(), 3);
 }
 
 test "bitmap allocator exhaustion" {
     var bitmap: BitmapAllocator = bitmap_allocator_new(4);
-    try assert_eq_i32(bitmap_allocator_alloc(&bitmap), 0);
-    try assert_eq_i32(bitmap_allocator_alloc(&bitmap), 1);
-    try assert_eq_i32(bitmap_allocator_alloc(&bitmap), 2);
-    try assert_eq_i32(bitmap_allocator_alloc(&bitmap), 3);
-    try assert_eq_i32(bitmap_allocator_alloc(&bitmap), -1);
-    try assert_eq_i32(bitmap_allocator_find_first_zero(&bitmap), -1);
+    try assert_eq_i32(bitmap.alloc(), 0);
+    try assert_eq_i32(bitmap.alloc(), 1);
+    try assert_eq_i32(bitmap.alloc(), 2);
+    try assert_eq_i32(bitmap.alloc(), 3);
+    try assert_eq_i32(bitmap.alloc(), -1);
+    try assert_eq_i32(bitmap.find_first_zero(), -1);
 }
 
 test "bitmap allocator concurrent allocation" {
@@ -103,6 +98,6 @@ test "bitmap allocator concurrent allocation" {
     }
 
     try assert_eq_i32(total, BITMAP_CONCURRENT_CAPACITY);
-    try assert_eq_i32(bitmap_allocator_used(&bitmap), BITMAP_CONCURRENT_CAPACITY);
-    try assert_eq_i32(bitmap_allocator_find_first_zero(&bitmap), -1);
+    try assert_eq_i32(bitmap.used(), BITMAP_CONCURRENT_CAPACITY);
+    try assert_eq_i32(bitmap.find_first_zero(), -1);
 }

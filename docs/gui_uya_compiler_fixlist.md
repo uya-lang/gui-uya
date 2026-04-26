@@ -10,7 +10,7 @@
 - 修复后应补的编译器回归测试
 
 > 2026-04-26 之后，这份文档已经主要转为“历史问题 + 当前回归状态”记录。
-> `Phase 0` 到 `Phase 3` 的已知问题中，除 `#7` 外其余条目已在编译器 / driver 侧修复；`Phase 4` 过程中新增发现的 `#12/#13` 已在编译器侧修复并补回归，`#14` 当前编译器也已通过 pthread callback 定向回归验证，GUI 仓库里对应兼容层暂未回切。
+> `Phase 0` 到 `Phase 3` 的已知问题中，除 `#7` 外其余条目已在编译器 / driver 侧修复；`Phase 4` 过程中新增发现的 `#12/#13` 已在编译器侧修复并补回归，`#14` 当前编译器也已通过 pthread callback 定向回归验证，GUI 仓库里对应兼容层现已回切。
 
 ## 优先级
 
@@ -41,7 +41,7 @@
 
 ## 当前状态总览
 
-> 2026-04-26 更新：当前 GUI 仓库已经可以通过 `make test` / `make build` / `make bench`；下表中的“状态”描述的是编译器 / 语言层问题是否已解决，不是 GUI 仓库是否还能继续开发。当前编译器侧已修复 `1/2/3/4/5/6/8/9/10/11/12/13`，`#14` 当前也已通过代表性 callback 回归验证；GUI 仓库里 `#12/#13/#14` 对应兼容层仍暂保留。
+> 2026-04-26 更新：当前 GUI 仓库已经可以通过 `make test` / `make build` / `make bench`；下表中的“状态”描述的是编译器 / 语言层问题是否已解决，不是 GUI 仓库是否还能继续开发。当前编译器侧已修复 `1/2/3/4/5/6/8/9/10/11/12/13`，`#14` 当前也已通过代表性 callback 回归验证；GUI 仓库里 `#12/#13/#14` 对应兼容层已回切。
 
 | 编号 | 问题 | 当前状态 | 对当前仓库影响 | 当前仓库处理方式 |
 |------|------|----------|----------------|------------------|
@@ -56,9 +56,9 @@
 | 9 | `&Self` 返回值链式方法 lowering | 已修复（编译器） | 低 | 普通链式已验证；`Chart.add_point()` 仍保留逐句调用 |
 | 10 | 跨模块同名 `enum` 的 C99 命名空间冲突 | 已修复（编译器） | 低 | 已恢复 `TextAlign` 命名 |
 | 11 | split-C 下相对 `-o` 路径解析 | 已修复（driver 层） | 低 | 已切回相对 `-o` |
-| 12 | `@async_fn` 返回 `Future<!void>` 的 C99 代码生成 | 已修复（编译器） | 低 | `AnimManager.animation_loop()` 仍暂保留 `Future<!usize>`，可择机回切 |
-| 13 | 泛型 `@async_fn` 自由函数的实例化与代码生成 | 已修复（编译器） | 低 | `fs_read_async<F>` 仍暂拆到具体类型方法，可择机回切 |
-| 14 | 结构体方法调用在 pthread callback 场景的 lowering | 当前编译器已无复现（已补回归） | 低 | `BitmapAllocator` 仍暂经导出包装函数调用，可择机回切 |
+| 12 | `@async_fn` 返回 `Future<!void>` 的 C99 代码生成 | 已修复（编译器） | 低 | `AnimManager.animation_loop()` 已回切到 `Future<!void>` |
+| 13 | 泛型 `@async_fn` 自由函数的实例化与代码生成 | 已修复（编译器） | 低 | `fs_read_async<F>` 已恢复为泛型 async 自由函数 |
+| 14 | 结构体方法调用在 pthread callback 场景的 lowering | 当前编译器已无复现（已补回归） | 低 | `BitmapAllocator` pthread callback 已切回直接实例方法调用 |
 
 ## 1. 泛型 `union` / `Option<T>` 的 C99 代码生成
 
@@ -510,10 +510,10 @@ _ = chart.add_point(6);
   - `return type is an incomplete type`
   - `uya_interface_Future_err_void` / `Poll_err_void` 未完整定义
 
-### GUI 侧遗留兼容层
+### GUI 仓库现状
 
-- 把 `AnimManager.animation_loop()` 暂改成 `Future<!usize>`
-- 以 `0usize` 作为完成值，规避 `Future<!void>` 的 codegen 路径
+- `AnimManager.animation_loop()` 已回切到 `Future<!void>`
+- GUI 测试中已补 `block_on<void>(manager.animation_loop(...))` 编译回归
 
 ### 修复结果
 
@@ -545,7 +545,7 @@ _ = chart.add_point(6);
 ### GUI 侧复现点
 
 - 目标形态原本是 `fs_read_async<F: IFileSystem>(fs, path, out, cap) Future<!usize>`
-- 当前兼容实现已改为具体类型方法，见 [fs.uya](/home/winger/uya/gui-uya/gui/res/fs.uya)
+- 当前 GUI 仓库已恢复 `fs_read_async<F: IFileSystem>(...)`，见 [fs.uya](/home/winger/uya/gui-uya/gui/res/fs.uya)
 
 ### 当时的失败表现
 
@@ -554,10 +554,10 @@ _ = chart.add_point(6);
   - `implicit declaration of function 'fs_read_async'`
   - 调用点与 `std_block_on_usize(...)` 之间类型不匹配
 
-### GUI 侧遗留兼容层
+### GUI 仓库现状
 
-- 移除泛型 async 自由函数
-- 改为 `RomFileSystem.read_async()` / `FatFileSystem.read_async()` 等具体类型方法
+- 已恢复 `fs_read_async<T: IFileSystem>(...)`
+- `phase4_smoke` 与 `test_phase4_io` 已切回泛型 async 自由函数调用
 
 ### 修复结果
 
@@ -579,7 +579,7 @@ _ = chart.add_point(6);
 ### 当前状态
 
 - 状态: 当前编译器已无复现（已补回归）
-- 阻塞性: 低；代表性 callback 场景已验证通过，但 GUI 仓库仍暂保留包装函数
+- 阻塞性: 低；代表性 callback 场景已验证通过，GUI 仓库也已回切直接调用
 
 ### 现象
 
@@ -597,10 +597,10 @@ _ = chart.add_point(6);
 - 宿主链接阶段报：
   - `undefined reference to 'unknown'`
 
-### GUI 侧遗留兼容层
+### GUI 仓库现状
 
-- 为 `BitmapAllocator` 增加 `bitmap_allocator_alloc()` / `bitmap_allocator_free()` 等导出包装函数
-- pthread worker 通过包装函数调用，绕开该 lowering 路径
+- pthread worker 已直接通过共享结构体指针调用实例方法（当前使用 `BitmapAllocator.alloc_slot()`）
+- 旧的导出包装函数已移除
 
 ### 当前编译器状态
 
@@ -642,11 +642,8 @@ _ = chart.add_point(6);
 - `widget/lbl.uya` 的 `TextAlign` 命名
 - `uya build ... -o build/app` 的相对输出路径
 
-以下组合路径在编译器侧已经打通或已补回归验证，但 GUI 仓库当前仍保留兼容层、尚未统一回切：
+以下组合路径在编译器侧已经打通或已补回归验证，其中 `#12/#13/#14` 对应 GUI 兼容层已经回切；其余条目仍保留兼容层：
 
 - `EventQueue.pop()` 继续使用 `EventOption`
 - `Buffer.as_slice()` 继续返回 `ByteSlice`
 - `Chart.add_point()` 继续拆成逐句调用
-- `AnimManager.animation_loop()` 暂返回 `Future<!usize>`
-- `fs_read_async<F: IFileSystem>` 暂拆到具体类型的 `read_async()` 方法
-- `BitmapAllocator` 的 pthread worker 暂经 `bitmap_allocator_*()` 包装函数调用

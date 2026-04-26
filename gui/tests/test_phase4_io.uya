@@ -13,6 +13,7 @@ use res.cache.image_cache_put_async;
 use res.fs.FatFileSystem;
 use res.fs.RomFileSystem;
 use res.fs.fat_fs_new;
+use res.fs.fs_read_async;
 use res.fs.rom_fs_new;
 use std.async.block_on;
 use std.testing.assert_eq_bool;
@@ -31,7 +32,7 @@ test "rom fs and async read succeed" {
     try assert_eq_i32(out[0] as i32, 85);
 
     var out_async: [byte: 8] = [];
-    const async_n: usize = try block_on<usize>(rom.read_async("hello.bin", &out_async[0], 8usize));
+    const async_n: usize = try block_on<usize>(fs_read_async<RomFileSystem>(&rom, "hello.bin", &out_async[0], 8usize));
     try assert_eq_i32(async_n as i32, 4);
     try assert_eq_i32(out_async[1] as i32, 89);
 }

@@ -33,6 +33,7 @@ use res.cache.ImageCache;
 use res.cache.image_cache_new;
 use res.cache.image_cache_put_async;
 use res.fs.RomFileSystem;
+use res.fs.fs_read_async;
 use res.fs.rom_fs_new;
 use style.StyleProp;
 use std.async.block_on;
@@ -89,7 +90,7 @@ export fn run_phase4_smoke() i32 {
     var blob: [byte: 4] = [80, 52, 33, 10];
     var fs_out: [byte: 8] = [];
     _ = rom.add_file("phase4.bin", &blob[0] as &const byte, 4usize);
-    const fs_n: usize = block_on<usize>(rom.read_async("phase4.bin", &fs_out[0], 8usize)) catch {
+    const fs_n: usize = block_on<usize>(fs_read_async<RomFileSystem>(&rom, "phase4.bin", &fs_out[0], 8usize)) catch {
         return 4;
     };
     if fs_n != 4usize || fs_out[0] != 80 {
