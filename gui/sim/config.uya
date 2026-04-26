@@ -1,0 +1,143 @@
+use libc.atoi;
+use libc.getenv;
+use sim.common.sim_cstr_empty;
+use sim.common.sim_cstr_eq;
+use std.runtime.get_argc;
+use std.runtime.get_argv;
+
+fn sim_clamp_positive_i32(value: i32, fallback: i32) i32 {
+    if value <= 0 {
+        return fallback;
+    }
+    return value;
+}
+
+export enum SimDemoKind {
+    Phase4,
+    Phase6,
+}
+
+export struct SimConfig {
+    demo: SimDemoKind,
+    width: u16,
+    height: u16,
+    scale: u8,
+    fullscreen: bool,
+    hud_enabled: bool,
+    show_help: bool,
+    profiler_report_every: u32,
+    max_frames: u32,
+    title: &const byte,
+    resource_root: &const byte,
+    screenshot_path: &const byte,
+    record_path: &const byte,
+    playback_path: &const byte,
+}
+
+export fn sim_demo_name(kind: SimDemoKind) &const byte {
+    if kind == SimDemoKind.Phase6 {
+        return "phase6" as &const byte;
+    }
+    return "phase4" as &const byte;
+}
+
+export fn sim_config_default() SimConfig {
+    return SimConfig{
+        demo: SimDemoKind.Phase4,
+        width: 320,
+        height: 240,
+        scale: 2,
+        fullscreen: false,
+        hud_enabled: true,
+        show_help: false,
+        profiler_report_every: 120u32,
+        max_frames: 0u32,
+        title: "UyaGUI Linux Simulator" as &const byte,
+        resource_root: "." as &const byte,
+        screenshot_path: "" as &const byte,
+        record_path: "" as &const byte,
+        playback_path: "" as &const byte,
+    };
+}
+
+export fn sim_config_from_runtime() SimConfig {
+    var cfg: SimConfig = sim_config_default();
+    const env_root: &byte = getenv("UYA_GUI_SIM_ROOT");
+    if env_root != null && env_root[0] != 0 {
+        cfg.resource_root = env_root as &const byte;
+    }
+
+    var i: i32 = 1;
+    while i < get_argc() {
+        const arg: &byte = get_argv(i);
+        if arg == null {
+            i = i + 1;
+            continue;
+        }
+
+        if sim_cstr_eq(arg as &const byte, "--help") {
+            cfg.show_help = true;
+        } else if sim_cstr_eq(arg as &const byte, "--fullscreen") {
+            cfg.fullscreen = true;
+        } else if sim_cstr_eq(arg as &const byte, "--windowed") {
+            cfg.fullscreen = false;
+        } else if sim_cstr_eq(arg as &const byte, "--hud") {
+            cfg.hud_enabled = true;
+        } else if sim_cstr_eq(arg as &const byte, "--no-hud") {
+            cfg.hud_enabled = false;
+        } else if i + 1 < get_argc() {
+            const next: &byte = get_argv(i + 1);
+            if sim_cstr_eq(arg as &const byte, "--demo") && next != null {
+                if sim_cstr_eq(next as &const byte, "phase6") {
+                    cfg.demo = SimDemoKind.Phase6;
+                } else {
+                    cfg.demo = SimDemoKind.Phase4;
+                }
+                i = i + 1;
+            } else if sim_cstr_eq(arg as &const byte, "--width") && next != null {
+                cfg.width = (sim_clamp_positive_i32(atoi(next as &const byte), cfg.width as i32) as! u16).value;
+                i = i + 1;
+            } else if sim_cstr_eq(arg as &const byte, "--height") && next != null {
+                cfg.height = (sim_clamp_positive_i32(atoi(next as &const byte), cfg.height as i32) as! u16).value;
+                i = i + 1;
+            } else if sim_cstr_eq(arg as &const byte, "--scale") && next != null {
+                const parsed_scale: i32 = sim_clamp_positive_i32(atoi(next as &const byte), cfg.scale as i32);
+                if parsed_scale > 0 && parsed_scale <= 8 {
+                    cfg.scale = (parsed_scale as! u8).value;
+                }
+                i = i + 1;
+            } else if sim_cstr_eq(arg as &const byte, "--root") && next != null {
+                cfg.resource_root = next as &const byte;
+                i = i + 1;
+            } else if sim_cstr_eq(arg as &const byte, "--title") && next != null {
+                cfg.title = next as &const byte;
+                i = i + 1;
+            } else if sim_cstr_eq(arg as &const byte, "--screenshot") && next != null {
+                cfg.screenshot_path = next as &const byte;
+                i = i + 1;
+            } else if sim_cstr_eq(arg as &const byte, "--record") && next != null {
+                cfg.record_path = next as &const byte;
+                i = i + 1;
+            } else if sim_cstr_eq(arg as &const byte, "--playback") && next != null {
+                cfg.playback_path = next as &const byte;
+                i = i + 1;
+            } else if sim_cstr_eq(arg as &const byte, "--max-frames") && next != null {
+                const parsed_frames: i32 = atoi(next as &const byte);
+                if parsed_frames >= 0 {
+                    cfg.max_frames = (parsed_frames as! u32).value;
+                }
+                i = i + 1;
+            } else if sim_cstr_eq(arg as &const byte, "--profile-every") && next != null {
+                const parsed_report: i32 = sim_clamp_positive_i32(atoi(next as &const byte), cfg.profiler_report_every as i32);
+                cfg.profiler_report_every = (parsed_report as! u32).value;
+                i = i + 1;
+            }
+        }
+        i = i + 1;
+    }
+
+    if sim_cstr_empty(cfg.resource_root) {
+        cfg.resource_root = ".";
+    }
+    return cfg;
+}

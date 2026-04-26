@@ -1,0 +1,192 @@
+use libc.O_CREAT;
+use libc.O_RDONLY;
+use libc.O_TRUNC;
+use libc.O_WRONLY;
+use libc.sys_close;
+use libc.sys_open;
+use libc.sys_read;
+use libc.sys_write;
+
+export const SIM_RECORDER_CAPACITY: i32 = 1024;
+export const SIM_RECORDER_MAGIC: u32 = 0x52435955u32;
+export const SIM_RECORDER_VERSION: u16 = 1u16;
+
+export error RecorderIo;
+export error RecorderFormat;
+
+export enum RecorderEventKind {
+    None,
+    Hover,
+    TouchDown,
+    TouchUp,
+    KeyDown,
+    KeyUp,
+    Wheel,
+}
+
+export struct RecordedEvent {
+    frame_offset: u32,
+    kind: RecorderEventKind,
+    x: i16,
+    y: i16,
+    value: i32,
+    key_code: u16,
+    reserved: u16,
+}
+
+struct RecorderHeader {
+    magic: u32,
+    version: u16,
+    count: u16,
+}
+
+export struct SimRecorder {
+    events: [RecordedEvent: 1024],
+    event_count: u16,
+    recording: bool,
+    playing: bool,
+    record_start_frame: u32,
+    playback_start_frame: u32,
+    playback_cursor: u16,
+
+    fn start_recording(self: &Self, frame: u32) void {
+        self.event_count = 0u16;
+        self.recording = true;
+        self.playing = false;
+        self.record_start_frame = frame;
+        self.playback_cursor = 0u16;
+    }
+
+    fn stop_recording(self: &Self) void {
+        self.recording = false;
+    }
+
+    fn record_event(self: &Self, frame: u32, kind: RecorderEventKind, x: i16, y: i16, value: i32, key_code: u16) bool {
+        if !self.recording || self.event_count >= SIM_RECORDER_CAPACITY as u16 {
+            return false;
+        }
+        const slot: usize = self.event_count as usize;
+        self.events[slot] = RecordedEvent{
+            frame_offset: frame - self.record_start_frame,
+            kind: kind,
+            x: x,
+            y: y,
+            value: value,
+            key_code: key_code,
+            reserved: 0u16,
+        };
+        self.event_count = self.event_count + 1u16;
+        return true;
+    }
+
+    fn save(self: &Self, path: &const byte) !u16 {
+        const fd: i32 = (sys_open(path as *const byte, (O_CREAT | O_TRUNC | O_WRONLY) as i32, 0o644) catch {
+            return error.RecorderIo;
+        });
+        var header: RecorderHeader = RecorderHeader{
+            magic: SIM_RECORDER_MAGIC,
+            version: SIM_RECORDER_VERSION,
+            count: self.event_count,
+        };
+        _ = (sys_write(fd, &header as *const byte, @size_of(RecorderHeader) as usize) catch {
+            _ = sys_close(fd) catch {};
+            return error.RecorderIo;
+        });
+        if self.event_count > 0u16 {
+            const total_bytes: usize = self.event_count as usize * @size_of(RecordedEvent) as usize;
+            _ = (sys_write(fd, &self.events[0] as *const byte, total_bytes) catch {
+                _ = sys_close(fd) catch {};
+                return error.RecorderIo;
+            });
+        }
+        _ = sys_close(fd) catch {};
+        return self.event_count;
+    }
+
+    fn load(self: &Self, path: &const byte) !u16 {
+        const fd: i32 = (sys_open(path as *const byte, O_RDONLY as i32, 0) catch {
+            return error.RecorderIo;
+        });
+        var header: RecorderHeader = RecorderHeader{
+            magic: 0u32,
+            version: 0u16,
+            count: 0u16,
+        };
+        const header_n: isize = (sys_read(fd, &header as *byte, @size_of(RecorderHeader) as usize) catch {
+            _ = sys_close(fd) catch {};
+            return error.RecorderIo;
+        });
+        if header_n != @size_of(RecorderHeader) as isize
+            || header.magic != SIM_RECORDER_MAGIC
+            || header.version != SIM_RECORDER_VERSION
+            || header.count > SIM_RECORDER_CAPACITY as u16 {
+            _ = sys_close(fd) catch {};
+            return error.RecorderFormat;
+        }
+
+        self.event_count = header.count;
+        self.recording = false;
+        self.playing = false;
+        self.playback_cursor = 0u16;
+        if self.event_count > 0u16 {
+            const total_bytes: usize = self.event_count as usize * @size_of(RecordedEvent) as usize;
+            const payload_n: isize = (sys_read(fd, &self.events[0] as *byte, total_bytes) catch {
+                _ = sys_close(fd) catch {};
+                return error.RecorderIo;
+            });
+            if payload_n != total_bytes as isize {
+                _ = sys_close(fd) catch {};
+                return error.RecorderIo;
+            }
+        }
+        _ = sys_close(fd) catch {};
+        return self.event_count;
+    }
+
+    fn begin_playback(self: &Self, frame: u32) bool {
+        if self.event_count == 0u16 {
+            self.playing = false;
+            self.playback_cursor = 0u16;
+            return false;
+        }
+        self.playing = true;
+        self.recording = false;
+        self.playback_start_frame = frame;
+        self.playback_cursor = 0u16;
+        return true;
+    }
+
+    fn stop_playback(self: &Self) void {
+        self.playing = false;
+    }
+
+    fn next_due(self: &Self, frame: u32, out_evt: &RecordedEvent) bool {
+        if !self.playing || out_evt == null || self.playback_cursor >= self.event_count {
+            return false;
+        }
+        const elapsed: u32 = frame - self.playback_start_frame;
+        const slot: usize = self.playback_cursor as usize;
+        if self.events[slot].frame_offset > elapsed {
+            return false;
+        }
+        out_evt[0] = self.events[slot];
+        self.playback_cursor = self.playback_cursor + 1u16;
+        if self.playback_cursor >= self.event_count {
+            self.playing = false;
+        }
+        return true;
+    }
+}
+
+export fn sim_recorder_new() SimRecorder {
+    return SimRecorder{
+        events: [],
+        event_count: 0u16,
+        recording: false,
+        playing: false,
+        record_start_frame: 0u32,
+        playback_start_frame: 0u32,
+        playback_cursor: 0u16,
+    };
+}
+

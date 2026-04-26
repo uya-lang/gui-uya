@@ -34,5 +34,11 @@ jobs:
         run: make test
       - name: Run GUI benchmark
         run: make bench
+      - name: Install SDL2 headers
+        run: sudo apt-get update && sudo apt-get install -y libsdl2-dev
+      - name: Build Linux simulator
+        run: make sim-build
+      - name: Smoke-run Linux simulator in dummy video mode
+        run: SDL_VIDEODRIVER=dummy make sim-run SIM_ARGS="--max-frames 2 --screenshot build/sim/ci.uyafb"
       - name: Generate API docs
         run: make docs-api

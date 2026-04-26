@@ -6,6 +6,63 @@
 
 > 说明: 本文是 Linux 模拟器方案文档，不定义 Uya 语言语法。现行 Uya 语法以 `uya/docs/grammar_formal.md`、`uya/docs/uya.md` 和 `uya/tests/` 为准；本文中的导入、宿主 FFI 和调度片段主要用于表达方案结构。
 
+> 2026-04-26 实现更新：仓库里已经落下首版 SDL2 MVP。真实入口为 `gui/sim_main.uya`（为了让 Uya 模块根保持在 `gui/`），模拟器逻辑位于 `gui/sim/{runner,app,config}.uya`，SDL2 host glue 位于 `gui/platform/sdl2/sdl_host.c`。当前 CI 已通过 `SDL_VIDEODRIVER=dummy` 跑最小 smoke；若要在本地看到窗口，请先安装 SDL2 开发包后运行 `make sim-run`。
+
+## 0. 当前落地状态
+
+- 已有命令：`make sim-build`、`make sim-run`、`make sim-debug`
+- 已有 SDL2 后端：`gui/platform/sdl2/{disp_sdl.uya, indev_sdl.uya, sdl_host.c}`
+- 已有调试工具：`gui/sim/{screenshot,profiler,recorder}.uya`
+- 已有无 SDL2 单测：`gui/tests/test_sim_app.uya`、`gui/tests/test_sim_tools.uya`
+- 已有 CI smoke：`.github/workflows/gui-phase0.yml` 会安装 `libsdl2-dev`，并在 dummy video 下跑 `make sim-run SIM_ARGS="--max-frames 2 --screenshot build/sim/ci.uyafb"`
+
+## 0.1 构建与运行
+
+```bash
+# Debian / Ubuntu
+sudo apt-get update
+sudo apt-get install -y libsdl2-dev
+
+# 构建
+make sim-build
+
+# 默认运行（phase4 场景）
+make sim-run
+
+# 运行 phase6 并限定帧数，适合 CI / smoke
+make sim-run SIM_ARGS="--demo phase6 --max-frames 120"
+
+# 打开调试 HUD / profiler
+make sim-debug
+```
+
+## 0.2 运行参数
+
+- `--demo phase4|phase6`
+- `--width N --height N --scale N`
+- `--fullscreen | --windowed`
+- `--root PATH`
+- `--title TEXT`
+- `--screenshot PATH`
+- `--record PATH`
+- `--playback PATH`
+- `--max-frames N`
+- `--profile-every N`
+- `--hud | --no-hud`
+
+## 0.3 当前交互
+
+- 鼠标左键：通过 `TouchDriver` 进入现有事件系统
+- 鼠标移动：驱动 hover 更新
+- 鼠标滚轮：映射到 `EncoderDriver`，当前用于调节 slider
+- 键盘：
+  - `Esc` 退出
+  - `P` 抓取 framebuffer raw dump
+  - `R` 开始/结束输入录制
+  - `L` 读取并回放录制
+  - `F11` 切换全屏
+  - `1` / `6` 重新跑 `phase4_smoke` / `phase6_smoke`
+
 ---
 
 ## 目录

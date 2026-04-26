@@ -1,0 +1,797 @@
+use core.event.Event;
+use core.event.EventType;
+use core.event.InputDev;
+use core.event_dispatch.EventDispatcher;
+use core.event_dispatch.event_dispatcher_new;
+use core.obj.gui_obj_register;
+use core.obj.gui_obj_reset_registry;
+use core.obj_tree.ObjTree;
+use core.obj_tree.obj_tree_new;
+use core.color.Color;
+use core.point.POINT_ZERO;
+use core.point.Point;
+use core.rect.Rect;
+use examples.phase4_smoke.run_phase4_smoke;
+use examples.phase6_smoke.run_phase6_smoke;
+use libc.snprintf;
+use platform.disp.FrameBuffer;
+use platform.disp.PixelFormat;
+use render.ctx.RenderCtx;
+use render.img.ImageData;
+use render.img.empty_image;
+use render.img.image_data_new;
+use res.cache.ImageCache;
+use res.cache.image_cache_new;
+use res.cache.image_cache_put_async;
+use res.fs.FatFileSystem;
+use res.fs.fat_fs_new;
+use sim.common.SIM_TEXT_CAPACITY;
+use sim.common.sim_copy_cstr;
+use sim.common.sim_cstr_empty;
+use sim.common.sim_cstr_eq;
+use sim.common.SIM_KEY_DOWN;
+use sim.common.SIM_KEY_ESCAPE;
+use sim.common.SIM_KEY_F11;
+use sim.common.SIM_KEY_LEFT;
+use sim.common.SIM_KEY_RIGHT;
+use sim.common.SIM_KEY_UP;
+use sim.config.SimConfig;
+use sim.config.SimDemoKind;
+use sim.config.sim_config_default;
+use sim.config.sim_demo_name;
+use sim.profiler.ProfilerSnapshot;
+use sim.profiler.SimProfiler;
+use sim.profiler.sim_profiler_new;
+use sim.recorder.RecordedEvent;
+use sim.recorder.RecorderEventKind;
+use sim.recorder.SimRecorder;
+use sim.recorder.sim_recorder_new;
+use sim.screenshot.screenshot_write_raw;
+use std.async.block_on;
+use widget.base.IWidgetEventCallback;
+use widget.base.IWidgetValueCallback;
+use widget.base.Widget;
+use widget.btn.Button;
+use widget.chart.Chart;
+use widget.chart.ChartType;
+use widget.img.Image;
+use widget.lbl.Label;
+use widget.lbl.TextAlign;
+use widget.lbl.TextOverflow;
+use widget.page.Page;
+use widget.panel.Panel;
+use widget.slider.Slider;
+use widget.switch.Switch;
+
+const APP_ID_PAGE: i32 = 1;
+const APP_ID_LEFT_PANEL: i32 = 2;
+const APP_ID_RIGHT_PANEL: i32 = 3;
+const APP_ID_ACTION_BUTTON: i32 = 4;
+const APP_ID_TOGGLE: i32 = 5;
+const APP_ID_SLIDER: i32 = 6;
+const APP_ID_TITLE: i32 = 7;
+const APP_ID_PHASE: i32 = 8;
+const APP_ID_STATUS: i32 = 9;
+const APP_ID_FS: i32 = 10;
+const APP_ID_INPUT: i32 = 11;
+const APP_ID_METRICS: i32 = 12;
+const APP_ID_HELP: i32 = 13;
+const APP_ID_CHART: i32 = 14;
+const APP_ID_IMAGE: i32 = 15;
+
+const DEFAULT_SCREENSHOT_PATH: &const byte = "build/sim/last_frame.uyafb";
+const DEFAULT_RECORD_PATH: &const byte = "build/sim/last_input.uyarec";
+const SIM_PREVIEW_RGB_BYTES: [byte: 48] = [
+    255, 213, 79,   255, 112, 67,   79, 195, 247,   129, 199, 132,
+    255, 171, 145,  255, 241, 118,  77, 182, 172,   100, 181, 246,
+    174, 213, 129,  255, 138, 101,  186, 104, 200,  255, 202, 40,
+    144, 202, 249,  129, 212, 250,  174, 234, 0,    255, 204, 128
+];
+
+export struct SimApp {
+    config: SimConfig,
+    page: Page,
+    left_panel: Panel,
+    right_panel: Panel,
+    action_button: Button,
+    toggle: Switch,
+    slider: Slider,
+    chart: Chart,
+    preview: Image,
+    title_label: Label,
+    phase_label: Label,
+    status_label: Label,
+    fs_label: Label,
+    input_label: Label,
+    metrics_label: Label,
+    help_label: Label,
+    title_text: [byte: 160],
+    phase_text: [byte: 160],
+    status_text: [byte: 160],
+    fs_text: [byte: 160],
+    input_text: [byte: 160],
+    metrics_text: [byte: 160],
+    help_text: [byte: 160],
+    preview_rgb: [byte: 48],
+    preview_source: ImageData,
+    preview_cached: ImageData,
+    cache: ImageCache,
+    fs: FatFileSystem,
+    tree: ObjTree,
+    dispatcher: EventDispatcher,
+    profiler: SimProfiler,
+    recorder: SimRecorder,
+    fs_probe_bytes: usize,
+    tap_count: i32,
+    last_key: u16,
+    last_wheel: i16,
+    last_pointer: Point,
+    phase4_result: i32,
+    phase6_result: i32,
+    last_chart_tick_ms: u32,
+    pending_exit: bool,
+    pending_screenshot: bool,
+    pending_fullscreen_toggle: bool,
+}
+
+struct AppButtonClickAdapter : IWidgetEventCallback {}
+struct AppSliderValueAdapter : IWidgetValueCallback {}
+struct AppSwitchValueAdapter : IWidgetValueCallback {}
+
+var APP_BUTTON_CLICK_ADAPTER: IWidgetEventCallback = AppButtonClickAdapter{};
+var APP_SLIDER_VALUE_ADAPTER: IWidgetValueCallback = AppSliderValueAdapter{};
+var APP_SWITCH_VALUE_ADAPTER: IWidgetValueCallback = AppSwitchValueAdapter{};
+
+fn sim_chart_sample(value: i32, taps: i32, wheel: i16) i32 {
+    var sample: i32 = value + taps * 3 + wheel as i32 * 4;
+    if sample < 4 {
+        sample = 4;
+    }
+    if sample > 100 {
+        sample = 100;
+    }
+    return sample;
+}
+
+AppButtonClickAdapter {
+    fn invoke(self: &Self, widget: &Widget, evt: &Event, user_data: &void) void {
+        _ = self;
+        _ = widget;
+        _ = evt;
+        const app: &SimApp = user_data as &SimApp;
+        if app != null {
+            app.on_button_click();
+        }
+    }
+}
+
+AppSliderValueAdapter {
+    fn invoke(self: &Self, widget: &Widget, value: i32, user_data: &void) void {
+        _ = self;
+        _ = widget;
+        const app: &SimApp = user_data as &SimApp;
+        if app != null {
+            app.on_slider_change(value);
+        }
+    }
+}
+
+AppSwitchValueAdapter {
+    fn invoke(self: &Self, widget: &Widget, value: i32, user_data: &void) void {
+        _ = self;
+        _ = widget;
+        const app: &SimApp = user_data as &SimApp;
+        if app != null {
+            app.on_switch_change(value != 0);
+        }
+    }
+}
+
+SimApp {
+    fn init(self: &Self, config: SimConfig) bool {
+        self.config = config;
+        self.fs = fat_fs_new(config.resource_root);
+        if sim_cstr_empty(config.resource_root) {
+            self.fs = fat_fs_new(null);
+        }
+        self.cache = image_cache_new(4, 4096u32);
+        self.profiler = sim_profiler_new(config.profiler_report_every);
+        self.recorder = sim_recorder_new();
+        self.dispatcher = event_dispatcher_new();
+        self.tap_count = 0;
+        self.last_key = 0u16;
+        self.last_wheel = 0;
+        self.last_pointer = POINT_ZERO;
+        self.pending_exit = false;
+        self.pending_screenshot = false;
+        self.pending_fullscreen_toggle = false;
+        self.last_chart_tick_ms = 0u32;
+        self.phase4_result = run_phase4_smoke();
+        self.phase6_result = -2;
+        if config.demo == SimDemoKind.Phase6 {
+            self.phase6_result = run_phase6_smoke();
+        }
+
+        self.layout();
+        self.seed_preview();
+        self.seed_chart();
+        self.bind_callbacks();
+        self.build_tree();
+        self.probe_resource_root();
+        self.refresh_title_label();
+        self.refresh_phase_label();
+        self.refresh_status_label("sim ready");
+        self.refresh_input_label();
+        self.refresh_fs_label();
+        self.refresh_metrics_label(0, 0u32, 0, 0u32, 0u32);
+        self.refresh_help_label();
+
+        if !sim_cstr_empty(self.config.record_path) {
+            self.recorder.start_recording(0u32);
+            self.refresh_status_label("recording started");
+        }
+        if !sim_cstr_empty(self.config.playback_path) {
+            if (self.recorder.load(self.config.playback_path) catch { 0u16; }) > 0u16 {
+                _ = self.recorder.begin_playback(0u32);
+                self.refresh_status_label("playback armed");
+            } else {
+                self.refresh_status_label("playback load failed");
+            }
+        }
+        return true;
+    }
+
+    fn layout(self: &Self) void {
+        const page_w: u16 = self.config.width;
+        const page_h: u16 = self.config.height;
+        const gutter: i32 = 10;
+        const body_y: i32 = 44;
+        const left_w: i32 = ((page_w as i32) * 58) / 100;
+        const right_w: i32 = page_w as i32 - left_w - gutter * 3;
+        const panel_h: i32 = page_h as i32 - body_y - gutter;
+
+        self.page.widget.at(0, 0);
+        self.page.widget.size(page_w, page_h);
+
+        self.title_label.widget.at(12, 8);
+        self.title_label.widget.size(page_w - 24u16, 14);
+        _ = self.title_label.set_align(TextAlign.Left);
+
+        self.left_panel.widget.at(gutter as i16, body_y as i16);
+        self.left_panel.widget.size((left_w as! u16).value, (panel_h as! u16).value);
+        self.right_panel.widget.at((gutter * 2 + left_w) as i16, body_y as i16);
+        self.right_panel.widget.size((right_w as! u16).value, (panel_h as! u16).value);
+
+        self.action_button.widget.at(12, 18);
+        self.action_button.widget.size(96, 34);
+        self.toggle.widget.at(12, 62);
+        self.slider.widget.at(12, 102);
+        self.slider.widget.size((left_w - 24) as u16, 28);
+        self.status_label.widget.at(12, 140);
+        self.status_label.widget.size((left_w - 24) as u16, 14);
+        self.input_label.widget.at(12, 158);
+        self.input_label.widget.size((left_w - 24) as u16, 14);
+        self.help_label.widget.at(12, 178);
+        self.help_label.widget.size((left_w - 24) as u16, 40);
+        self.help_label.overflow = TextOverflow.Wrap;
+
+        self.phase_label.widget.at(12, 18);
+        self.phase_label.widget.size((right_w - 24) as u16, 28);
+        self.phase_label.overflow = TextOverflow.Wrap;
+        self.chart.widget.at(12, 54);
+        self.chart.widget.size((right_w - 24) as u16, 64);
+        self.preview.widget.at(12, 126);
+        self.preview.widget.size(44, 44);
+        self.fs_label.widget.at(60, 126);
+        self.fs_label.widget.size((right_w - 72) as u16, 28);
+        self.fs_label.overflow = TextOverflow.Wrap;
+        self.metrics_label.widget.at(12, 176);
+        self.metrics_label.widget.size((right_w - 24) as u16, 40);
+        self.metrics_label.overflow = TextOverflow.Wrap;
+    }
+
+    fn seed_preview(self: &Self) void {
+        var i: i32 = 0;
+        while i < 48 {
+            self.preview_rgb[i] = SIM_PREVIEW_RGB_BYTES[i];
+            i = i + 1;
+        }
+        self.preview_source = image_data_new(&self.preview_rgb[0], 4, 4, 12, PixelFormat.RGB888);
+        const cached_ok: bool = block_on<bool>(image_cache_put_async(&self.cache, 1u32, self.preview_source)) catch {
+            return;
+        };
+        if cached_ok && self.cache.get(1u32, &self.preview_cached) {
+            self.preview.set_source(&self.preview_cached);
+        } else {
+            self.preview.set_source(&self.preview_source);
+        }
+    }
+
+    fn seed_chart(self: &Self) void {
+        _ = self.chart.clear();
+        self.chart.chart_type = ChartType.Area;
+        _ = self.chart.add_point(18);
+        _ = self.chart.add_point(28);
+        _ = self.chart.add_point(21);
+        _ = self.chart.add_point(34);
+        _ = self.chart.add_point(26);
+    }
+
+    fn bind_callbacks(self: &Self) void {
+        self.action_button.on_click(&APP_BUTTON_CLICK_ADAPTER, self as &void);
+        self.slider.on_change(&APP_SLIDER_VALUE_ADAPTER, self as &void);
+        self.toggle.on_change(&APP_SWITCH_VALUE_ADAPTER, self as &void);
+    }
+
+    fn build_tree(self: &Self) void {
+        gui_obj_reset_registry();
+        if !gui_obj_register(APP_ID_PAGE, self.page.obj()) {}
+        if !gui_obj_register(APP_ID_LEFT_PANEL, self.left_panel.obj()) {}
+        if !gui_obj_register(APP_ID_RIGHT_PANEL, self.right_panel.obj()) {}
+        if !gui_obj_register(APP_ID_ACTION_BUTTON, self.action_button.obj()) {}
+        if !gui_obj_register(APP_ID_TOGGLE, self.toggle.obj()) {}
+        if !gui_obj_register(APP_ID_SLIDER, self.slider.obj()) {}
+        if !gui_obj_register(APP_ID_TITLE, self.title_label.obj()) {}
+        if !gui_obj_register(APP_ID_PHASE, self.phase_label.obj()) {}
+        if !gui_obj_register(APP_ID_STATUS, self.status_label.obj()) {}
+        if !gui_obj_register(APP_ID_FS, self.fs_label.obj()) {}
+        if !gui_obj_register(APP_ID_INPUT, self.input_label.obj()) {}
+        if !gui_obj_register(APP_ID_METRICS, self.metrics_label.obj()) {}
+        if !gui_obj_register(APP_ID_HELP, self.help_label.obj()) {}
+        if !gui_obj_register(APP_ID_CHART, self.chart.obj()) {}
+        if !gui_obj_register(APP_ID_IMAGE, self.preview.obj()) {}
+
+        self.page.add(self.title_label.obj());
+        self.page.add(self.left_panel.obj());
+        self.page.add(self.right_panel.obj());
+
+        self.left_panel.add(self.action_button.obj());
+        self.left_panel.add(self.toggle.obj());
+        self.left_panel.add(self.slider.obj());
+        self.left_panel.add(self.status_label.obj());
+        self.left_panel.add(self.input_label.obj());
+        self.left_panel.add(self.help_label.obj());
+
+        self.right_panel.add(self.phase_label.obj());
+        self.right_panel.add(self.chart.obj());
+        self.right_panel.add(self.preview.obj());
+        self.right_panel.add(self.fs_label.obj());
+        self.right_panel.add(self.metrics_label.obj());
+
+        self.tree.set_root(APP_ID_PAGE, self.page.obj());
+    }
+
+    fn probe_resource_root(self: &Self) void {
+        var buf: [byte: 64] = [];
+        self.fs_probe_bytes = self.fs.read("Makefile", &buf[0], 64usize) catch {
+            return;
+        };
+    }
+
+    fn refresh_title_label(self: &Self) void {
+        _ = snprintf(
+            &self.title_text[0],
+            SIM_TEXT_CAPACITY as usize,
+            "%s  demo=%s" as &const byte,
+            self.config.title,
+            sim_demo_name(self.config.demo)
+        );
+        self.title_label.set_text(&self.title_text[0]);
+    }
+
+    fn refresh_phase_label(self: &Self) void {
+        if self.phase6_result == -2 {
+            _ = snprintf(
+                &self.phase_text[0],
+                SIM_TEXT_CAPACITY as usize,
+                "phase4=%s  phase6=pending" as &const byte,
+                self.phase_ok_text(self.phase4_result)
+            );
+        } else {
+            _ = snprintf(
+                &self.phase_text[0],
+                SIM_TEXT_CAPACITY as usize,
+                "phase4=%s  phase6=%s" as &const byte,
+                self.phase_ok_text(self.phase4_result),
+                self.phase_ok_text(self.phase6_result)
+            );
+        }
+        self.phase_label.set_text(&self.phase_text[0]);
+    }
+
+    fn phase_ok_text(self: &Self, code: i32) &const byte {
+        _ = self;
+        if code == 0 {
+            return "ok";
+        }
+        return "err";
+    }
+
+    fn refresh_status_label(self: &Self, text: &const byte) void {
+        _ = sim_copy_cstr(&self.status_text[0], SIM_TEXT_CAPACITY as usize, text);
+        self.status_label.set_text(&self.status_text[0]);
+    }
+
+    fn refresh_fs_label(self: &Self) void {
+        const cache_state: &const byte = "ready";
+        _ = snprintf(
+            &self.fs_text[0],
+            SIM_TEXT_CAPACITY as usize,
+            "root=%s  fs=%luB  cache=%s" as &const byte,
+            self.config.resource_root,
+            self.fs_probe_bytes as u64,
+            cache_state
+        );
+        self.fs_label.set_text(&self.fs_text[0]);
+    }
+
+    fn refresh_input_label(self: &Self) void {
+        _ = snprintf(
+            &self.input_text[0],
+            SIM_TEXT_CAPACITY as usize,
+            "ptr=%d,%d key=%u wheel=%d" as &const byte,
+            self.last_pointer.x as i32,
+            self.last_pointer.y as i32,
+            self.last_key as u32,
+            self.last_wheel as i32
+        );
+        self.input_label.set_text(&self.input_text[0]);
+    }
+
+    fn refresh_metrics_label(self: &Self, frame_ms: u32, dirty_regions: i32, text_ops: u32, line_ops: u32, image_ops: u32) void {
+        const snap: ProfilerSnapshot = self.profiler.snapshot();
+        _ = snprintf(
+            &self.metrics_text[0],
+            SIM_TEXT_CAPACITY as usize,
+            "frame=%u avg=%u max=%u dirty=%d text=%u line=%u img=%u" as &const byte,
+            frame_ms,
+            snap.frame_avg_ms,
+            snap.frame_max_ms,
+            dirty_regions,
+            text_ops,
+            line_ops,
+            image_ops
+        );
+        self.metrics_label.set_text(&self.metrics_text[0]);
+    }
+
+    fn refresh_help_label(self: &Self) void {
+        _ = sim_copy_cstr(
+            &self.help_text[0],
+            SIM_TEXT_CAPACITY as usize,
+            "Esc quit | P screenshot | R record | L playback | F11 fullscreen | arrows/wheel adjust slider"
+        );
+        self.help_label.set_text(&self.help_text[0]);
+    }
+
+    fn on_button_click(self: &Self) void {
+        self.tap_count = self.tap_count + 1;
+        if self.chart.point_count >= 60u16 {
+            self.seed_chart();
+        }
+        _ = self.chart.add_point(sim_chart_sample(self.slider.get_value(), self.tap_count, self.last_wheel));
+        _ = snprintf(
+            &self.status_text[0],
+            SIM_TEXT_CAPACITY as usize,
+            "tap=%d switch=%s slider=%d" as &const byte,
+            self.tap_count,
+            self.switch_text(self.toggle.checked),
+            self.slider.get_value()
+        );
+        self.status_label.set_text(&self.status_text[0]);
+    }
+
+    fn on_slider_change(self: &Self, value: i32) void {
+        _ = snprintf(
+            &self.status_text[0],
+            SIM_TEXT_CAPACITY as usize,
+            "slider=%d switch=%s taps=%d" as &const byte,
+            value,
+            self.switch_text(self.toggle.checked),
+            self.tap_count
+        );
+        self.status_label.set_text(&self.status_text[0]);
+    }
+
+    fn on_switch_change(self: &Self, enabled: bool) void {
+        _ = snprintf(
+            &self.status_text[0],
+            SIM_TEXT_CAPACITY as usize,
+            "animation=%s slider=%d taps=%d" as &const byte,
+            self.switch_text(enabled),
+            self.slider.get_value(),
+            self.tap_count
+        );
+        self.status_label.set_text(&self.status_text[0]);
+    }
+
+    fn switch_text(self: &Self, enabled: bool) &const byte {
+        _ = self;
+        if enabled {
+            return "on";
+        }
+        return "off";
+    }
+
+    fn update(self: &Self, delta_ms: u32, now_ms: u32) void {
+        _ = delta_ms;
+        if self.toggle.checked && (self.last_chart_tick_ms == 0u32 || now_ms - self.last_chart_tick_ms >= 140u32) {
+            self.last_chart_tick_ms = now_ms;
+            if self.chart.point_count >= 60u16 {
+                self.seed_chart();
+            }
+            _ = self.chart.add_point(sim_chart_sample(self.slider.get_value(), self.tap_count, self.last_wheel));
+        }
+
+        var playback_evt: RecordedEvent = RecordedEvent{
+            frame_offset: 0u32,
+            kind: RecorderEventKind.None,
+            x: 0,
+            y: 0,
+            value: 0,
+            key_code: 0u16,
+            reserved: 0u16,
+        };
+        while self.recorder.next_due(now_ms, &playback_evt) {
+            self.handle_recorded_event(&playback_evt, now_ms);
+        }
+    }
+
+    fn render(self: &Self, ctx: &RenderCtx) void {
+        ctx.clear(Color{ r: 241, g: 245, b: 249, a: 255 });
+        self.page.render(ctx);
+    }
+
+    fn record_touch_edge(self: &Self, evt: &Event) void {
+        const point: Point = evt.point();
+        if evt.event_type == EventType.Press {
+            _ = self.recorder.record_event(evt.timestamp, RecorderEventKind.TouchDown, point.x, point.y, 0, 0u16);
+        } else if evt.event_type == EventType.Release {
+            _ = self.recorder.record_event(evt.timestamp, RecorderEventKind.TouchUp, point.x, point.y, 0, 0u16);
+        }
+    }
+
+    fn handle_translated_event(self: &Self, evt: &Event) void {
+        if evt.dev_type == InputDev.Touch {
+            self.last_pointer = evt.point();
+            self.record_touch_edge(evt);
+            var working: Event = evt[0];
+            _ = self.dispatcher.dispatch(working, &self.tree);
+            self.refresh_input_label();
+            return;
+        }
+        if evt.dev_type == InputDev.Keypad {
+            self.handle_key_event(evt.key_code(), evt.event_type == EventType.KeyDown, evt.timestamp, true);
+            return;
+        }
+        if evt.dev_type == InputDev.Encoder {
+            self.handle_wheel_event(evt.value() as i16, evt.timestamp, true);
+        }
+    }
+
+    fn handle_hover_coords(self: &Self, x: i16, y: i16, now_ms: u32, record: bool) void {
+        const hover_point: Point = Point{ x: x, y: y };
+        self.last_pointer = hover_point;
+        if record {
+            _ = self.recorder.record_event(now_ms, RecorderEventKind.Hover, hover_point.x, hover_point.y, 0, 0u16);
+        }
+        _ = self.dispatcher.process_hover(&self.tree, hover_point, now_ms);
+        self.refresh_input_label();
+    }
+
+    fn handle_recorded_event(self: &Self, evt: &RecordedEvent, now_ms: u32) void {
+        const point: Point = Point{ x: evt.x, y: evt.y };
+        if evt.kind == RecorderEventKind.Hover {
+            self.handle_hover_coords(point.x, point.y, now_ms, false);
+            return;
+        }
+        if evt.kind == RecorderEventKind.TouchDown {
+            self.last_pointer = point;
+            _ = self.dispatcher.process_touch(&self.tree, point, true, now_ms);
+            self.refresh_input_label();
+            return;
+        }
+        if evt.kind == RecorderEventKind.TouchUp {
+            self.last_pointer = point;
+            _ = self.dispatcher.process_touch(&self.tree, point, false, now_ms);
+            self.refresh_input_label();
+            return;
+        }
+        if evt.kind == RecorderEventKind.KeyDown {
+            self.handle_key_event(evt.key_code, true, now_ms, false);
+            return;
+        }
+        if evt.kind == RecorderEventKind.KeyUp {
+            self.handle_key_event(evt.key_code, false, now_ms, false);
+            return;
+        }
+        if evt.kind == RecorderEventKind.Wheel {
+            self.handle_wheel_event(evt.value as i16, now_ms, false);
+        }
+    }
+
+    fn handle_wheel_event(self: &Self, delta: i16, now_ms: u32, record: bool) void {
+        _ = now_ms;
+        self.last_wheel = delta;
+        self.slider.set_value(self.slider.get_value() + delta as i32 * 4);
+        if record {
+            _ = self.recorder.record_event(now_ms, RecorderEventKind.Wheel, self.last_pointer.x, self.last_pointer.y, delta as i32, 0u16);
+        }
+        self.refresh_input_label();
+    }
+
+    fn handle_key_event(self: &Self, key_code: u16, pressed: bool, now_ms: u32, record: bool) void {
+        self.last_key = key_code;
+        if record {
+            var kind: RecorderEventKind = RecorderEventKind.KeyUp;
+            if pressed {
+                kind = RecorderEventKind.KeyDown;
+            }
+            _ = self.recorder.record_event(now_ms, kind, self.last_pointer.x, self.last_pointer.y, 0, key_code);
+        }
+        if pressed {
+            if key_code == SIM_KEY_ESCAPE {
+                self.pending_exit = true;
+            } else if key_code == SIM_KEY_F11 {
+                self.pending_fullscreen_toggle = true;
+            } else if key_code == 'p' as u16 || key_code == 'P' as u16 {
+                self.pending_screenshot = true;
+                self.refresh_status_label("screenshot requested");
+            } else if key_code == 'r' as u16 || key_code == 'R' as u16 {
+                if self.recorder.recording {
+                    self.recorder.stop_recording();
+                    const save_path: &const byte = self.recorder_path();
+                    _ = self.recorder.save(save_path) catch {};
+                    self.refresh_status_label("recording saved");
+                } else {
+                    self.recorder.start_recording(now_ms);
+                    self.refresh_status_label("recording started");
+                }
+            } else if key_code == 'l' as u16 || key_code == 'L' as u16 {
+                const load_path: &const byte = self.playback_path();
+                if (self.recorder.load(load_path) catch { 0u16; }) > 0u16 {
+                    _ = self.recorder.begin_playback(now_ms);
+                    self.refresh_status_label("playback started");
+                } else {
+                    self.refresh_status_label("playback unavailable");
+                }
+            } else if key_code == '1' as u16 {
+                self.phase4_result = run_phase4_smoke();
+                self.refresh_phase_label();
+                self.refresh_status_label("phase4 smoke reran");
+            } else if key_code == '6' as u16 {
+                self.phase6_result = run_phase6_smoke();
+                self.refresh_phase_label();
+                self.refresh_status_label("phase6 smoke reran");
+            } else if key_code == SIM_KEY_LEFT || key_code == SIM_KEY_DOWN {
+                self.slider.set_value(self.slider.get_value() - 4);
+            } else if key_code == SIM_KEY_RIGHT || key_code == SIM_KEY_UP {
+                self.slider.set_value(self.slider.get_value() + 4);
+            }
+        }
+        self.refresh_input_label();
+    }
+
+    fn record_frame(self: &Self, ctx: &RenderCtx, update_ms: u32, render_ms: u32, present_ms: u32, frame_ms: u32) void {
+        if self.profiler.record(update_ms, render_ms, present_ms, frame_ms) {
+            self.profiler.print_summary();
+        }
+        self.refresh_metrics_label(
+            frame_ms,
+            ctx.dirty.get_regions().len,
+            ctx.stats.text_ops,
+            ctx.stats.line_ops,
+            ctx.stats.image_ops
+        );
+    }
+
+    fn consume_screenshot_request(self: &Self) bool {
+        if !self.pending_screenshot {
+            return false;
+        }
+        self.pending_screenshot = false;
+        return true;
+    }
+
+    fn consume_fullscreen_toggle(self: &Self) bool {
+        if !self.pending_fullscreen_toggle {
+            return false;
+        }
+        self.pending_fullscreen_toggle = false;
+        return true;
+    }
+
+    fn should_exit(self: &Self) bool {
+        return self.pending_exit;
+    }
+
+    fn save_screenshot(self: &Self, fb: &FrameBuffer) void {
+        const path: &const byte = self.screenshot_path();
+        const written: !usize = screenshot_write_raw(path, fb);
+        _ = written catch {
+            self.refresh_status_label("screenshot failed");
+            return;
+        };
+        self.refresh_status_label("screenshot written");
+    }
+
+    fn screenshot_path(self: &Self) &const byte {
+        if !sim_cstr_empty(self.config.screenshot_path) {
+            return self.config.screenshot_path;
+        }
+        return DEFAULT_SCREENSHOT_PATH;
+    }
+
+    fn recorder_path(self: &Self) &const byte {
+        if !sim_cstr_empty(self.config.record_path) {
+            return self.config.record_path;
+        }
+        return DEFAULT_RECORD_PATH;
+    }
+
+    fn playback_path(self: &Self) &const byte {
+        if !sim_cstr_empty(self.config.playback_path) {
+            return self.config.playback_path;
+        }
+        return self.recorder_path();
+    }
+
+    fn finish(self: &Self, fb: &FrameBuffer) void {
+        if !sim_cstr_empty(self.config.screenshot_path) {
+            self.save_screenshot(fb);
+        }
+        if self.recorder.recording {
+            self.recorder.stop_recording();
+            _ = self.recorder.save(self.recorder_path()) catch {};
+        }
+        self.profiler.print_summary();
+    }
+}
+
+export fn sim_app_new() SimApp {
+    return SimApp{
+        config: sim_config_default(),
+        page: Page.new("SimRoot"),
+        left_panel: Panel.new(),
+        right_panel: Panel.new(),
+        action_button: Button.filled("Tap +1"),
+        toggle: Switch.new(true),
+        slider: Slider.new(0, 100, 42),
+        chart: Chart.new(),
+        preview: Image.from_data(null),
+        title_label: Label.new("UyaGUI Linux Simulator"),
+        phase_label: Label.new("phase"),
+        status_label: Label.new("status"),
+        fs_label: Label.new("fs"),
+        input_label: Label.new("input"),
+        metrics_label: Label.new("metrics"),
+        help_label: Label.new("help"),
+        title_text: [],
+        phase_text: [],
+        status_text: [],
+        fs_text: [],
+        input_text: [],
+        metrics_text: [],
+        help_text: [],
+        preview_rgb: [],
+        preview_source: empty_image(),
+        preview_cached: empty_image(),
+        cache: image_cache_new(4, 4096u32),
+        fs: fat_fs_new(null),
+        tree: obj_tree_new(),
+        dispatcher: event_dispatcher_new(),
+        profiler: sim_profiler_new(120u32),
+        recorder: sim_recorder_new(),
+        fs_probe_bytes: 0usize,
+        tap_count: 0,
+        last_key: 0u16,
+        last_wheel: 0,
+        last_pointer: POINT_ZERO,
+        phase4_result: -1,
+        phase6_result: -2,
+        last_chart_tick_ms: 0u32,
+        pending_exit: false,
+        pending_screenshot: false,
+        pending_fullscreen_toggle: false,
+    };
+}

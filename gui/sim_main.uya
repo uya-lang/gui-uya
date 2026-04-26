@@ -1,0 +1,7 @@
+use std.runtime.entry;
+
+use sim.runner.run_simulator;
+
+export fn main() i32 {
+    return run_simulator();
+}

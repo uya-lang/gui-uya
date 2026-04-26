@@ -1,0 +1,5 @@
+use sim.runner.run_simulator;
+
+export fn sim_entry() i32 {
+    return run_simulator();
+}

@@ -1,0 +1,53 @@
+export const SIM_TEXT_CAPACITY: i32 = 160;
+export const SIM_PATH_CAPACITY: i32 = 256;
+
+export const SIM_KEY_ESCAPE: u16 = 27;
+export const SIM_KEY_ENTER: u16 = 13;
+export const SIM_KEY_SPACE: u16 = 32;
+export const SIM_KEY_LEFT: u16 = 1000;
+export const SIM_KEY_RIGHT: u16 = 1001;
+export const SIM_KEY_UP: u16 = 1002;
+export const SIM_KEY_DOWN: u16 = 1003;
+export const SIM_KEY_F11: u16 = 1011;
+
+export fn sim_cstr_empty(text: &const byte) bool {
+    return text == null || text[0] == 0;
+}
+
+export fn sim_cstr_eq(a: &const byte, b: &const byte) bool {
+    if a == null || b == null {
+        return a == b;
+    }
+    var i: usize = 0usize;
+    while true {
+        if a[i] != b[i] {
+            return false;
+        }
+        if a[i] == 0 {
+            return true;
+        }
+        i = i + 1usize;
+    }
+}
+
+export fn sim_copy_cstr(dst: &byte, capacity: usize, src: &const byte) bool {
+    if dst == null || capacity == 0usize {
+        return false;
+    }
+    if src == null {
+        dst[0] = 0;
+        return true;
+    }
+
+    var i: usize = 0usize;
+    while i + 1usize < capacity && src[i] != 0 {
+        dst[i] = src[i];
+        i = i + 1usize;
+    }
+    if src[i] != 0 && i + 1usize >= capacity {
+        return false;
+    }
+    dst[i] = 0;
+    return true;
+}
+

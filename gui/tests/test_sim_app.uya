@@ -1,0 +1,78 @@
+use platform.disp.FrameBuffer;
+use platform.disp.PixelFormat;
+use platform.disp.framebuffer_new;
+use render.ctx.RenderCtx;
+use render.ctx.render_ctx_new;
+use sim.app.SimApp;
+use sim.app.sim_app_new;
+use sim.common.SIM_KEY_F11;
+use sim.config.SimConfig;
+use sim.config.sim_config_default;
+use sim.recorder.RecordedEvent;
+use sim.recorder.RecorderEventKind;
+use std.testing.assert_eq_bool;
+use std.testing.assert_eq_i32;
+
+export const TEST_SIM_APP_MODULE: i32 = 1;
+
+test "sim app renders and reacts to playback-style input" {
+    var app: SimApp = sim_app_new();
+    var cfg: SimConfig = sim_config_default();
+    cfg.width = 320;
+    cfg.height = 240;
+    try assert_eq_bool(app.init(cfg), true);
+
+    var down: RecordedEvent = RecordedEvent{
+        frame_offset: 0u32,
+        kind: RecorderEventKind.TouchDown,
+        x: 40,
+        y: 80,
+        value: 0,
+        key_code: 0u16,
+        reserved: 0u16,
+    };
+    var up: RecordedEvent = RecordedEvent{
+        frame_offset: 60u32,
+        kind: RecorderEventKind.TouchUp,
+        x: 40,
+        y: 80,
+        value: 0,
+        key_code: 0u16,
+        reserved: 0u16,
+    };
+    app.handle_recorded_event(&down, 100u32);
+    app.handle_recorded_event(&up, 160u32);
+    try assert_eq_i32(app.tap_count, 1);
+
+    var wheel: RecordedEvent = RecordedEvent{
+        frame_offset: 100u32,
+        kind: RecorderEventKind.Wheel,
+        x: 40,
+        y: 80,
+        value: 2,
+        key_code: 0u16,
+        reserved: 0u16,
+    };
+    app.handle_recorded_event(&wheel, 200u32);
+    try assert_eq_bool(app.slider.get_value() > 42, true);
+
+    var key_evt: RecordedEvent = RecordedEvent{
+        frame_offset: 140u32,
+        kind: RecorderEventKind.KeyDown,
+        x: 0,
+        y: 0,
+        value: 0,
+        key_code: SIM_KEY_F11,
+        reserved: 0u16,
+    };
+    app.handle_recorded_event(&key_evt, 240u32);
+    try assert_eq_bool(app.consume_fullscreen_toggle(), true);
+
+    var pixels: [byte: 307200] = [];
+    const fb: FrameBuffer = framebuffer_new(&pixels[0], cfg.width, cfg.height, cfg.width * 4u16, PixelFormat.ARGB8888);
+    var ctx: RenderCtx = render_ctx_new(fb);
+    app.render(&ctx);
+    try assert_eq_bool(ctx.stats.text_ops > 0u32, true);
+    try assert_eq_bool(ctx.stats.image_ops > 0u32, true);
+}
+

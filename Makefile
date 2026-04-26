@@ -12,6 +12,10 @@ UYA_OPT := $(if $(filter release,$(MODE)),-O3,-O0)
 
 .PHONY: build test bench bench-report docs-api ci clean hooks build-arm build-riscv build-esp32
 
+SIM_BUILD_DIR ?= $(BUILD_DIR)/sim
+SIM_BIN ?= $(SIM_BUILD_DIR)/gui_uya_sim
+SIM_ARGS ?=
+
 BENCH_REPORT ?= $(BUILD_DIR)/phase5_bench.txt
 
 build:
@@ -58,3 +62,15 @@ build-riscv:
 build-esp32:
 	@mkdir -p $(BUILD_DIR)/microapp
 	$(UYA) build --app microapp --microapp-profile xtensa_baremetal_softvm $(SMOKE_APP) $(UYA_OPT) -o $(BUILD_DIR)/microapp/phase6_smoke_xtensa.pobj
+
+sim-build:
+	@mkdir -p $(SIM_BUILD_DIR)
+	@MODE=$(MODE) BUILD_DIR=$(abspath $(SIM_BUILD_DIR)) bash tools/build_gui_sim.sh
+
+sim-run: sim-build
+	$(SIM_BIN) $(SIM_ARGS)
+
+sim-debug:
+	@mkdir -p $(SIM_BUILD_DIR)
+	@MODE=debug BUILD_DIR=$(abspath $(SIM_BUILD_DIR)) bash tools/build_gui_sim.sh >/dev/null
+	$(SIM_BIN) --hud --profile-every 60 $(SIM_ARGS)

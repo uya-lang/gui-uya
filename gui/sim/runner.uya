@@ -1,0 +1,130 @@
+use core.event.Event;
+use core.event.event_none;
+use core.point.POINT_ZERO;
+use core.point.Point;
+use libc.printf;
+use platform.disp.FrameBuffer;
+use platform.disp.framebuffer_new;
+use platform.sdl2.disp_sdl.SdlDisplay;
+use platform.sdl2.disp_sdl.sdl_display_last_error;
+use platform.sdl2.disp_sdl.sdl_display_new;
+use platform.sdl2.indev_sdl.SdlInputSystem;
+use platform.sdl2.indev_sdl.sdl_input_system_new;
+use platform.tick.get_tick_ms;
+use platform.tick.sleep_ms;
+use render.ctx.RenderCtx;
+use render.ctx.render_ctx_new;
+use sim.app.SimApp;
+use sim.app.sim_app_new;
+use sim.config.SimConfig;
+use sim.config.sim_config_from_runtime;
+
+fn sim_print_usage() void {
+    _ = printf(
+        "UyaGUI Linux Simulator\n"
+        "  --demo phase4|phase6\n"
+        "  --width N --height N --scale N\n"
+        "  --fullscreen | --windowed\n"
+        "  --root PATH --title TEXT\n"
+        "  --screenshot PATH --record PATH --playback PATH\n"
+        "  --max-frames N --profile-every N --hud --no-hud\n" as *byte
+    );
+}
+
+export fn run_simulator() i32 {
+    const cfg: SimConfig = sim_config_from_runtime();
+    if cfg.show_help {
+        sim_print_usage();
+        return 0;
+    }
+
+    var display: SdlDisplay = sdl_display_new();
+    if !display.init(cfg.width, cfg.height, cfg.scale, cfg.title, cfg.fullscreen) {
+        _ = printf("[sim] SDL2 init failed: %s\n" as *byte, sdl_display_last_error());
+        return 2;
+    }
+    defer {
+        display.shutdown();
+    }
+
+    var input: SdlInputSystem = sdl_input_system_new();
+    input.init();
+
+    var app: SimApp = sim_app_new();
+    if !app.init(cfg) {
+        _ = printf("[sim] app init failed\n" as *byte);
+        return 3;
+    }
+
+    var last_tick_ms: u32 = get_tick_ms();
+    while true {
+        const frame_start_ms: u32 = get_tick_ms();
+        const delta_ms: u32 = frame_start_ms - last_tick_ms;
+        last_tick_ms = frame_start_ms;
+
+        _ = input.pump(frame_start_ms);
+
+        var has_hover: bool = true;
+        while has_hover {
+            var hover_x: i16 = 0;
+            var hover_y: i16 = 0;
+            has_hover = input.poll_hover_coords(&hover_x, &hover_y);
+            if !has_hover {
+                break;
+            }
+            app.handle_hover_coords(hover_x, hover_y, frame_start_ms, true);
+        }
+
+        var evt: Event = event_none();
+        var has_evt: bool = input.poll(&evt);
+        while has_evt {
+            app.handle_translated_event(&evt);
+            evt = event_none();
+            has_evt = input.poll(&evt);
+        }
+
+        app.update(delta_ms, frame_start_ms);
+        const after_update_ms: u32 = get_tick_ms();
+
+        const back_ref: &FrameBuffer = display.get_back_buffer();
+        var ctx: RenderCtx = render_ctx_new(framebuffer_new(back_ref.pixels, back_ref.size.w, back_ref.size.h, back_ref.stride, back_ref.format));
+        app.render(&ctx);
+        const after_render_ms: u32 = get_tick_ms();
+
+        if app.consume_screenshot_request() {
+            app.save_screenshot(display.get_back_buffer());
+        }
+        if app.consume_fullscreen_toggle() {
+            _ = display.toggle_fullscreen();
+        }
+
+        if !display.present() {
+            _ = printf("[sim] present failed: %s\n" as *byte, sdl_display_last_error());
+            break;
+        }
+        const after_present_ms: u32 = get_tick_ms();
+
+        app.record_frame(
+            &ctx,
+            after_update_ms - frame_start_ms,
+            after_render_ms - after_update_ms,
+            after_present_ms - after_render_ms,
+            after_present_ms - frame_start_ms
+        );
+
+        if input.quit_requested || app.should_exit() {
+            break;
+        }
+        if cfg.max_frames > 0u32 && display.ctx.frame_id >= cfg.max_frames {
+            break;
+        }
+
+        const frame_ms: u32 = after_present_ms - frame_start_ms;
+        if frame_ms < 16u32 {
+            sleep_ms(16u32 - frame_ms);
+        }
+    }
+
+    app.finish(display.get_front_buffer());
+    return 0;
+}
