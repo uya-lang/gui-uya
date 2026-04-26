@@ -1,11 +1,21 @@
 use core.color.Color;
 use core.rect.Rect;
+use libc.MAP_PRIVATE;
+use libc.O_RDONLY;
+use libc.PROT_READ;
+use libc.Stat;
+use libc.sys_close;
+use libc.sys_fstat;
+use libc.sys_mmap;
+use libc.sys_open;
 use platform.disp.PixelFormat;
 use render.ctx.RenderCtx;
 
 const CJK_GLYPH_8X8_BYTES: &[const byte] = @embed("cjk_unifont_4e00_9fff_8x8.bin");
 const CJK_UNIFIED_START: u32 = 0x4E00u32;
 const CJK_UNIFIED_END: u32 = 0x9FFFu32;
+const SYSTEM_UI_FONT_PRIMARY_PATH: &const byte = "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc\0";
+const SYSTEM_UI_FONT_FALLBACK_PATH: &const byte = "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc\0";
 const GLYPH_EDGE_AA_ORTHO_ALPHA: i32 = 30;
 const GLYPH_EDGE_AA_DIAG_ALPHA: i32 = 12;
 const GLYPH_EDGE_AA_MAX_ALPHA: i32 = 96;
@@ -14,6 +24,7 @@ const BUILTIN_FONT_KERNING_CAPACITY: i32 = 8;
 const BUILTIN_FONT_PRINTABLE_COUNT: u16 = 95u16;
 const FONT_LOOKUP_MISSING: i16 = -1;
 const TTF_GLYPH_FALLBACK_ID: u32 = 0xFFFFFFFFu32;
+const TTF_SFNT_OFFSET_INVALID: u32 = 0xFFFFFFFFu32;
 export const BITMAP_FONT_GLYPH_CAPACITY: i32 = 128;
 export const BITMAP_FONT_UNICODE_CAPACITY: i32 = 64;
 export const BITMAP_FONT_KERNING_CAPACITY: i32 = 64;
@@ -25,6 +36,7 @@ export const TTF_CACHE_ENTRY_CAPACITY: i32 = 128;
 export const TTF_CACHE_SLOT_DIM: i32 = 64;
 export const TTF_CACHE_SLOT_BYTES: i32 = TTF_CACHE_SLOT_DIM * TTF_CACHE_SLOT_DIM;
 export const TTF_CACHE_STORAGE_BYTES: i32 = TTF_CACHE_ENTRY_CAPACITY * TTF_CACHE_SLOT_BYTES;
+export const SYSTEM_UI_FONT_SLOT_CAPACITY: i32 = 16;
 
 export enum TextAlign {
     Start,
@@ -149,6 +161,7 @@ export struct TtfFontAsset {
     font: Font,
     data: &const byte,
     len: usize,
+    sfnt_offset: u32,
     cmap_offset: u32,
     cmap4_offset: u32,
     cmap12_offset: u32,
@@ -172,6 +185,12 @@ export struct TtfFontAsset {
     hint_enabled: bool,
 }
 
+struct SystemUiFontSlot {
+    pixel_height: u16,
+    asset: TtfFontAsset,
+    ready: bool,
+}
+
 var _builtin_font_lookup: GlyphLookupTable = GlyphLookupTable{
     ascii_index: [],
     unicode_entries: null,
@@ -190,6 +209,11 @@ var _ttf_cache_storage: [byte: 524288] = [];
 var _ttf_cache_clock: u32 = 0u32;
 var _ttf_cache_hits: u32 = 0u32;
 var _ttf_cache_misses: u32 = 0u32;
+var _system_ui_font_data: &const byte = null;
+var _system_ui_font_len: usize = 0usize;
+var _system_ui_font_ready: bool = false;
+var _system_ui_font_attempted: bool = false;
+var _system_ui_font_slots: [SystemUiFontSlot: 16] = [];
 
 fn glyph_pack7(r0: u8, r1: u8, r2: u8, r3: u8, r4: u8, r5: u8, r6: u8) u64 {
     return (r0 as u64)
@@ -1684,11 +1708,16 @@ fn ttf_read_u32(data: &const byte, len: usize, offset: usize) u32 {
         | (data[offset + 3usize] as u32);
 }
 
-fn ttf_find_table_offset(data: &const byte, len: usize, tag: u32, out_length: &u32) u32 {
-    const table_count: u16 = ttf_read_u16(data, len, 4usize);
+fn ttf_find_table_offset(data: &const byte, len: usize, directory_offset: u32, tag: u32, out_length: &u32) u32 {
+    if data == null || directory_offset == TTF_SFNT_OFFSET_INVALID || directory_offset as usize + 12usize > len {
+        out_length[0] = 0u32;
+        return 0u32;
+    }
+
+    const table_count: u16 = ttf_read_u16(data, len, directory_offset as usize + 4usize);
     var i: i32 = 0;
     while i < table_count as i32 {
-        const record_offset: usize = 12usize + (i as usize) * 16usize;
+        const record_offset: usize = directory_offset as usize + 12usize + (i as usize) * 16usize;
         if ttf_read_u32(data, len, record_offset) == tag {
             out_length[0] = ttf_read_u32(data, len, record_offset + 12usize);
             return ttf_read_u32(data, len, record_offset + 8usize);
@@ -1710,6 +1739,7 @@ fn ttf_font_asset_reset(asset: &TtfFontAsset) void {
     asset.font = font_empty();
     asset.data = null;
     asset.len = 0usize;
+    asset.sfnt_offset = 0u32;
     asset.cmap_offset = 0u32;
     asset.cmap4_offset = 0u32;
     asset.cmap12_offset = 0u32;
@@ -1738,6 +1768,7 @@ export fn ttf_font_asset_new() TtfFontAsset {
         font: font_empty(),
         data: null,
         len: 0usize,
+        sfnt_offset: 0u32,
         cmap_offset: 0u32,
         cmap4_offset: 0u32,
         cmap12_offset: 0u32,
@@ -1762,6 +1793,101 @@ export fn ttf_font_asset_new() TtfFontAsset {
     };
     ttf_font_asset_reset(&asset);
     return asset;
+}
+
+fn ttf_select_sfnt_offset(data: &const byte, len: usize) u32 {
+    if data == null || len < 12usize {
+        return TTF_SFNT_OFFSET_INVALID;
+    }
+
+    if ttf_read_u32(data, len, 0usize) == ttf_tag('t' as u8, 't' as u8, 'c' as u8, 'f' as u8) {
+        const font_count: u32 = ttf_read_u32(data, len, 8usize);
+        if font_count == 0u32 || len < 16usize {
+            return TTF_SFNT_OFFSET_INVALID;
+        }
+        const offset: u32 = ttf_read_u32(data, len, 12usize);
+        if offset as usize + 12usize > len {
+            return TTF_SFNT_OFFSET_INVALID;
+        }
+        return offset;
+    }
+
+    return 0u32;
+}
+
+fn system_ui_font_slot_reset(slot: &SystemUiFontSlot) void {
+    if slot == null {
+        return;
+    }
+    slot.pixel_height = 0u16;
+    slot.asset = ttf_font_asset_new();
+    slot.ready = false;
+}
+
+fn system_ui_font_slots_reset() void {
+    var i: i32 = 0;
+    while i < SYSTEM_UI_FONT_SLOT_CAPACITY {
+        system_ui_font_slot_reset(&_system_ui_font_slots[i as usize]);
+        i = i + 1;
+    }
+}
+
+fn system_ui_font_map_file(path: &const byte, out_data: &&const byte, out_len: &usize) bool {
+    if path == null {
+        return false;
+    }
+
+    const fd: i32 = sys_open(path as *const byte, O_RDONLY as i32, 0) catch {
+        return false;
+    };
+
+    var stat_buf: Stat = Stat{};
+    _ = sys_fstat(fd, &stat_buf) catch {
+        _ = sys_close(fd) catch {};
+        return false;
+    };
+    if stat_buf.st_size <= 0 {
+        _ = sys_close(fd) catch {};
+        return false;
+    }
+
+    const file_len: usize = (stat_buf.st_size as! usize).value;
+    const mapped: *void = sys_mmap(null as *void, file_len, PROT_READ, MAP_PRIVATE, fd, 0) catch {
+        _ = sys_close(fd) catch {};
+        return false;
+    };
+    _ = sys_close(fd) catch {};
+    if mapped == null {
+        return false;
+    }
+
+    out_data[0] = mapped as &const byte;
+    out_len[0] = file_len;
+    return true;
+}
+
+fn system_ui_font_source_init() bool {
+    if _system_ui_font_ready {
+        return true;
+    }
+    if _system_ui_font_attempted {
+        return false;
+    }
+
+    _system_ui_font_attempted = true;
+    system_ui_font_slots_reset();
+
+    var mapped: &const byte = null;
+    var mapped_len: usize = 0usize;
+    if !system_ui_font_map_file(SYSTEM_UI_FONT_PRIMARY_PATH, &mapped, &mapped_len)
+        && !system_ui_font_map_file(SYSTEM_UI_FONT_FALLBACK_PATH, &mapped, &mapped_len) {
+        return false;
+    }
+
+    _system_ui_font_data = mapped;
+    _system_ui_font_len = mapped_len;
+    _system_ui_font_ready = true;
+    return true;
 }
 
 fn ttf_select_cmap(asset: &TtfFontAsset) void {
@@ -1974,8 +2100,9 @@ fn ttf_glyph_for_codepoint(font: &Font, codepoint: u32) Glyph {
     }
 
     var glyph_id: u16 = ttf_map_codepoint(asset, codepoint);
-    if glyph_id >= asset.num_glyphs {
-        glyph_id = 0u16;
+    if glyph_id == 0u16 || glyph_id >= asset.num_glyphs {
+        const fallback: Glyph = font_dynamic_glyph(font, codepoint);
+        return ttf_builtin_fallback_glyph(font, codepoint, fallback.advance as i32);
     }
 
     const advance_px: i32 = ttf_clamp_i32(ttf_round_i32(ttf_glyph_advance_units(asset, glyph_id) as f64 * asset.scale), 0, 255);
@@ -2040,16 +2167,20 @@ export fn ttf_font_load_memory(asset: &TtfFontAsset, name: &const byte, data: &c
     asset.data = data;
     asset.len = len;
     asset.pixel_height = pixel_height;
+    asset.sfnt_offset = ttf_select_sfnt_offset(data, len);
+    if asset.sfnt_offset == TTF_SFNT_OFFSET_INVALID {
+        return false;
+    }
 
     var table_len: u32 = 0u32;
-    asset.cmap_offset = ttf_find_table_offset(data, len, ttf_tag('c' as u8, 'm' as u8, 'a' as u8, 'p' as u8), &table_len);
-    asset.head_offset = ttf_find_table_offset(data, len, ttf_tag('h' as u8, 'e' as u8, 'a' as u8, 'd' as u8), &table_len);
-    asset.hhea_offset = ttf_find_table_offset(data, len, ttf_tag('h' as u8, 'h' as u8, 'e' as u8, 'a' as u8), &table_len);
-    asset.hmtx_offset = ttf_find_table_offset(data, len, ttf_tag('h' as u8, 'm' as u8, 't' as u8, 'x' as u8), &table_len);
-    var maxp_offset: u32 = ttf_find_table_offset(data, len, ttf_tag('m' as u8, 'a' as u8, 'x' as u8, 'p' as u8), &table_len);
-    asset.loca_offset = ttf_find_table_offset(data, len, ttf_tag('l' as u8, 'o' as u8, 'c' as u8, 'a' as u8), &table_len);
-    asset.glyf_offset = ttf_find_table_offset(data, len, ttf_tag('g' as u8, 'l' as u8, 'y' as u8, 'f' as u8), &table_len);
-    asset.kern_offset = ttf_find_table_offset(data, len, ttf_tag('k' as u8, 'e' as u8, 'r' as u8, 'n' as u8), &table_len);
+    asset.cmap_offset = ttf_find_table_offset(data, len, asset.sfnt_offset, ttf_tag('c' as u8, 'm' as u8, 'a' as u8, 'p' as u8), &table_len);
+    asset.head_offset = ttf_find_table_offset(data, len, asset.sfnt_offset, ttf_tag('h' as u8, 'e' as u8, 'a' as u8, 'd' as u8), &table_len);
+    asset.hhea_offset = ttf_find_table_offset(data, len, asset.sfnt_offset, ttf_tag('h' as u8, 'h' as u8, 'e' as u8, 'a' as u8), &table_len);
+    asset.hmtx_offset = ttf_find_table_offset(data, len, asset.sfnt_offset, ttf_tag('h' as u8, 'm' as u8, 't' as u8, 'x' as u8), &table_len);
+    var maxp_offset: u32 = ttf_find_table_offset(data, len, asset.sfnt_offset, ttf_tag('m' as u8, 'a' as u8, 'x' as u8, 'p' as u8), &table_len);
+    asset.loca_offset = ttf_find_table_offset(data, len, asset.sfnt_offset, ttf_tag('l' as u8, 'o' as u8, 'c' as u8, 'a' as u8), &table_len);
+    asset.glyf_offset = ttf_find_table_offset(data, len, asset.sfnt_offset, ttf_tag('g' as u8, 'l' as u8, 'y' as u8, 'f' as u8), &table_len);
+    asset.kern_offset = ttf_find_table_offset(data, len, asset.sfnt_offset, ttf_tag('k' as u8, 'e' as u8, 'r' as u8, 'n' as u8), &table_len);
     if asset.cmap_offset == 0u32 || asset.head_offset == 0u32 || asset.hhea_offset == 0u32 || asset.hmtx_offset == 0u32 || maxp_offset == 0u32 || asset.loca_offset == 0u32 || asset.glyf_offset == 0u32 {
         return false;
     }
@@ -2428,6 +2559,50 @@ export fn font_system_vector() Font {
         builtin_cjk: false,
         backend: null,
     };
+}
+
+export fn font_system_ui_ref(pixel_height: u8) &Font {
+    if pixel_height == 0u8 {
+        return null;
+    }
+    if !system_ui_font_source_init() {
+        return null;
+    }
+
+    const requested_height: u16 = pixel_height as u16;
+    var free_idx: i32 = -1;
+    var i: i32 = 0;
+    while i < SYSTEM_UI_FONT_SLOT_CAPACITY {
+        const slot: &SystemUiFontSlot = &_system_ui_font_slots[i as usize];
+        if slot.ready && slot.pixel_height == requested_height {
+            return &slot.asset.font;
+        }
+        if free_idx < 0 && !slot.ready {
+            free_idx = i;
+        }
+        i = i + 1;
+    }
+
+    if free_idx < 0 {
+        free_idx = 0;
+    }
+    if free_idx < 0 || free_idx >= SYSTEM_UI_FONT_SLOT_CAPACITY {
+        return null;
+    }
+
+    const slot_idx: usize = (free_idx as! usize).value;
+    if slot_idx >= SYSTEM_UI_FONT_SLOT_CAPACITY as usize {
+        return null;
+    }
+    const slot: &SystemUiFontSlot = &_system_ui_font_slots[slot_idx];
+    slot.asset = ttf_font_asset_new();
+    if !ttf_font_load_memory(&slot.asset, "SystemUiCjk", _system_ui_font_data, _system_ui_font_len, requested_height) {
+        system_ui_font_slot_reset(slot);
+        return null;
+    }
+    slot.pixel_height = requested_height;
+    slot.ready = true;
+    return &slot.asset.font;
 }
 
 export fn font_default() Font {

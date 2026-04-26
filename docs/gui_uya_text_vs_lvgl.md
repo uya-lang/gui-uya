@@ -47,14 +47,15 @@ build/text_compare/uya_text_render_samples.png
 - 灰度/彩色 framebuffer 上，会对字形边缘做轻量 alpha 抗锯齿
 - 单色 `I1` framebuffer 保持硬边渲染
 - 内置 kerning：当前只覆盖少量硬编码字偶，例如 `AV`
-- TTF 路径：支持纯 Uya 轮廓解析、复合字形、glyph cache、小字号 hinting 开关
-- 当前没有发现 RTL / BiDi / 阿拉伯文 shaping / 字体 fallback 链的实现
+- TTF 路径：支持纯 Uya 轮廓解析、复合字形、glyph cache、小字号 hinting 开关，以及 `TTC` 集合字体
+- 默认 widget 字体现在会优先按 `font_size` 懒加载系统 CJK `TTC` 字体；缺字时可回退到内置位图字
+- 当前没有发现 RTL / BiDi / 阿拉伯文 shaping / 完整字体 fallback 链的实现
 
 从样张能直接看出的现象是：
 
 - 内置位图字的边缘已经不是“纯硬锯齿”，但本质仍是小尺寸点阵字放大后的效果
 - `TTF hinted 11px` 比 `TTF plain 11px` 更收敛，竖线和斜线更稳
-- 中文目前能显示，但默认路径仍是固定 `8x8` 点阵，不是可缩放字形
+- 核心保底中文仍保留 `8x8` 点阵，但默认控件路径在系统存在 CJK `TTC` 时，已经能切到可缩放字形
 
 ---
 
@@ -119,9 +120,10 @@ build/text_compare/uya_text_render_samples.png
 
 当前 UyaGUI：
 
-- 默认中文来自固定 `8x8` 点阵
-- 优点是占用可控、集成简单、在低资源设备上非常稳
-- 缺点是字号不可伸缩、笔画密集时容易发糊、字体风格单一
+- 核心保底中文仍来自固定 `8x8` 点阵
+- Linux/hosted 默认 widget 路径现在会优先尝试系统 CJK `TTC`，成功时可得到可缩放中文字形
+- 优点是保底路径仍然占用可控，同时常见桌面环境已经能拿到更自然的中文边缘
+- 缺点是当前系统 CJK 字体仍依赖宿主环境，不是完全自带的字体资产方案
 
 LVGL：
 
@@ -130,8 +132,9 @@ LVGL：
 
 结论：
 
-- 如果只看“当前仓库默认中文效果”，LVGL 接入外部字体引擎后的上限明显更高
-- UyaGUI 当前中文路径更像是“保底可显示方案”，还不是高质量中文排版方案
+- 如果只看“当前仓库自带保底路径”，LVGL 接入外部字体引擎后的上限仍明显更高
+- 如果看当前 Linux/hosted 默认 widget 效果，UyaGUI 已经从“纯 8x8 保底”迈到“系统 CJK TTF + 保底回退”的阶段
+- 但 UyaGUI 还缺少自带字体资产、完整 fallback 链和复杂排版能力，距离 LVGL 的成熟字体生态仍有明显差距
 
 ### 4.5 复杂脚本
 
@@ -148,13 +151,13 @@ LVGL：
 
 如果只比较“当前仓库已经落地的真实效果”，可以归纳成一句话：
 
-> UyaGUI 现在已经具备可用的英文字体渲染基线，TTF hinted 路径也已经摸到接近现代 GUI 字体链路的门槛；但默认中文、fallback、复杂脚本和完整排版能力，和 LVGL 的成熟字体生态相比还有明显差距。
+> UyaGUI 现在已经具备可用的英文字体渲染基线，TTF hinted 路径也已经摸到接近现代 GUI 字体链路的门槛；默认 widget 中文也开始接入系统 CJK TTF，但在自带字体资产、完整 fallback、复杂脚本和排版能力上，和 LVGL 的成熟字体生态相比还有明显差距。
 
 更细一点：
 
 - 默认英文观感：`UyaGUI < LVGL 高 bpp 位图/TTF 路径`
 - 当前 TTF 小字号：`UyaGUI 已接近“可认真打磨”的阶段`
-- 中文默认路径：`UyaGUI 明显弱于 LVGL + 外部字体引擎`
+- 中文默认路径：`UyaGUI 已明显好于纯 8x8 保底，但仍弱于 LVGL + 完整外部字体引擎`
 - 复杂文本能力：`UyaGUI 目前缺项，LVGL 更完整`
 
 ---
@@ -163,8 +166,8 @@ LVGL：
 
 如果目标是把 UyaGUI 的文字效果继续往 LVGL 靠，优先级建议如下：
 
-1. 增加字体 fallback 链，而不是单字体兜底 `?`
-2. 把中文从固定 `8x8` 点阵升级到可缓存的 TTF/bitmap atlas 路径
+1. 增加完整字体 fallback 链，而不是只做“TTF 缺字 -> 内置位图”兜底
+2. 把当前“依赖系统 CJK TTC”的默认中文路径，升级成仓库自带、可缓存的 TTF/bitmap atlas 方案
 3. 扩大 kerning 覆盖，至少不要只停留在少量硬编码字偶
 4. 增加 RTL / BiDi / Arabic shaping 能力
 5. 再补“真实 LVGL 渲染截图 + 同文案同字号同背景”的并排样张

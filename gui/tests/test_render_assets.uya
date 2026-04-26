@@ -10,6 +10,7 @@ use render.ctx.ctx_pixel;
 use render.ctx.render_ctx_new;
 use render.font.BitmapFontAsset;
 use render.font.Font;
+use render.font.FontRenderKind;
 use render.font.Glyph;
 use render.font.TtfFontAsset;
 use render.font.bitmap_font_asset_new;
@@ -19,6 +20,7 @@ use render.font.draw_text;
 use render.font.draw_text_aligned;
 use render.font.font_default;
 use render.font.font_system_compact;
+use render.font.font_system_ui_ref;
 use render.font.font_system_vector;
 use render.font.glyph_for_char;
 use render.font.text_width;
@@ -37,8 +39,12 @@ use render.img.image_data_new;
 use res.cache.ImageCache;
 use res.cache.image_cache_new;
 use libc.strlen;
+use style.Style;
+use style.StyleProp;
+use style.style_default;
 use std.testing.assert_eq_bool;
 use std.testing.assert_eq_i32;
+use widget.base.widget_font;
 
 export const TEST_RENDER_ASSETS_MODULE: i32 = 1;
 const TEST_DEJAVU_TTF_BYTES: &[const byte] = @embed("../render/DejaVuSans.ttf");
@@ -152,6 +158,45 @@ test "font can draw chinese glyphs" {
     try assert_eq_bool(ctx_pixel(&ctx, 3, 0) == white_expect, true);
     try assert_eq_bool(ctx_pixel(&ctx, 7, 0) == black_expect, true);
     try assert_eq_bool(ctx_pixel(&ctx, 11, 0) == white_expect, true);
+}
+
+test "ttf missing chinese glyphs fall back to builtin cjk bitmap" {
+    var bytes: [byte: 1024] = [];
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 16, 16, 64, PixelFormat.ARGB8888));
+    var asset: TtfFontAsset = ttf_font_asset_new();
+    try assert_eq_bool(
+        ttf_font_load_memory(&asset, "DejaVuSans", TEST_DEJAVU_TTF_BYTES.ptr, TEST_DEJAVU_TTF_BYTES.len, 12u16),
+        true
+    );
+
+    const white_expect: Color = Color{ r: 255, g: 255, b: 255, a: 255 };
+    const black_expect: Color = Color{ r: 0, g: 0, b: 0, a: 255 };
+    ctx.clear(Color{ r: 0, g: 0, b: 0, a: 255 });
+
+    try assert_eq_i32(text_width("中文", 6usize, &asset.font) as i32, 16);
+    draw_text(&ctx, 0, 0, "中文", 6usize, &asset.font, Color{ r: 255, g: 255, b: 255, a: 255 });
+
+    try assert_eq_bool(ctx_pixel(&ctx, 3, 0) == white_expect, true);
+    try assert_eq_bool(ctx_pixel(&ctx, 7, 0) == black_expect, true);
+    try assert_eq_bool(ctx_pixel(&ctx, 11, 0) == white_expect, true);
+}
+
+test "widget font resolves scalable system ui font by font size when available" {
+    var small_style: Style = style_default();
+    var large_style: Style = style_default();
+    small_style.set_u32(StyleProp.FontSize, 11u32);
+    large_style.set_u32(StyleProp.FontSize, 14u32);
+
+    const small_font: &Font = widget_font(&small_style);
+    const large_font: &Font = widget_font(&large_style);
+    const direct_font: &Font = font_system_ui_ref(14u8);
+    if direct_font == null || small_font.render_kind != FontRenderKind.TrueTypeOutline || large_font.render_kind != FontRenderKind.TrueTypeOutline {
+        return;
+    }
+
+    try assert_eq_i32(small_font.height as i32, 11);
+    try assert_eq_i32(large_font.height as i32, 14);
+    try assert_eq_bool(text_width("中文", 6usize, small_font) < text_width("中文", 6usize, large_font), true);
 }
 
 test "font antialiases diagonal edges" {

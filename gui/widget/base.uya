@@ -15,6 +15,7 @@ use render.font.Font;
 use render.font.FontBitmapFormat;
 use render.font.FontRenderKind;
 use render.font.font_default;
+use render.font.font_system_ui_ref;
 use render.font.text_width;
 use style.DEFAULT_STYLE;
 use style.Style;
@@ -362,6 +363,11 @@ export fn widget_bind_callbacks(base: &GuiObj, render_cb: &IGuiRenderCallback, i
 export fn widget_font(style: &Style) &Font {
     const font_ptr: &void = style.get_ptr_or(StyleProp.Font, null);
     if font_ptr == null {
+        const font_size: u8 = (style.get_u32_or(StyleProp.FontSize, 14u32) as! u8).value;
+        const resolved: &Font = font_system_ui_ref(font_size);
+        if resolved != null {
+            return resolved;
+        }
         return widget_default_font_ref();
     }
     return font_ptr as &Font;
