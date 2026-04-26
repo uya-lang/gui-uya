@@ -38,7 +38,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libsdl2-dev
       - name: Build Linux simulator
         run: make sim-build
-      - name: Smoke-run Linux simulator in dummy video mode
-        run: SDL_VIDEODRIVER=dummy make sim-run SIM_ARGS="--max-frames 2 --screenshot build/sim/ci.uyafb"
+      - name: Smoke-run Linux simulator in headless mode
+        run: make sim-headless SIM_HEADLESS_ARGS="--max-frames 2 --screenshot build/sim/ci.uyafb"
       - name: Generate API docs
         run: make docs-api

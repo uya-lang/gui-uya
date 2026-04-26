@@ -1,0 +1,41 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "gui: sim-build",
+      "type": "shell",
+      "command": "make",
+      "args": ["sim-build"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": ["$gcc"],
+      "group": "build"
+    },
+    {
+      "label": "gui: sim-run",
+      "type": "shell",
+      "command": "make",
+      "args": ["sim-run", "SIM_ARGS=--max-frames 120"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "dependsOn": "gui: sim-build",
+      "problemMatcher": []
+    },
+    {
+      "label": "gui: sim-headless",
+      "type": "shell",
+      "command": "make",
+      "args": [
+        "sim-headless",
+        "SIM_HEADLESS_ARGS=--max-frames 5 --screenshot build/sim/vscode_headless.uyafb"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "dependsOn": "gui: sim-build",
+      "problemMatcher": []
+    }
+  ]
+}

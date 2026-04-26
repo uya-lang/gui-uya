@@ -60,7 +60,7 @@
 | S3 | 调试工具（截图/录制/Profiler） | 已完成 |
 | S4 | 资源/文件系统接线与 demo 扩展 | 已完成 |
 | S5 | 构建脚本、调试工作流、文档收尾 | 已完成 |
-| S6 | Framebuffer / Headless 扩展（可选） | 未开始 |
+| S6 | Framebuffer / Headless 扩展（可选） | 部分完成（headless 已落地，Framebuffer 未开始） |
 
 ---
 
@@ -246,7 +246,7 @@
   - [x] 构建
   - [x] 运行
   - [x] 常见问题
-- [ ] 视情况补 VS Code / Cursor 调试配置
+- [x] 视情况补 VS Code / Cursor 调试配置
 - [x] 视情况增加 Linux 环境下的可选 CI job
   - [x] 至少保证模拟器入口可以编译
 
@@ -266,6 +266,19 @@
 
 ### TODO
 
+- [ ] `gui/platform/fb/disp_fb.uya`
+- [ ] 评估是否真的需要 `indev_fb.uya`
+- [x] 评估 headless + 截图回归是否比 raw framebuffer 更实用
+- [ ] 若做 framebuffer 模式，补权限/设备节点说明
+- [x] 若做 headless 模式，优先支持离屏渲染 + 导出截图
+
+### 当前实现
+
+- [x] `make sim-headless`
+  - [x] 使用 `SDL_VIDEODRIVER=dummy`
+  - [x] 支持 `SIM_HEADLESS_ARGS`
+  - [x] 默认导出 `build/sim/headless.uyafb`
+
 ---
 
 ## 当前已验证命令
@@ -282,13 +295,7 @@ make sim-run SIM_ARGS="--max-frames 3 --screenshot build/sim/makerun.uyafb"
 
 - `make sim-build` 仍会打印较多由 Uya 生成 C 代码带来的 warning，但不阻塞链接与运行
 - `Framebuffer / Headless` 专用模式还没有开始做
-- VS Code / Cursor 调试配置还没补
-
-- [ ] `gui/platform/fb/disp_fb.uya`
-- [ ] 评估是否真的需要 `indev_fb.uya`
-- [ ] 评估 headless + 截图回归是否比 raw framebuffer 更实用
-- [ ] 若做 framebuffer 模式，补权限/设备节点说明
-- [ ] 若做 headless 模式，优先支持离屏渲染 + 导出截图
+- Framebuffer 后端仍未开始
 
 ### 验收
 
@@ -305,11 +312,12 @@ make sim-run SIM_ARGS="--max-frames 3 --screenshot build/sim/makerun.uyafb"
 | `make test` | [x] 已可用 | [x] 保持不回退 |
 | `make bench` | [x] 已可用 | [x] 保持不回退 |
 | `test_phase4_io` | [x] 已覆盖 | [x] 继续作为模拟器 I/O 基线 |
-| SDL2 模拟器构建 | [ ] 未覆盖 | [ ] 新增 `sim-build` |
-| SDL2 模拟器运行 | [ ] 未覆盖 | [ ] 新增 `sim-run` |
-| 输入交互回归 | [ ] 未覆盖 | [ ] 至少覆盖点击/按键/滚轮 |
-| 截图导出 | [ ] 未覆盖 | [ ] 至少一条正向回归 |
-| 录制/回放 | [ ] 未覆盖 | [ ] 至少一条正向回归 |
+| SDL2 模拟器构建 | [x] 已覆盖 | [x] `sim-build` |
+| SDL2 模拟器运行 | [x] 已覆盖 | [x] `sim-run` |
+| Headless 模拟器运行 | [x] 已覆盖 | [x] `sim-headless` |
+| 输入交互回归 | [x] 已覆盖 | [x] 点击/按键/滚轮 |
+| 截图导出 | [x] 已覆盖 | [x] 至少一条正向回归 |
+| 录制/回放 | [x] 已覆盖 | [x] 至少一条正向回归 |
 
 ## 推荐实施顺序
 

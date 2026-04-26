@@ -1,0 +1,47 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "GUI Sim: Windowed",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/sim/gui_uya_sim",
+      "args": ["--max-frames", "300"],
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "gui: sim-build",
+      "MIMode": "gdb",
+      "miDebuggerPath": "/usr/bin/gdb",
+      "externalConsole": false,
+      "setupCommands": [
+        {
+          "description": "Enable pretty-printing",
+          "text": "-enable-pretty-printing",
+          "ignoreFailures": true
+        }
+      ]
+    },
+    {
+      "name": "GUI Sim: Headless Screenshot",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/sim/gui_uya_sim",
+      "args": [
+        "--max-frames",
+        "5",
+        "--screenshot",
+        "build/sim/vscode_headless.uyafb"
+      ],
+      "cwd": "${workspaceFolder}",
+      "environment": [
+        {
+          "name": "SDL_VIDEODRIVER",
+          "value": "dummy"
+        }
+      ],
+      "preLaunchTask": "gui: sim-build",
+      "MIMode": "gdb",
+      "miDebuggerPath": "/usr/bin/gdb",
+      "externalConsole": false
+    }
+  ]
+}

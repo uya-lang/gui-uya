@@ -10,11 +10,12 @@ RENDER_TEST_ENTRY ?= gui/render_test_suite.uya
 MODE ?= debug
 UYA_OPT := $(if $(filter release,$(MODE)),-O3,-O0)
 
-.PHONY: build test bench bench-report docs-api ci clean hooks build-arm build-riscv build-esp32
+.PHONY: build test bench bench-report docs-api ci clean hooks build-arm build-riscv build-esp32 sim-build sim-run sim-debug sim-headless
 
 SIM_BUILD_DIR ?= $(BUILD_DIR)/sim
 SIM_BIN ?= $(SIM_BUILD_DIR)/gui_uya_sim
 SIM_ARGS ?=
+SIM_HEADLESS_ARGS ?= --max-frames 3 --screenshot $(SIM_BUILD_DIR)/headless.uyafb
 
 BENCH_REPORT ?= $(BUILD_DIR)/phase5_bench.txt
 
@@ -74,3 +75,6 @@ sim-debug:
 	@mkdir -p $(SIM_BUILD_DIR)
 	@MODE=debug BUILD_DIR=$(abspath $(SIM_BUILD_DIR)) bash tools/build_gui_sim.sh >/dev/null
 	$(SIM_BIN) --hud --profile-every 60 $(SIM_ARGS)
+
+sim-headless: sim-build
+	SDL_VIDEODRIVER=dummy $(SIM_BIN) $(SIM_HEADLESS_ARGS)

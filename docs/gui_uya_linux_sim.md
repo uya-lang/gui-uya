@@ -11,6 +11,7 @@
 ## 0. 当前落地状态
 
 - 已有命令：`make sim-build`、`make sim-run`、`make sim-debug`
+- 已有 headless 命令：`make sim-headless`
 - 已有 SDL2 后端：`gui/platform/sdl2/{disp_sdl.uya, indev_sdl.uya, sdl_host.c}`
 - 已有调试工具：`gui/sim/{screenshot,profiler,recorder}.uya`
 - 已有无 SDL2 单测：`gui/tests/test_sim_app.uya`、`gui/tests/test_sim_tools.uya`
@@ -37,12 +38,16 @@ make sim-run SIM_ARGS="--demo phase6 --max-frames 120"
 
 # 打开调试 HUD / profiler
 make sim-debug
+
+# 无窗口运行并导出截图
+make sim-headless
 ```
 
 ## 0.1.1 已验证输出
 
 - `build/sim/manual.uyafb`
 - `build/sim/makerun.uyafb`
+- `build/sim/headless.uyafb`
 - `build/sim/ci.uyafb`
 
 ## 0.2 运行参数
@@ -58,6 +63,12 @@ make sim-debug
 - `--max-frames N`
 - `--profile-every N`
 - `--hud | --no-hud`
+
+### Headless 专用入口
+
+- `make sim-headless`
+- 可覆盖参数：`SIM_HEADLESS_ARGS="--max-frames 5 --screenshot build/sim/custom.uyafb"`
+- 实现方式：通过 `SDL_VIDEODRIVER=dummy` 复用 SDL2 主线，不额外分叉一套 headless runtime
 
 ## 0.3 当前交互
 
@@ -83,6 +94,7 @@ make sim-debug
 
 - `make sim-build` 仍会打印不少来自 Uya 生成 C 文件的 warning；当前不影响链接与运行
 - 截图目前是原始 framebuffer dump（`.uyafb`），还没有接 PNG/BMP 编码
+- Framebuffer 专用后端仍未开始做；当前“无窗口”模式优先复用 SDL2 dummy video
 
 ---
 
