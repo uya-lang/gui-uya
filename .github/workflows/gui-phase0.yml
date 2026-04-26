@@ -39,6 +39,6 @@ jobs:
       - name: Build Linux simulator
         run: make sim-build
       - name: Smoke-run Linux simulator in headless mode
-        run: make sim-headless SIM_HEADLESS_ARGS="--max-frames 2 --screenshot build/sim/ci.uyafb"
+        run: make sim-headless SIM_HEADLESS_ARGS="--max-frames 2 --screenshot build/sim/ci.bmp"
       - name: Generate API docs
         run: make docs-api

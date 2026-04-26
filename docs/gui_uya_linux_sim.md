@@ -6,7 +6,7 @@
 
 > 说明: 本文是 Linux 模拟器方案文档，不定义 Uya 语言语法。现行 Uya 语法以 `uya/docs/grammar_formal.md`、`uya/docs/uya.md` 和 `uya/tests/` 为准；本文中的导入、宿主 FFI 和调度片段主要用于表达方案结构。
 
-> 2026-04-26 实现更新：仓库里已经落下首版 SDL2 MVP。真实入口为 `gui/sim_main.uya`（为了让 Uya 模块根保持在 `gui/`），模拟器逻辑位于 `gui/sim/{runner,app,config}.uya`，SDL2 host glue 位于 `gui/platform/sdl2/sdl_host.c`。当前 CI 已通过 `SDL_VIDEODRIVER=dummy` 跑最小 smoke；同一天也在本地 Linux + SDL2 2.32.4 完成了实窗 smoke，`make sim-run SIM_ARGS="--max-frames 3 --screenshot build/sim/makerun.uyafb"` 可成功退出并生成截图。
+> 2026-04-26 实现更新：仓库里已经落下首版 SDL2 MVP。真实入口为 `gui/sim_main.uya`（为了让 Uya 模块根保持在 `gui/`），模拟器逻辑位于 `gui/sim/{runner,app,config}.uya`，SDL2 host glue 位于 `gui/platform/sdl2/sdl_host.c`。当前 CI 已通过 `SDL_VIDEODRIVER=dummy` 跑最小 smoke；同一天也在本地 Linux + SDL2 2.32.4 完成了实窗 smoke，`make sim-run SIM_ARGS="--max-frames 3 --screenshot build/sim/makerun.bmp"` 可成功退出并生成截图。
 
 ## 0. 当前落地状态
 
@@ -15,10 +15,10 @@
 - 已有 SDL2 后端：`gui/platform/sdl2/{disp_sdl.uya, indev_sdl.uya, sdl_host.c}`
 - 已有调试工具：`gui/sim/{screenshot,profiler,recorder}.uya`
 - 已有无 SDL2 单测：`gui/tests/test_sim_app.uya`、`gui/tests/test_sim_tools.uya`
-- 已有 CI smoke：`.github/workflows/gui-phase0.yml` 会安装 `libsdl2-dev`，并在 dummy video 下跑 `make sim-run SIM_ARGS="--max-frames 2 --screenshot build/sim/ci.uyafb"`
+- 已有 CI smoke：`.github/workflows/gui-phase0.yml` 会安装 `libsdl2-dev`，并在 dummy video 下跑 `make sim-headless SIM_HEADLESS_ARGS="--max-frames 2 --screenshot build/sim/ci.bmp"`
 - 已有本地实机 smoke：
-  - `./build/sim/gui_uya_sim --max-frames 5 --screenshot build/sim/manual.uyafb`
-  - `make sim-run SIM_ARGS="--max-frames 3 --screenshot build/sim/makerun.uyafb"`
+  - `./build/sim/gui_uya_sim --max-frames 5 --screenshot build/sim/manual.bmp`
+  - `make sim-run SIM_ARGS="--max-frames 3 --screenshot build/sim/makerun.bmp"`
 
 ## 0.1 构建与运行
 
@@ -48,10 +48,10 @@ make sim-fb-run
 
 ## 0.1.1 已验证输出
 
-- `build/sim/manual.uyafb`
-- `build/sim/makerun.uyafb`
-- `build/sim/headless.uyafb`
-- `build/sim/ci.uyafb`
+- `build/sim/manual.bmp`
+- `build/sim/makerun.bmp`
+- `build/sim/headless.bmp`
+- `build/sim/ci.bmp`
 
 ## 0.2 运行参数
 
@@ -70,7 +70,7 @@ make sim-fb-run
 ### Headless 专用入口
 
 - `make sim-headless`
-- 可覆盖参数：`SIM_HEADLESS_ARGS="--max-frames 5 --screenshot build/sim/custom.uyafb"`
+- 可覆盖参数：`SIM_HEADLESS_ARGS="--max-frames 5 --screenshot build/sim/custom.bmp"`
 - 实现方式：通过 `SDL_VIDEODRIVER=dummy` 复用 SDL2 主线，不额外分叉一套 headless runtime
 
 ### Framebuffer 专用入口
@@ -89,7 +89,7 @@ make sim-fb-run
 - 鼠标滚轮：映射到 `EncoderDriver`，当前用于调节 slider
 - 键盘：
   - `Esc` 退出
-  - `P` 抓取 framebuffer raw dump
+  - `P` 抓取截图（默认 BMP；若路径以 `.uyafb` 结尾则导出原始 dump）
   - `R` 开始/结束输入录制
   - `L` 读取并回放录制
   - `F11` 切换全屏
@@ -105,7 +105,7 @@ make sim-fb-run
 ## 0.5 当前已知现象
 
 - `make sim-build` 仍会打印不少来自 Uya 生成 C 文件的 warning；当前不影响链接与运行
-- 截图目前是原始 framebuffer dump（`.uyafb`），还没有接 PNG/BMP 编码
+- 截图目前已支持 `BMP` 与原始 framebuffer dump（`.uyafb`）；`PNG` 仍未接入
 - Framebuffer 专用后端已具备首版显示链路，但当前仍未实现 `indev_fb`
 - 当前机器上 `/dev/fb0` 存在但普通用户无权限，`--backend fb` 会清晰返回 `Permission denied`
 - 默认文本渲染已切到内置位图字体，不再显示统一占位方框

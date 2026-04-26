@@ -129,7 +129,7 @@
 > 2026-04-26 实测记录：
 > - `pkg-config --modversion sdl2` = `2.32.4`
 > - `make sim-build` 成功
-> - `make sim-run SIM_ARGS="--max-frames 3 --screenshot build/sim/makerun.uyafb"` 成功退出并生成截图
+> - `make sim-run SIM_ARGS="--max-frames 3 --screenshot build/sim/makerun.bmp"` 成功退出并生成截图
 > - 启动期真实踩到的 2 个问题已经修复：
 >   1. `SdlInputSystem` 的接口值不能绑定到构造函数局部变量，否则 `poll()` 时会悬空
 >   2. SDL2 不能误绑定到可执行里的 Uya `malloc/pthread_*` 符号；构建脚本已加 `-fvisibility=hidden`，host glue 也切回宿主 libc allocator
@@ -182,7 +182,7 @@
 
 - [x] `gui/sim/screenshot.uya`
   - [x] 导出当前 framebuffer
-  - [x] 先支持原始像素导出；图片编码可后置
+  - [x] 支持原始像素导出与 `BMP` 编码
 - [x] `gui/sim/profiler.uya`
   - [x] 统计 frame time
   - [x] 统计 update/render/present 时间分布
@@ -277,7 +277,7 @@
 - [x] `make sim-headless`
   - [x] 使用 `SDL_VIDEODRIVER=dummy`
   - [x] 支持 `SIM_HEADLESS_ARGS`
-  - [x] 默认导出 `build/sim/headless.uyafb`
+  - [x] 默认导出 `build/sim/headless.bmp`
 - [x] `make sim-fb-run`
   - [x] 通过 `--backend fb` 复用同一套 simulator app/runtime
   - [x] `disp_fb.uya` + `fb_host.c` 已可打开 `/dev/fb0`、查询分辨率并做 ARGB8888 -> 设备像素格式写回
@@ -291,8 +291,8 @@
 make test
 make build
 make sim-build
-make sim-run SIM_ARGS="--max-frames 3 --screenshot build/sim/makerun.uyafb"
-./build/sim/gui_uya_sim --max-frames 5 --screenshot build/sim/manual.uyafb
+make sim-run SIM_ARGS="--max-frames 3 --screenshot build/sim/makerun.bmp"
+./build/sim/gui_uya_sim --max-frames 5 --screenshot build/sim/manual.bmp
 ```
 
 ## 当前遗留项
@@ -304,7 +304,7 @@ make sim-run SIM_ARGS="--max-frames 3 --screenshot build/sim/makerun.uyafb"
 ### 验收
 
 - [ ] 可选后端不会反向拖慢 SDL2 主线
-- [ ] CI 或本地验证至少有一个“无窗口”运行模式
+- [x] CI 或本地验证至少有一个“无窗口”运行模式
 
 ---
 

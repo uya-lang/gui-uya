@@ -15,7 +15,7 @@ UYA_OPT := $(if $(filter release,$(MODE)),-O3,-O0)
 SIM_BUILD_DIR ?= $(BUILD_DIR)/sim
 SIM_BIN ?= $(SIM_BUILD_DIR)/gui_uya_sim
 SIM_ARGS ?=
-SIM_HEADLESS_ARGS ?= --max-frames 3 --screenshot $(SIM_BUILD_DIR)/headless.uyafb
+SIM_HEADLESS_ARGS ?= --max-frames 3 --screenshot $(SIM_BUILD_DIR)/headless.bmp
 SIM_FB_ARGS ?= --backend fb --max-frames 60
 
 BENCH_REPORT ?= $(BUILD_DIR)/phase5_bench.txt

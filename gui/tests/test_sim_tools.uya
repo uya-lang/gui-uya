@@ -15,7 +15,7 @@ use sim.recorder.SIM_RECORDER_MAGIC;
 use sim.recorder.SimRecorder;
 use sim.recorder.sim_recorder_new;
 use sim.screenshot.SIM_SCREENSHOT_MAGIC;
-use sim.screenshot.screenshot_write_raw;
+use sim.screenshot.screenshot_write;
 use std.testing.assert_eq_bool;
 use std.testing.assert_eq_i32;
 
@@ -80,7 +80,7 @@ test "sim screenshot writes tagged framebuffer dump" {
 
     var pixels: [byte: 16] = [1, 2, 3, 4,   5, 6, 7, 8,   9, 10, 11, 12,   13, 14, 15, 16];
     const fb: FrameBuffer = framebuffer_new(&pixels[0], 2, 2, 8, PixelFormat.ARGB8888);
-    const written: usize = try screenshot_write_raw(shot_path as &const byte, &fb);
+    const written: usize = try screenshot_write(shot_path as &const byte, &fb);
     try assert_eq_bool(written > 16usize, true);
 
     const fd: i32 = try sys_open(shot_path, O_RDONLY as i32, 0);
@@ -92,6 +92,37 @@ test "sim screenshot writes tagged framebuffer dump" {
     try assert_eq_i32(raw[8] as i32, 2);
     try assert_eq_i32(raw[10] as i32, 8);
     try assert_eq_i32(raw[12] as i32, PixelFormat.ARGB8888 as i32);
+    _ = sys_close(fd) catch {};
+
+    _ = unlink(shot_path as &const byte);
+}
+
+test "sim screenshot writes bmp when path ends with bmp" {
+    const shot_path: *const byte = "/tmp/uya_gui_sim_test.bmp\0" as *const byte;
+    _ = unlink(shot_path as &const byte);
+
+    var pixels: [byte: 16] = [1, 2, 3, 4,   5, 6, 7, 8,   9, 10, 11, 12,   13, 14, 15, 16];
+    const fb: FrameBuffer = framebuffer_new(&pixels[0], 2, 2, 8, PixelFormat.ARGB8888);
+    const written: usize = try screenshot_write(shot_path as &const byte, &fb);
+    try assert_eq_i32(written as i32, 70);
+
+    const fd: i32 = try sys_open(shot_path, O_RDONLY as i32, 0);
+    var raw: [byte: 70] = [];
+    const n: isize = try sys_read(fd, &raw[0], 70usize);
+    try assert_eq_i32(n as i32, 70);
+    try assert_eq_i32(raw[0] as i32, 'B' as i32);
+    try assert_eq_i32(raw[1] as i32, 'M' as i32);
+    try assert_eq_i32((raw[2] as i32) | ((raw[3] as i32) << 8) | ((raw[4] as i32) << 16) | ((raw[5] as i32) << 24), 70);
+    try assert_eq_i32((raw[10] as i32) | ((raw[11] as i32) << 8) | ((raw[12] as i32) << 16) | ((raw[13] as i32) << 24), 54);
+    try assert_eq_i32((raw[18] as i32) | ((raw[19] as i32) << 8) | ((raw[20] as i32) << 16) | ((raw[21] as i32) << 24), 2);
+    try assert_eq_i32((raw[22] as i32) | ((raw[23] as i32) << 8) | ((raw[24] as i32) << 16) | ((raw[25] as i32) << 24), 2);
+    try assert_eq_i32((raw[28] as i32) | ((raw[29] as i32) << 8), 24);
+    try assert_eq_i32(raw[54] as i32, 12);
+    try assert_eq_i32(raw[55] as i32, 11);
+    try assert_eq_i32(raw[56] as i32, 10);
+    try assert_eq_i32(raw[62] as i32, 4);
+    try assert_eq_i32(raw[63] as i32, 3);
+    try assert_eq_i32(raw[64] as i32, 2);
     _ = sys_close(fd) catch {};
 
     _ = unlink(shot_path as &const byte);

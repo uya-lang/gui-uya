@@ -19,10 +19,10 @@
 - `./uya/bin/uya --version` 输出 `v0.9.4`
 - `make build` 通过
 - `make sim-build` 通过
-- `make sim-run SIM_ARGS="--max-frames 2 --screenshot build/sim/readme_check.uyafb"` 通过，并生成截图
+- `make sim-run SIM_ARGS="--max-frames 2 --screenshot build/sim/readme_check.bmp"` 通过，并生成截图
 - `make test` 通过
-  - `gui/test_suite.uya` 的 `91` 个测试通过
-  - `gui/render_test_suite.uya` 的 `8` 个测试通过
+  - `gui/test_suite.uya` 的 `92` 个测试通过
+  - `gui/render_test_suite.uya` 的 `12` 个测试通过
 
 如果你当前只是想验证 GUI 核心与模拟器相关逻辑，可先单独执行：
 
@@ -95,8 +95,8 @@ make sim-fb-run
 
 ```bash
 make sim-run SIM_ARGS="--demo phase6 --max-frames 120"
-make sim-run SIM_ARGS="--max-frames 3 --screenshot build/sim/manual.uyafb"
-make sim-headless SIM_HEADLESS_ARGS="--max-frames 5 --screenshot build/sim/headless.uyafb"
+make sim-run SIM_ARGS="--max-frames 3 --screenshot build/sim/manual.bmp"
+make sim-headless SIM_HEADLESS_ARGS="--max-frames 5 --screenshot build/sim/headless.bmp"
 ```
 
 可用运行参数：
@@ -116,7 +116,7 @@ make sim-headless SIM_HEADLESS_ARGS="--max-frames 5 --screenshot build/sim/headl
 当前 SDL2 模拟器常用快捷键：
 
 - `Esc`：退出
-- `P`：抓取 framebuffer dump
+- `P`：抓取截图（`.bmp` 或 `.uyafb`）
 - `R`：开始或结束输入录制
 - `L`：回放录制
 - `F11`：切换全屏
@@ -209,7 +209,7 @@ make build-esp32
 ## 已知问题
 
 - `make sim-build` 能完成链接，但由 Uya 生成的 C 文件仍会产生较多编译 warning；目前不影响 `make sim-run` 正常使用。
-- 当前截图输出为原始 framebuffer dump（`.uyafb`），尚未接入 PNG/BMP 编码。
+- 当前截图已支持 `BMP` 导出；如需原始 framebuffer dump，可显式使用 `.uyafb`；`PNG` 仍未接入。
 - Framebuffer 后端已具备首版显示链路，但输入侧 `indev_fb` 仍未补齐。
 - 默认内置字体已支持 ASCII 与 `U+4E00..U+9FFF` 中文常用字，但仍未覆盖完整 Unicode 字体排版链路。
 

@@ -46,7 +46,7 @@ use sim.recorder.RecordedEvent;
 use sim.recorder.RecorderEventKind;
 use sim.recorder.SimRecorder;
 use sim.recorder.sim_recorder_new;
-use sim.screenshot.screenshot_write_raw;
+use sim.screenshot.screenshot_write;
 use std.async.block_on;
 use widget.base.IWidgetEventCallback;
 use widget.base.IWidgetValueCallback;
@@ -79,7 +79,7 @@ const APP_ID_HELP: i32 = 13;
 const APP_ID_CHART: i32 = 14;
 const APP_ID_IMAGE: i32 = 15;
 
-const DEFAULT_SCREENSHOT_PATH: &const byte = "build/sim/last_frame.uyafb";
+const DEFAULT_SCREENSHOT_PATH: &const byte = "build/sim/last_frame.bmp";
 const DEFAULT_RECORD_PATH: &const byte = "build/sim/last_input.uyarec";
 const SIM_PREVIEW_RGB_BYTES: [byte: 48] = [
     255, 213, 79,   255, 112, 67,   79, 195, 247,   129, 199, 132,
@@ -707,7 +707,7 @@ SimApp {
 
     fn save_screenshot(self: &Self, fb: &FrameBuffer) void {
         const path: &const byte = self.screenshot_path();
-        const written: !usize = screenshot_write_raw(path, fb);
+        const written: !usize = screenshot_write(path, fb);
         _ = written catch {
             self.refresh_status_label("截图失败");
             return;
