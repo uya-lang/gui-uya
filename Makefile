@@ -34,8 +34,8 @@ bench:
 
 bench-report:
 	@mkdir -p $(BUILD_DIR)
-	$(UYA) run $(BENCH_APP) -O3 | tail -n 18 > $(BENCH_REPORT)
-	@sed -n '1,160p' $(BENCH_REPORT)
+	$(UYA) run $(BENCH_APP) -O3 2>&1 | sed -n '/^Phase5 benchmark\/report/,$$p' > $(BENCH_REPORT)
+	@sed -n '1,240p' $(BENCH_REPORT)
 
 docs-api:
 	bash tools/gen_gui_api_docs.sh

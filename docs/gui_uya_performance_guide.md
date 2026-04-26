@@ -5,8 +5,12 @@
 当前性能关键点主要集中在：
 
 - `core/dirty_region.uya`
+- `core/color.uya`
+- `platform/disp.uya`
+- `render/ctx.uya`
 - `render/batch.uya`
 - `render/gpu.uya`
+- `render/img.uya`
 - `render/zerocopy.uya`
 - `res/cache.uya`
 
@@ -24,6 +28,18 @@
 - 同色填充矩形横向/纵向合并
 - 水平线段拼接
 - `gpu_execute_batch()` 按段下发批量命令
+
+### 像素热路径
+
+- `fill_rect` / `draw_line` / `draw_circle` 减少逐像素 dirty bookkeeping
+- `ARGB8888` / `RGB565` / `RGB888` / `L8` / `A8` 走连续行写入快路径
+- `draw_image*` 复用单次源 framebuffer 视图，按可见区域直接写目标缓冲
+
+### LUT / SIMD
+
+- Alpha `scale/unscale` 统一走查表
+- 弧形绘制使用角度 trig LUT
+- 行填充与同格式 blit 使用 `@vector.load/store` 16-byte 块路径
 
 ### 零拷贝
 

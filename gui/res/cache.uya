@@ -15,13 +15,13 @@ export enum CacheEntryState {
 }
 
 export struct CacheEntry {
+    used: bool,
+    state: CacheEntryState,
     key: u32,
-    image: ImageData,
     age: u32,
     bytes: u32,
     pin_count: u16,
-    state: CacheEntryState,
-    used: bool,
+    image: ImageData,
 }
 
 export struct ImageCache {

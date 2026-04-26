@@ -26,10 +26,11 @@ fn clamp_channel_u32(v: u32) u8 {
 }
 
 var _alpha_scale_lut: [u8: 65536] = [];
-var _alpha_scale_lut_ready: bool = false;
+var _alpha_unscale_lut: [u8: 65536] = [];
+var _alpha_lut_ready: bool = false;
 
-fn alpha_scale_lut_init() void {
-    if _alpha_scale_lut_ready {
+fn alpha_lut_init() void {
+    if _alpha_lut_ready {
         return;
     }
 
@@ -39,12 +40,19 @@ fn alpha_scale_lut_init() void {
         while value < 256u32 {
             const idx: usize = alpha as usize * 256usize + value as usize;
             _alpha_scale_lut[idx] = (((value * alpha + 127u32) / 255u32) as! u8).value;
+            if alpha == 0u32 || value == 0u32 {
+                _alpha_unscale_lut[idx] = 0u8;
+            } else if alpha == 255u32 {
+                _alpha_unscale_lut[idx] = (value as! u8).value;
+            } else {
+                _alpha_unscale_lut[idx] = clamp_channel_u32((value * 255u32 + alpha / 2u32) / alpha);
+            }
             value = value + 1u32;
         }
         alpha = alpha + 1u32;
     }
 
-    _alpha_scale_lut_ready = true;
+    _alpha_lut_ready = true;
 }
 
 fn alpha_scale(value: u8, alpha: u8) u8 {
@@ -54,7 +62,7 @@ fn alpha_scale(value: u8, alpha: u8) u8 {
     if alpha == 255u8 {
         return value;
     }
-    alpha_scale_lut_init();
+    alpha_lut_init();
     return _alpha_scale_lut[alpha as usize * 256usize + value as usize];
 }
 
@@ -65,8 +73,8 @@ fn alpha_unscale(value: u8, alpha: u8) u8 {
     if alpha == 255u8 {
         return value;
     }
-    const expanded: u32 = ((value as u32) * 255u32 + (alpha as u32 / 2u32)) / alpha as u32;
-    return clamp_channel_u32(expanded);
+    alpha_lut_init();
+    return _alpha_unscale_lut[alpha as usize * 256usize + value as usize];
 }
 
 export struct Color {

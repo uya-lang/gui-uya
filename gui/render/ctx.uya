@@ -17,6 +17,13 @@ use platform.disp.framebuffer_rect;
 use platform.disp.framebuffer_set_pixel;
 
 export const MAX_CLIP_STACK: i32 = 16;
+const TRIG_LUT_SCALE: i32 = 4096;
+
+type RenderByteVec16 = @vector(u8, 16);
+
+var _sin_deg_lut: [i16: 360] = [];
+var _cos_deg_lut: [i16: 360] = [];
+var _trig_lut_ready: bool = false;
 
 fn render_full_rect(fb: &FrameBuffer) Rect {
     return framebuffer_rect(fb);
@@ -30,6 +37,20 @@ fn clamp_i32(v: i32, min: i32, max: i32) i32 {
         return max;
     }
     return v;
+}
+
+fn ctx_min_i32(a: i32, b: i32) i32 {
+    if a < b {
+        return a;
+    }
+    return b;
+}
+
+fn ctx_max_i32(a: i32, b: i32) i32 {
+    if a > b {
+        return a;
+    }
+    return b;
 }
 
 fn abs_f64(v: f64) f64 {
@@ -59,6 +80,25 @@ fn clamp_unit_f64(v: f64) f64 {
 fn alpha_from_unit(v: f64) u8 {
     const clamped: f64 = clamp_unit_f64(v);
     return ((clamped * 255.0 + 0.5) as! u8).value;
+}
+
+fn ctx_round_to_i32(v: f64) i32 {
+    if v < 0.0 {
+        return (v - 0.5) as i32;
+    }
+    return (v + 0.5) as i32;
+}
+
+fn ctx_grayscale(color: &Color) u8 {
+    return (((color.r as u32) * 30u32 + (color.g as u32) * 59u32 + (color.b as u32) * 11u32) / 100u32) as u8;
+}
+
+fn ctx_pack_argb4444(color: &Color) u16 {
+    const a: u16 = ((color.a as u32 >> 4) as! u16).value;
+    const r: u16 = ((color.r as u32 >> 4) as! u16).value;
+    const g: u16 = ((color.g as u32 >> 4) as! u16).value;
+    const b: u16 = ((color.b as u32 >> 4) as! u16).value;
+    return (a << 12) | (r << 8) | (g << 4) | b;
 }
 
 fn degrees_to_radians(deg: i16) f64 {
@@ -117,6 +157,172 @@ fn shadow_coverage_from_signed_distance(sd: f64, blur: u8) u8 {
     return alpha_from_unit(smoothstep01((softness - sd) / softness));
 }
 
+fn rect_pixel_count(rect: Rect) u32 {
+    return rect.w as u32 * rect.h as u32;
+}
+
+fn ctx_clip_contains_xy(clip: &Rect, x: i32, y: i32) bool {
+    if clip.is_empty() {
+        return false;
+    }
+    return x >= clip.x as i32
+        && y >= clip.y as i32
+        && x < clip.x as i32 + clip.w as i32
+        && y < clip.y as i32 + clip.h as i32;
+}
+
+fn ctx_fill_repeat_bytes1(dst: &byte, len: usize, value: u8) void {
+    const fill: RenderByteVec16 = @vector.splat(value);
+    var off: usize = 0usize;
+    while off + 16usize <= len {
+        @vector.store(&dst[off], fill);
+        off = off + 16usize;
+    }
+    while off < len {
+        dst[off] = value;
+        off = off + 1usize;
+    }
+}
+
+fn ctx_fill_repeat_bytes2(dst: &byte, len: usize, b0: u8, b1: u8) void {
+    var pattern: [byte: 16] = [];
+    var i: usize = 0usize;
+    while i < 16usize {
+        pattern[i] = b0;
+        pattern[i + 1usize] = b1;
+        i = i + 2usize;
+    }
+    const fill: RenderByteVec16 = @vector.load(&pattern[0]);
+    var off: usize = 0usize;
+    while off + 16usize <= len {
+        @vector.store(&dst[off], fill);
+        off = off + 16usize;
+    }
+    while off + 1usize < len {
+        dst[off] = b0;
+        dst[off + 1usize] = b1;
+        off = off + 2usize;
+    }
+}
+
+fn ctx_fill_repeat_bytes4(dst: &byte, len: usize, b0: u8, b1: u8, b2: u8, b3: u8) void {
+    var pattern: [byte: 16] = [];
+    var i: usize = 0usize;
+    while i < 16usize {
+        pattern[i] = b0;
+        pattern[i + 1usize] = b1;
+        pattern[i + 2usize] = b2;
+        pattern[i + 3usize] = b3;
+        i = i + 4usize;
+    }
+    const fill: RenderByteVec16 = @vector.load(&pattern[0]);
+    var off: usize = 0usize;
+    while off + 16usize <= len {
+        @vector.store(&dst[off], fill);
+        off = off + 16usize;
+    }
+    while off + 3usize < len {
+        dst[off] = b0;
+        dst[off + 1usize] = b1;
+        dst[off + 2usize] = b2;
+        dst[off + 3usize] = b3;
+        off = off + 4usize;
+    }
+}
+
+fn ctx_fill_repeat_rgb888(dst: &byte, width: usize, color: &Color) void {
+    var x: usize = 0usize;
+    while x < width {
+        const off: usize = x * 3usize;
+        dst[off] = color.r;
+        dst[off + 1usize] = color.g;
+        dst[off + 2usize] = color.b;
+        x = x + 1usize;
+    }
+}
+
+fn ctx_fill_rect_opaque(fb: &FrameBuffer, rect: Rect, color: Color) bool {
+    if fb == null || fb.pixels == null || rect.is_empty() || color.a != 255u8 {
+        return false;
+    }
+
+    var y: usize = 0usize;
+    while y < rect.h as usize {
+        const row_offset: usize = (((rect.y as! usize).value) + y) * fb.stride as usize;
+        const pixel_offset: usize = (rect.x as! usize).value;
+        if fb.format == PixelFormat.RGB565 {
+            const bits: u16 = color.to_rgb565();
+            ctx_fill_repeat_bytes2(
+                &fb.pixels[row_offset + pixel_offset * 2usize],
+                rect.w as usize * 2usize,
+                ((bits & 0x00FFu16) as! u8).value,
+                ((bits >> 8) as! u8).value
+            );
+        } else if fb.format == PixelFormat.RGB888 {
+            ctx_fill_repeat_rgb888(&fb.pixels[row_offset + pixel_offset * 3usize], rect.w as usize, &color);
+        } else if fb.format == PixelFormat.ARGB8888 {
+            ctx_fill_repeat_bytes4(
+                &fb.pixels[row_offset + pixel_offset * 4usize],
+                rect.w as usize * 4usize,
+                color.a,
+                color.r,
+                color.g,
+                color.b
+            );
+        } else if fb.format == PixelFormat.ARGB4444 {
+            const bits: u16 = ctx_pack_argb4444(&color);
+            ctx_fill_repeat_bytes2(
+                &fb.pixels[row_offset + pixel_offset * 2usize],
+                rect.w as usize * 2usize,
+                ((bits & 0x00FFu16) as! u8).value,
+                ((bits >> 8) as! u8).value
+            );
+        } else if fb.format == PixelFormat.L8 {
+            ctx_fill_repeat_bytes1(&fb.pixels[row_offset + pixel_offset], rect.w as usize, ctx_grayscale(&color));
+        } else if fb.format == PixelFormat.A8 {
+            ctx_fill_repeat_bytes1(&fb.pixels[row_offset + pixel_offset], rect.w as usize, color.a);
+        } else {
+            return false;
+        }
+        y = y + 1usize;
+    }
+    return true;
+}
+
+fn trig_lut_init() void {
+    if _trig_lut_ready {
+        return;
+    }
+
+    var angle: i32 = 0;
+    while angle < 360 {
+        const deg: i16 = (angle as! i16).value;
+        const rad: f64 = degrees_to_radians(deg);
+        _sin_deg_lut[angle as usize] = (ctx_round_to_i32(sin(rad) * TRIG_LUT_SCALE as f64) as! i16).value;
+        _cos_deg_lut[angle as usize] = (ctx_round_to_i32(cos(rad) * TRIG_LUT_SCALE as f64) as! i16).value;
+        angle = angle + 1;
+    }
+    _trig_lut_ready = true;
+}
+
+fn normalize_angle(angle: i16) i32 {
+    var normalized: i32 = angle as i32 % 360;
+    if normalized < 0 {
+        normalized = normalized + 360;
+    }
+    return normalized;
+}
+
+fn trig_sin_scaled(angle: i16) i32 {
+    trig_lut_init();
+    return _sin_deg_lut[normalize_angle(angle) as usize] as i32;
+}
+
+fn trig_cos_scaled(angle: i16) i32 {
+    trig_lut_init();
+    return _cos_deg_lut[normalize_angle(angle) as usize] as i32;
+}
+
 export enum RenderMode {
     Immediate,
     Batch,
@@ -165,6 +371,47 @@ export struct RenderCtx {
         return self.clip_stack[(self.clip_len - 1) as usize];
     }
 
+    fn fill_rect_pixels(self: &Self, draw_rect: Rect, color: Color) void {
+        if draw_rect.is_empty() {
+            return;
+        }
+        if ctx_fill_rect_opaque(&self.fb, draw_rect, color) {
+            self.stats.pixel_ops = self.stats.pixel_ops + rect_pixel_count(draw_rect);
+            return;
+        }
+
+        var y: i32 = draw_rect.y as i32;
+        while y < draw_rect.y as i32 + draw_rect.h as i32 {
+            var x: i32 = draw_rect.x as i32;
+            while x < draw_rect.x as i32 + draw_rect.w as i32 {
+                framebuffer_set_pixel(&self.fb, x, y, &color);
+                self.stats.pixel_ops = self.stats.pixel_ops + 1u32;
+                x = x + 1;
+            }
+            y = y + 1;
+        }
+    }
+
+    fn fill_rect_no_dirty(self: &Self, rect: Rect, color: Color) Rect {
+        const clip: Rect = self.current_clip();
+        const draw_rect: Rect = clip.intersect(rect);
+        if draw_rect.is_empty() {
+            return RECT_ZERO;
+        }
+        self.fill_rect_pixels(draw_rect, color);
+        return draw_rect;
+    }
+
+    fn draw_pixel_no_dirty(self: &Self, x: i32, y: i32, color: Color) bool {
+        const clip: Rect = self.current_clip();
+        if !ctx_clip_contains_xy(&clip, x, y) {
+            return false;
+        }
+        framebuffer_set_pixel(&self.fb, x, y, &color);
+        self.stats.pixel_ops = self.stats.pixel_ops + 1u32;
+        return true;
+    }
+
     fn clear(self: &Self, color: Color) void {
         self.clear_color = color;
         framebuffer_clear(&self.fb, color);
@@ -172,15 +419,10 @@ export struct RenderCtx {
     }
 
     fn draw_pixel(self: &Self, x: i16, y: i16, color: Color) void {
-        const clip: Rect = self.current_clip();
-        const point_rect: Rect = Rect{ x: x, y: y, w: 1, h: 1 };
-        const visible: Rect = clip.intersect(point_rect);
-        if visible.is_empty() {
+        if !self.draw_pixel_no_dirty(x as i32, y as i32, color) {
             return;
         }
-        framebuffer_set_pixel(&self.fb, x as i32, y as i32, &color);
-        self.stats.pixel_ops = self.stats.pixel_ops + 1u32;
-        self.dirty.add(point_rect);
+        self.dirty.add(Rect{ x: x, y: y, w: 1, h: 1 });
     }
 
     fn draw_pixel_coverage(self: &Self, x: i32, y: i32, color: Color, coverage: u8) void {
@@ -201,16 +443,7 @@ export struct RenderCtx {
         if draw_rect.is_empty() {
             return;
         }
-        var y: i32 = draw_rect.y as i32;
-        while y < draw_rect.y as i32 + draw_rect.h as i32 {
-            var x: i32 = draw_rect.x as i32;
-            while x < draw_rect.x as i32 + draw_rect.w as i32 {
-                framebuffer_set_pixel(&self.fb, x, y, &color);
-                self.stats.pixel_ops = self.stats.pixel_ops + 1u32;
-                x = x + 1;
-            }
-            y = y + 1;
-        }
+        self.fill_rect_pixels(draw_rect, color);
         self.stats.rect_ops = self.stats.rect_ops + 1u32;
         self.dirty.add(draw_rect);
     }
@@ -243,6 +476,14 @@ export struct RenderCtx {
     }
 
     fn draw_line(self: &Self, x1: i16, y1: i16, x2: i16, y2: i16, color: Color, width: u8) void {
+        if width == 0u8 {
+            return;
+        }
+        const clip: Rect = self.current_clip();
+        if clip.is_empty() {
+            return;
+        }
+
         var x0: i32 = x1 as i32;
         var y0: i32 = y1 as i32;
         const tx: i32 = x2 as i32;
@@ -264,10 +505,17 @@ export struct RenderCtx {
             sy = 1;
         }
         var err: i32 = dx - dy_abs;
+        const half: i32 = width as i32 / 2;
 
         while true {
-            const half: i32 = width as i32 / 2;
-            self.fill_rect(Rect{ x: (x0 - half) as i16, y: (y0 - half) as i16, w: width as u16, h: width as u16 }, color);
+            if width == 1u8 {
+                _ = self.draw_pixel_no_dirty(x0, y0, color);
+            } else {
+                _ = self.fill_rect_no_dirty(
+                    Rect{ x: (x0 - half) as i16, y: (y0 - half) as i16, w: width as u16, h: width as u16 },
+                    color
+                );
+            }
             if x0 == tx && y0 == ty {
                 break;
             }
@@ -281,6 +529,16 @@ export struct RenderCtx {
                 y0 = y0 + sy;
             }
         }
+
+        const dirty_rect: Rect = clip.intersect(Rect{
+            x: (ctx_min_i32(x1 as i32, x2 as i32) - half) as i16,
+            y: (ctx_min_i32(y1 as i32, y2 as i32) - half) as i16,
+            w: (ctx_max_i32(x1 as i32, x2 as i32) - ctx_min_i32(x1 as i32, x2 as i32) + width as i32) as u16,
+            h: (ctx_max_i32(y1 as i32, y2 as i32) - ctx_min_i32(y1 as i32, y2 as i32) + width as i32) as u16,
+        });
+        if !dirty_rect.is_empty() {
+            self.dirty.add(dirty_rect);
+        }
         self.stats.line_ops = self.stats.line_ops + 1u32;
     }
 
@@ -288,18 +546,22 @@ export struct RenderCtx {
         if r <= 0 {
             return;
         }
+        const clip: Rect = self.current_clip();
+        if clip.is_empty() {
+            return;
+        }
         var x: i32 = r as i32;
         var y: i32 = 0;
         var err: i32 = 1 - x;
         while x >= y {
-            self.draw_pixel((cx as i32 + x) as i16, (cy as i32 + y) as i16, color);
-            self.draw_pixel((cx as i32 + y) as i16, (cy as i32 + x) as i16, color);
-            self.draw_pixel((cx as i32 - y) as i16, (cy as i32 + x) as i16, color);
-            self.draw_pixel((cx as i32 - x) as i16, (cy as i32 + y) as i16, color);
-            self.draw_pixel((cx as i32 - x) as i16, (cy as i32 - y) as i16, color);
-            self.draw_pixel((cx as i32 - y) as i16, (cy as i32 - x) as i16, color);
-            self.draw_pixel((cx as i32 + y) as i16, (cy as i32 - x) as i16, color);
-            self.draw_pixel((cx as i32 + x) as i16, (cy as i32 - y) as i16, color);
+            _ = self.draw_pixel_no_dirty(cx as i32 + x, cy as i32 + y, color);
+            _ = self.draw_pixel_no_dirty(cx as i32 + y, cy as i32 + x, color);
+            _ = self.draw_pixel_no_dirty(cx as i32 - y, cy as i32 + x, color);
+            _ = self.draw_pixel_no_dirty(cx as i32 - x, cy as i32 + y, color);
+            _ = self.draw_pixel_no_dirty(cx as i32 - x, cy as i32 - y, color);
+            _ = self.draw_pixel_no_dirty(cx as i32 - y, cy as i32 - x, color);
+            _ = self.draw_pixel_no_dirty(cx as i32 + y, cy as i32 - x, color);
+            _ = self.draw_pixel_no_dirty(cx as i32 + x, cy as i32 - y, color);
             y = y + 1;
             if err < 0 {
                 err = err + 2 * y + 1;
@@ -308,6 +570,15 @@ export struct RenderCtx {
                 err = err + 2 * (y - x) + 1;
             }
         }
+        const dirty_rect: Rect = clip.intersect(Rect{
+            x: (cx as i32 - r as i32) as i16,
+            y: (cy as i32 - r as i32) as i16,
+            w: (r as i32 * 2 + 1) as u16,
+            h: (r as i32 * 2 + 1) as u16,
+        });
+        if !dirty_rect.is_empty() {
+            self.dirty.add(dirty_rect);
+        }
         self.stats.circle_ops = self.stats.circle_ops + 1u32;
     }
 
@@ -315,16 +586,32 @@ export struct RenderCtx {
         if r <= 0 {
             return;
         }
+        const clip: Rect = self.current_clip();
+        if clip.is_empty() {
+            return;
+        }
         var y: i32 = 0 - r as i32;
         while y <= r as i32 {
             const row_radius: i32 = clamp_i32(sqrt((r as i32 * r as i32 - y * y) as f64) as i32, 0, r as i32);
-            self.fill_rect(Rect{
-                x: (cx as i32 - row_radius) as i16,
-                y: (cy as i32 + y) as i16,
-                w: (row_radius * 2 + 1) as u16,
-                h: 1,
-            }, color);
+            _ = self.fill_rect_no_dirty(
+                Rect{
+                    x: (cx as i32 - row_radius) as i16,
+                    y: (cy as i32 + y) as i16,
+                    w: (row_radius * 2 + 1) as u16,
+                    h: 1,
+                },
+                color
+            );
             y = y + 1;
+        }
+        const dirty_rect: Rect = clip.intersect(Rect{
+            x: (cx as i32 - r as i32) as i16,
+            y: (cy as i32 - r as i32) as i16,
+            w: (r as i32 * 2 + 1) as u16,
+            h: (r as i32 * 2 + 1) as u16,
+        });
+        if !dirty_rect.is_empty() {
+            self.dirty.add(dirty_rect);
         }
         self.stats.circle_ops = self.stats.circle_ops + 1u32;
     }
@@ -525,9 +812,8 @@ export struct RenderCtx {
     fn draw_arc(self: &Self, cx: i16, cy: i16, r: i16, start_deg: i16, end_deg: i16, width: u8, color: Color) void {
         var angle: i16 = start_deg;
         while angle <= end_deg {
-            const rad: f64 = degrees_to_radians(angle);
-            const px: i16 = (cx as f64 + cos(rad) * r as f64) as i16;
-            const py: i16 = (cy as f64 + sin(rad) * r as f64) as i16;
+            const px: i16 = (cx as i32 + (trig_cos_scaled(angle) * r as i32) / TRIG_LUT_SCALE) as i16;
+            const py: i16 = (cy as i32 + (trig_sin_scaled(angle) * r as i32) / TRIG_LUT_SCALE) as i16;
             self.fill_rect(Rect{ x: px - width as i16 / 2, y: py - width as i16 / 2, w: width as u16, h: width as u16 }, color);
             angle = angle + 2;
         }
@@ -536,9 +822,8 @@ export struct RenderCtx {
     fn fill_arc(self: &Self, cx: i16, cy: i16, r: i16, start_deg: i16, end_deg: i16, color: Color) void {
         var angle: i16 = start_deg;
         while angle <= end_deg {
-            const rad: f64 = degrees_to_radians(angle);
-            const px: i16 = (cx as f64 + cos(rad) * r as f64) as i16;
-            const py: i16 = (cy as f64 + sin(rad) * r as f64) as i16;
+            const px: i16 = (cx as i32 + (trig_cos_scaled(angle) * r as i32) / TRIG_LUT_SCALE) as i16;
+            const py: i16 = (cy as i32 + (trig_sin_scaled(angle) * r as i32) / TRIG_LUT_SCALE) as i16;
             self.draw_line(cx, cy, px, py, color, 1);
             angle = angle + 3;
         }

@@ -1988,14 +1988,19 @@ fn ttf_glyph_for_codepoint(font: &Font, codepoint: u32) Glyph {
     const height_px: i32 = y_max_px - y_min_px;
     const offset_x_px: i32 = x_min_px;
     const offset_y_px: i32 = asset.font.baseline as i32 - y_max_px;
+    const width_u8: u8 = (ttf_clamp_i32(width_px, 0, 255) as! u8).value;
+    const height_u8: u8 = (ttf_clamp_i32(height_px, 0, 255) as! u8).value;
+    const advance_u8: u8 = (advance_px as! u8).value;
+    const offset_x_i8: i8 = (ttf_clamp_i32(offset_x_px, -128, 127) as! i8).value;
+    const offset_y_i8: i8 = (ttf_clamp_i32(offset_y_px, -128, 127) as! i8).value;
 
     return Glyph{
         codepoint: codepoint,
-        width: (ttf_clamp_i32(width_px, 0, 255) as! u8).value,
-        height: (ttf_clamp_i32(height_px, 0, 255) as! u8).value,
-        advance: (advance_px as! u8).value,
-        offset_x: (ttf_clamp_i32(offset_x_px, -128, 127) as! i8).value,
-        offset_y: (ttf_clamp_i32(offset_y_px, -128, 127) as! i8).value,
+        width: width_u8,
+        height: height_u8,
+        advance: advance_u8,
+        offset_x: offset_x_i8,
+        offset_y: offset_y_i8,
         bitmap_offset: glyph_id as u32,
     };
 }
@@ -2175,13 +2180,18 @@ fn bitmap_font_asset_add_glyph(asset: &BitmapFontAsset, codepoint: u32, x: i32, 
     }
 
     const glyph_index: usize = asset.glyph_len as usize;
+    const width_u8: u8 = (width as! u8).value;
+    const height_u8: u8 = (height as! u8).value;
+    const advance_u8: u8 = (advance as! u8).value;
+    const offset_x_i8: i8 = (offset_x as! i8).value;
+    const offset_y_i8: i8 = (offset_y as! i8).value;
     asset.glyphs[glyph_index] = Glyph{
         codepoint: codepoint,
-        width: (width as! u8).value,
-        height: (height as! u8).value,
-        advance: (advance as! u8).value,
-        offset_x: (offset_x as! i8).value,
-        offset_y: (offset_y as! i8).value,
+        width: width_u8,
+        height: height_u8,
+        advance: advance_u8,
+        offset_x: offset_x_i8,
+        offset_y: offset_y_i8,
         bitmap_offset: (y as u32) * asset.font.bitmap_stride as u32 + x as u32,
     };
 
@@ -2212,10 +2222,11 @@ fn bitmap_font_asset_add_kerning(asset: &BitmapFontAsset, left: u32, right: u32,
         return false;
     }
     const idx: usize = asset.kerning_len as usize;
+    const adjust_i8: i8 = (adjust as! i8).value;
     asset.kerning_pairs[idx] = KerningPair{
         left: left,
         right: right,
-        adjust: (adjust as! i8).value,
+        adjust: adjust_i8,
     };
     asset.kerning_len = asset.kerning_len + 1u16;
     asset.font.kerning_count = asset.kerning_len;

@@ -4,6 +4,8 @@ use core.rect.Rect;
 use core.size.SIZE_ZERO;
 use core.size.Size;
 
+type DispByteVec16 = @vector(u8, 16);
+
 fn copy_color(color: &Color) Color {
     return Color{
         r: color.r,
@@ -48,6 +50,120 @@ fn unpack_rgb565(bits: u16) Color {
         b: (((b5 << 3) | (b5 >> 2)) as! u8).value,
         a: 255,
     };
+}
+
+fn fill_repeat_bytes1(dst: &byte, len: usize, value: u8) void {
+    const fill: DispByteVec16 = @vector.splat(value);
+    var off: usize = 0usize;
+    while off + 16usize <= len {
+        @vector.store(&dst[off], fill);
+        off = off + 16usize;
+    }
+    while off < len {
+        dst[off] = value;
+        off = off + 1usize;
+    }
+}
+
+fn fill_repeat_bytes2(dst: &byte, len: usize, b0: u8, b1: u8) void {
+    var pattern: [byte: 16] = [];
+    var i: usize = 0usize;
+    while i < 16usize {
+        pattern[i] = b0;
+        pattern[i + 1usize] = b1;
+        i = i + 2usize;
+    }
+    const fill: DispByteVec16 = @vector.load(&pattern[0]);
+    var off: usize = 0usize;
+    while off + 16usize <= len {
+        @vector.store(&dst[off], fill);
+        off = off + 16usize;
+    }
+    while off + 1usize < len {
+        dst[off] = b0;
+        dst[off + 1usize] = b1;
+        off = off + 2usize;
+    }
+}
+
+fn fill_repeat_bytes4(dst: &byte, len: usize, b0: u8, b1: u8, b2: u8, b3: u8) void {
+    var pattern: [byte: 16] = [];
+    var i: usize = 0usize;
+    while i < 16usize {
+        pattern[i] = b0;
+        pattern[i + 1usize] = b1;
+        pattern[i + 2usize] = b2;
+        pattern[i + 3usize] = b3;
+        i = i + 4usize;
+    }
+    const fill: DispByteVec16 = @vector.load(&pattern[0]);
+    var off: usize = 0usize;
+    while off + 16usize <= len {
+        @vector.store(&dst[off], fill);
+        off = off + 16usize;
+    }
+    while off + 3usize < len {
+        dst[off] = b0;
+        dst[off + 1usize] = b1;
+        dst[off + 2usize] = b2;
+        dst[off + 3usize] = b3;
+        off = off + 4usize;
+    }
+}
+
+fn fill_repeat_rgb888(dst: &byte, width: usize, color: &Color) void {
+    var x: usize = 0usize;
+    while x < width {
+        const off: usize = x * 3usize;
+        dst[off] = color.r;
+        dst[off + 1usize] = color.g;
+        dst[off + 2usize] = color.b;
+        x = x + 1usize;
+    }
+}
+
+fn clear_row_fast(fb: &FrameBuffer, row_offset: usize, width: usize, color: &Color) bool {
+    if color.a != 255u8 {
+        return false;
+    }
+
+    if fb.format == PixelFormat.RGB565 {
+        const bits: u16 = color.to_rgb565();
+        fill_repeat_bytes2(
+            &fb.pixels[row_offset],
+            width * 2usize,
+            ((bits & 0x00FFu16) as! u8).value,
+            ((bits >> 8) as! u8).value
+        );
+        return true;
+    }
+    if fb.format == PixelFormat.RGB888 {
+        fill_repeat_rgb888(&fb.pixels[row_offset], width, color);
+        return true;
+    }
+    if fb.format == PixelFormat.ARGB8888 {
+        fill_repeat_bytes4(&fb.pixels[row_offset], width * 4usize, color.a, color.r, color.g, color.b);
+        return true;
+    }
+    if fb.format == PixelFormat.ARGB4444 {
+        const bits: u16 = pack_argb4444(color);
+        fill_repeat_bytes2(
+            &fb.pixels[row_offset],
+            width * 2usize,
+            ((bits & 0x00FFu16) as! u8).value,
+            ((bits >> 8) as! u8).value
+        );
+        return true;
+    }
+    if fb.format == PixelFormat.L8 {
+        fill_repeat_bytes1(&fb.pixels[row_offset], width, grayscale(color));
+        return true;
+    }
+    if fb.format == PixelFormat.A8 {
+        fill_repeat_bytes1(&fb.pixels[row_offset], width, color.a);
+        return true;
+    }
+    return false;
 }
 
 fn pixel_byte_offset(fb: &FrameBuffer, x: i32, y: i32) usize {
@@ -312,6 +428,11 @@ export fn framebuffer_clear(fb: &FrameBuffer, color: Color) void {
     };
     var y: i32 = 0;
     while y < fb.size.h as i32 {
+        const row_offset: usize = (y as! usize).value * fb.stride as usize;
+        if clear_row_fast(&target, row_offset, fb.size.w as usize, &color) {
+            y = y + 1;
+            continue;
+        }
         var x: i32 = 0;
         while x < fb.size.w as i32 {
             framebuffer_set_pixel(&target, x, y, &color);

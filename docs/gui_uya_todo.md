@@ -25,7 +25,7 @@
 
 - 2026-04-26 当前工作区已完成 Phase 4 最小基线: 在 Phase 3 组件库基础上，新增 `anim/{easing,tween,timeline}.uya`、`platform/tick.uya`、`res/fs.uya`，并增强 `platform/{disp,indev}.uya`、`res/cache.uya` 与 `widget/page.uya`，补齐页面导航、资源异步入口、输入校准/管理与平台 profile。
 - 2026-04-26 当前 `make test` / `make build` / `make bench` / `make bench-report` / `make docs-api` 可用；默认 smoke 入口已切换为 `gui/phase6_smoke.uya`，对应 `examples/phase6_smoke.uya`、`tests/test_phase6_examples.uya` 与 Phase 4/5/6 demo 已接入。
-- 2026-04-26 已完成 Phase 5 仓库内闭环: 优化 `core/dirty_region.uya`、`render/{batch,gpu,zerocopy}.uya` 与 `res/cache.uya`，新增 `tests/test_phase5_runtime.uya`、CI benchmark、`build/phase5_bench.txt` 与 [gui_uya_phase5_report.md](./gui_uya_phase5_report.md)。
+- 2026-04-26 已完成 Phase 5 仓库内闭环: 优化 `core/{color,dirty_region}.uya`、`platform/disp.uya`、`render/{ctx,img,batch,gpu,zerocopy}.uya` 与 `res/cache.uya`，新增 `tests/test_phase5_runtime.uya`、旋转图像回归、CI benchmark、`build/phase5_bench.txt` 与 [gui_uya_phase5_report.md](./gui_uya_phase5_report.md)。
 - 2026-04-26 已完成 Phase 6 第一轮仓库内闭环: 新增 `phase6_smoke`、`tests/test_phase6_examples.uya`、`examples/demo_{clock,music,settings,dashboard,game,perf}.uya`，补齐快速入门/API 索引/主题/性能/移植/架构文档，并新增 [gui_uya_phase6_report.md](./gui_uya_phase6_report.md)。
 - Phase 1 已落地模块仍完整可见: `style/*`、`theme`、`event_dispatch`、`platform/indev`、`layout/*`、`dirty_region`、`benchmarks/core_bench.uya`、`examples/phase1_smoke.uya`。
 - 以下 Phase 2 条目中的 `[x]` 表示“代码/接口已经写出或已有测试草案”，不代表当前工作区已经恢复绿色构建。
@@ -576,11 +576,11 @@
   - [ ] 帧完成延迟
 
 #### Day 5: 渲染性能调优
-- [ ] 内联热点函数
-- [ ] SIMD 优化 (如果目标支持)
-- [ ] 查找表优化 (Alpha 混合、Sin/Cos)
-- [ ] 缓存友好数据布局
-- [ ] 修复构建后补完整渲染基准测试
+- [x] 内联热点函数
+- [x] SIMD 优化 (如果目标支持)
+- [x] 查找表优化 (Alpha 混合、Sin/Cos)
+- [x] 缓存友好数据布局
+- [x] 修复构建后补完整渲染基准测试
 
 ---
 
