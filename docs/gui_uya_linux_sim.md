@@ -93,7 +93,7 @@ make sim-fb-run
 - 鼠标滚轮：映射到 `EncoderDriver`，当前用于调节 slider
 - 键盘：
   - `Esc` 退出
-  - `P` 抓取截图（默认 BMP；若路径以 `.uyafb` 结尾则导出原始 dump）
+  - `P` 抓取截图（按扩展名导出 `PNG` / `BMP` / `.uyafb` 原始 dump）
   - `R` 开始/结束输入录制
   - `L` 读取并回放录制
   - `F11` 切换全屏
@@ -116,7 +116,7 @@ make sim-fb-run
 ## 0.5 当前已知现象
 
 - `make sim-build` 仍会打印不少来自 Uya 生成 C 文件的 warning；当前不影响链接与运行
-- 截图目前已支持 `BMP` 与原始 framebuffer dump（`.uyafb`）；`PNG` 仍未接入
+- 截图目前已支持 `PNG`、`BMP` 与原始 framebuffer dump（`.uyafb`）
 - Framebuffer 专用后端已具备首版显示链路，并已支持控制终端键盘热键与方向键，以及可选 `evdev` 指针/触摸/滚轮；更完整校准与多点手势仍未实现
 - 当前机器上 `/dev/fb0` 存在但普通用户无权限，`--backend fb` 会清晰返回 `Permission denied`
 - 默认文本渲染已切到内置位图字体，不再显示统一占位方框

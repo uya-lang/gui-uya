@@ -182,7 +182,7 @@
 
 - [x] `gui/sim/screenshot.uya`
   - [x] 导出当前 framebuffer
-  - [x] 支持原始像素导出与 `BMP` 编码
+  - [x] 支持原始像素导出与 `BMP` / `PNG` 编码
 - [x] `gui/sim/profiler.uya`
   - [x] 统计 frame time
   - [x] 统计 update/render/present 时间分布

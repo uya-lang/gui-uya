@@ -127,3 +127,46 @@ test "sim screenshot writes bmp when path ends with bmp" {
 
     _ = unlink(shot_path as &const byte);
 }
+
+test "sim screenshot writes png when path ends with png" {
+    const shot_path: *const byte = "/tmp/uya_gui_sim_test.png\0" as *const byte;
+    _ = unlink(shot_path as &const byte);
+
+    var pixels: [byte: 16] = [1, 2, 3, 4,   5, 6, 7, 8,   9, 10, 11, 12,   13, 14, 15, 16];
+    const fb: FrameBuffer = framebuffer_new(&pixels[0], 2, 2, 8, PixelFormat.ARGB8888);
+    const written: usize = try screenshot_write(shot_path as &const byte, &fb);
+    try assert_eq_i32(written as i32, 86);
+
+    const fd: i32 = try sys_open(shot_path, O_RDONLY as i32, 0);
+    var raw: [byte: 86] = [];
+    const n: isize = try sys_read(fd, &raw[0], 86usize);
+    try assert_eq_i32(n as i32, 86);
+    try assert_eq_i32(raw[0] as i32, 137);
+    try assert_eq_i32(raw[1] as i32, 'P' as i32);
+    try assert_eq_i32(raw[2] as i32, 'N' as i32);
+    try assert_eq_i32(raw[3] as i32, 'G' as i32);
+    try assert_eq_i32(raw[8] as i32, 0);
+    try assert_eq_i32(raw[11] as i32, 13);
+    try assert_eq_i32(raw[12] as i32, 'I' as i32);
+    try assert_eq_i32(raw[13] as i32, 'H' as i32);
+    try assert_eq_i32(raw[14] as i32, 'D' as i32);
+    try assert_eq_i32(raw[15] as i32, 'R' as i32);
+    try assert_eq_i32(raw[19] as i32, 2);
+    try assert_eq_i32(raw[23] as i32, 2);
+    try assert_eq_i32(raw[24] as i32, 8);
+    try assert_eq_i32(raw[25] as i32, 6);
+    try assert_eq_i32(raw[36] as i32, 29);
+    try assert_eq_i32(raw[37] as i32, 'I' as i32);
+    try assert_eq_i32(raw[38] as i32, 'D' as i32);
+    try assert_eq_i32(raw[39] as i32, 'A' as i32);
+    try assert_eq_i32(raw[40] as i32, 'T' as i32);
+    try assert_eq_i32(raw[41] as i32, 0x78);
+    try assert_eq_i32(raw[42] as i32, 0x01);
+    try assert_eq_i32(raw[78] as i32, 'I' as i32);
+    try assert_eq_i32(raw[79] as i32, 'E' as i32);
+    try assert_eq_i32(raw[80] as i32, 'N' as i32);
+    try assert_eq_i32(raw[81] as i32, 'D' as i32);
+    _ = sys_close(fd) catch {};
+
+    _ = unlink(shot_path as &const byte);
+}
