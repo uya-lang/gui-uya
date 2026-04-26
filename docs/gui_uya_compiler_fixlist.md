@@ -10,7 +10,7 @@
 - 修复后应补的编译器回归测试
 
 > 2026-04-26 之后，这份文档已经主要转为“历史问题 + 当前回归状态”记录。
-> `Phase 0` 到 `Phase 3` 的已知问题中，除 `#7` 外其余条目已在编译器 / driver 侧修复；`Phase 4` 过程中又新增发现 `#12/#13/#14` 三个 codegen / lowering 问题，GUI 仓库当前通过兼容层绕过。
+> `Phase 0` 到 `Phase 3` 的已知问题中，除 `#7` 外其余条目已在编译器 / driver 侧修复；`Phase 4` 过程中新增发现的 `#12/#13` 已在编译器侧修复并补回归，`#14` 当前编译器也已通过 pthread callback 定向回归验证，GUI 仓库里对应兼容层暂未回切。
 
 ## 优先级
 
@@ -41,7 +41,7 @@
 
 ## 当前状态总览
 
-> 2026-04-26 更新：当前 GUI 仓库已经可以通过 `make test` / `make build` / `make bench`；下表中的“状态”描述的是编译器 / 语言层问题是否已解决，不是 GUI 仓库是否还能继续开发。当前编译器侧已修复 `1/2/3/4/5/6/8/9/10/11`；`#12/#13/#14` 为 Phase 4 新发现问题，GUI 仓库当前仍保留兼容层。
+> 2026-04-26 更新：当前 GUI 仓库已经可以通过 `make test` / `make build` / `make bench`；下表中的“状态”描述的是编译器 / 语言层问题是否已解决，不是 GUI 仓库是否还能继续开发。当前编译器侧已修复 `1/2/3/4/5/6/8/9/10/11/12/13`，`#14` 当前也已通过代表性 callback 回归验证；GUI 仓库里 `#12/#13/#14` 对应兼容层仍暂保留。
 
 | 编号 | 问题 | 当前状态 | 对当前仓库影响 | 当前仓库处理方式 |
 |------|------|----------|----------------|------------------|
@@ -56,9 +56,9 @@
 | 9 | `&Self` 返回值链式方法 lowering | 已修复（编译器） | 低 | 普通链式已验证；`Chart.add_point()` 仍保留逐句调用 |
 | 10 | 跨模块同名 `enum` 的 C99 命名空间冲突 | 已修复（编译器） | 低 | 已恢复 `TextAlign` 命名 |
 | 11 | split-C 下相对 `-o` 路径解析 | 已修复（driver 层） | 低 | 已切回相对 `-o` |
-| 12 | `@async_fn` 返回 `Future<!void>` 的 C99 代码生成 | 未修复（编译器） | 中 | `AnimManager.animation_loop()` 暂改为 `Future<!usize>` |
-| 13 | 泛型 `@async_fn` 自由函数的实例化与代码生成 | 未修复（编译器） | 中 | `fs_read_async<F>` 暂拆到具体类型方法 |
-| 14 | 结构体方法调用在 pthread callback 场景的 lowering | 未修复（编译器） | 低 | `BitmapAllocator` 暂经导出包装函数调用 |
+| 12 | `@async_fn` 返回 `Future<!void>` 的 C99 代码生成 | 已修复（编译器） | 低 | `AnimManager.animation_loop()` 仍暂保留 `Future<!usize>`，可择机回切 |
+| 13 | 泛型 `@async_fn` 自由函数的实例化与代码生成 | 已修复（编译器） | 低 | `fs_read_async<F>` 仍暂拆到具体类型方法，可择机回切 |
+| 14 | 结构体方法调用在 pthread callback 场景的 lowering | 当前编译器已无复现（已补回归） | 低 | `BitmapAllocator` 仍暂经导出包装函数调用，可择机回切 |
 
 ## 1. 泛型 `union` / `Option<T>` 的 C99 代码生成
 
@@ -491,8 +491,8 @@ _ = chart.add_point(6);
 
 ### 当前状态
 
-- 状态: 未修复（编译器）
-- 阻塞性: 中；会阻断一类常见 async 控制流写法
+- 状态: 已修复（编译器）
+- 阻塞性: 已解除；`Future<!void>` 可直接回到原始语义设计
 
 ### 现象
 
@@ -510,20 +510,22 @@ _ = chart.add_point(6);
   - `return type is an incomplete type`
   - `uya_interface_Future_err_void` / `Poll_err_void` 未完整定义
 
-### 当前仓库绕法
+### GUI 侧遗留兼容层
 
 - 把 `AnimManager.animation_loop()` 暂改成 `Future<!usize>`
 - 以 `0usize` 作为完成值，规避 `Future<!void>` 的 codegen 路径
 
-### 建议修复方向
+### 修复结果
 
-- 为 `Future<!void>` / `Poll<!void>` 生成与 `Future<!usize>` 对称的完整承载类型
-- 校验 `@await` 局部临时值、vtable 与 boxed interface 路径在 `void` payload 下的一致性
+- `Future<!void>` / `Poll<!void>` 的单态承载类型现在会完整发射，不再漏掉 `uya_interface_Future_err_void` / `Poll_err_void`
+- stage-B `@async_fn` 路径下的 `void` payload 已与 `usize` 等普通 payload 对齐
+- 单文件 C 与 split-C 路径均已回归验证
 
-### 建议补的编译器测试
+### 已补的编译器测试
 
-- 新增 `uya/tests/test_async_future_void_codegen.uya`
-- 应覆盖：
+- `tests/test_async_future_void_codegen.uya`
+- `tests/verify_gui_fixlist_codegen.sh`
+- 已覆盖：
   - 顶层 `@async_fn fn noop() Future<!void>`
   - 结构体方法 `@async_fn`
   - `while` + `@await` 路径
@@ -533,8 +535,8 @@ _ = chart.add_point(6);
 
 ### 当前状态
 
-- 状态: 未修复（编译器）
-- 阻塞性: 中；限制抽象层写法
+- 状态: 已修复（编译器）
+- 阻塞性: 已解除；泛型 async 自由函数可恢复使用
 
 ### 现象
 
@@ -552,31 +554,32 @@ _ = chart.add_point(6);
   - `implicit declaration of function 'fs_read_async'`
   - 调用点与 `std_block_on_usize(...)` 之间类型不匹配
 
-### 当前仓库绕法
+### GUI 侧遗留兼容层
 
 - 移除泛型 async 自由函数
 - 改为 `RomFileSystem.read_async()` / `FatFileSystem.read_async()` 等具体类型方法
 
-### 建议修复方向
+### 修复结果
 
-- 统一泛型 `@async_fn` 自由函数与普通泛型函数的单态化 / 发射规则
-- 确保 interface 约束 + async 返回值的组合能在调用点前稳定声明
+- 泛型 `@async_fn` 自由函数现在会和普通泛型函数一样稳定参与单态化 / 发射
+- stage-B async 状态机里的参数类型会先固化为具体实参后的 C 类型，避免退化成 `unknown()` 或错误签名
+- 调用点前置声明与实际定义的参数类型已保持一致
 
-### 建议补的编译器测试
+### 已补的编译器测试
 
-- 新增 `uya/tests/test_generic_async_function_codegen.uya`
-- 应覆盖：
+- `tests/test_generic_async_function_codegen.uya`
+- `tests/verify_gui_fixlist_codegen.sh`
+- 已覆盖：
   - `fn read_async<T: Trait>(...) Future<!usize>`
   - 直接调用
   - 作为 `block_on(...)` 实参
-  - 跨模块导入调用
 
 ## 14. 结构体方法调用在 pthread callback 场景的 lowering
 
 ### 当前状态
 
-- 状态: 未修复（编译器）
-- 阻塞性: 低；影响较窄，但真实并发测试可触发
+- 状态: 当前编译器已无复现（已补回归）
+- 阻塞性: 低；代表性 callback 场景已验证通过，但 GUI 仓库仍暂保留包装函数
 
 ### 现象
 
@@ -594,28 +597,28 @@ _ = chart.add_point(6);
 - 宿主链接阶段报：
   - `undefined reference to 'unknown'`
 
-### 当前仓库绕法
+### GUI 侧遗留兼容层
 
 - 为 `BitmapAllocator` 增加 `bitmap_allocator_alloc()` / `bitmap_allocator_free()` 等导出包装函数
 - pthread worker 通过包装函数调用，绕开该 lowering 路径
 
-### 建议修复方向
+### 当前编译器状态
 
-- 检查 “函数指针回调 + 全局共享指针 + 实例方法调用” 的 lowering
-- 确保 receiver 解析不会退化成未绑定的占位节点
+- 当前编译器在 “pthread callback + 全局共享结构体指针 + 实例方法调用” 组合路径下已能生成真实方法调用
+- 本轮已补定向回归，防止未来再退化成 `unknown()`
 
-### 建议补的编译器测试
+### 已补的编译器测试
 
-- 新增 `uya/tests/test_method_call_in_callback_codegen.uya`
-- 应覆盖：
+- `tests/test_method_call_in_callback_codegen.uya`
+- `tests/verify_gui_fixlist_codegen.sh`
+- 已覆盖：
   - pthread 风格 callback
   - 全局共享结构体指针
   - callback 内部实例方法调用
-  - split-C 路径
 
 ## 历史修复顺序
 
-`Phase 0` 到 `Phase 3` 的历史问题里，只剩 `#7` 处于语言设计待决状态；以下顺序保留作追溯。`#12/#13/#14` 为 Phase 4 新增问题，暂不并入这段历史顺序。
+`Phase 0` 到 `Phase 3` 的历史问题里，只剩 `#7` 处于语言设计待决状态；以下顺序保留作追溯。`#12/#13/#14` 为 Phase 4 新增问题，其中 `#12/#13` 已修复，`#14` 当前已补回归验证，因此也暂不并入这段历史顺序。
 
 1. 修 `Option<T>` / 泛型 union 单态化
 2. 修 union 结构体字段
@@ -639,7 +642,7 @@ _ = chart.add_point(6);
 - `widget/lbl.uya` 的 `TextAlign` 命名
 - `uya build ... -o build/app` 的相对输出路径
 
-以下组合路径经真实 GUI 构建验证后，当前仍保留兼容层：
+以下组合路径在编译器侧已经打通或已补回归验证，但 GUI 仓库当前仍保留兼容层、尚未统一回切：
 
 - `EventQueue.pop()` 继续使用 `EventOption`
 - `Buffer.as_slice()` 继续返回 `ByteSlice`
