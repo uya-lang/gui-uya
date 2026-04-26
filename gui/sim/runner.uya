@@ -6,6 +6,9 @@ use platform.disp.framebuffer_new;
 use platform.fb.disp_fb.FbDisplay;
 use platform.fb.disp_fb.fb_display_last_error;
 use platform.fb.disp_fb.fb_display_new;
+use platform.fb.indev_fb.FbInputSystem;
+use platform.fb.indev_fb.fb_input_last_error;
+use platform.fb.indev_fb.fb_input_system_new;
 use platform.sdl2.disp_sdl.SdlDisplay;
 use platform.sdl2.disp_sdl.sdl_display_last_error;
 use platform.sdl2.disp_sdl.sdl_display_new;
@@ -29,7 +32,7 @@ fn sim_print_usage() void {
         "  --demo phase4|phase6\n"
         "  --width N --height N --scale N\n"
         "  --fullscreen | --windowed\n"
-        "  --fb-dev /dev/fb0\n"
+        "  --fb-dev /dev/fb0 --fb-tty /dev/tty\n"
         "  --root PATH --title TEXT\n"
         "  --screenshot PATH --record PATH --playback PATH\n"
         "  --max-frames N --profile-every N --hud --no-hud\n" as *byte
@@ -151,6 +154,14 @@ fn run_simulator_fb(cfg_in: SimConfig) i32 {
         cfg.max_frames = 300u32;
     }
 
+    var input: FbInputSystem = fb_input_system_new();
+    if !input.init(cfg.fb_input_device_path) {
+        _ = printf("[sim] framebuffer input unavailable: %s\n" as *byte, fb_input_last_error());
+    }
+    defer {
+        input.shutdown();
+    }
+
     var app: SimApp = sim_app_new();
     if !app.init(cfg) {
         _ = printf("[sim] app init failed\n" as *byte);
@@ -162,6 +173,15 @@ fn run_simulator_fb(cfg_in: SimConfig) i32 {
         const frame_start_ms: u32 = get_tick_ms();
         const delta_ms: u32 = frame_start_ms - last_tick_ms;
         last_tick_ms = frame_start_ms;
+
+        _ = input.pump(frame_start_ms);
+        var evt: Event = event_none();
+        var has_evt: bool = input.poll(&evt);
+        while has_evt {
+            app.handle_translated_event(&evt);
+            evt = event_none();
+            has_evt = input.poll(&evt);
+        }
 
         app.update(delta_ms, frame_start_ms);
         const after_update_ms: u32 = get_tick_ms();

@@ -5,6 +5,9 @@ use core.event.InputDev;
 use core.event.event_none;
 use core.event.gesture_config_default;
 use core.point.Point;
+use platform.fb.indev_fb_common.FB_EVT_KEY_DOWN;
+use platform.fb.indev_fb_common.FbHostEvent;
+use platform.fb.indev_fb_common.fb_feed_host_event;
 use platform.indev.EncoderDriver;
 use platform.indev.IInputDev;
 use platform.indev.InputManager;
@@ -97,4 +100,20 @@ test "input manager supports hotplug and edge gestures" {
     try assert_eq_bool(manager.detach(InputDev.Mouse), true);
     try assert_eq_i32(manager.device_count(), 1);
     try assert_eq_bool(manager.hotplug_revision >= 3u32, true);
+}
+
+test "fb input system translates tty key events" {
+    var key: KeyDriver = key_driver_new();
+
+    var raw: FbHostEvent = FbHostEvent{
+        kind: FB_EVT_KEY_DOWN,
+        key_code: 'P' as u16,
+        reserved: 0u8,
+    };
+    fb_feed_host_event(&key, &raw, 44u32);
+
+    var evt: Event = event_none();
+    try assert_eq_bool(key.read(&evt), true);
+    try expect(evt.event_type == EventType.KeyDown);
+    try assert_eq_i32(evt.key_code() as i32, 'P' as i32);
 }

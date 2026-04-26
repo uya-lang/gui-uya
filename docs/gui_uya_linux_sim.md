@@ -79,8 +79,10 @@ make sim-fb-run
 - 默认参数：`SIM_FB_ARGS="--backend fb --max-frames 60"`
 - 可覆盖设备：
   - `SIM_FB_ARGS="--backend fb --fb-dev /dev/fb1 --max-frames 60"`
+  - `SIM_FB_ARGS="--backend fb --fb-dev /dev/fb1 --fb-tty /dev/tty1 --max-frames 60"`
   - 或 `UYA_GUI_FB_DEV=/dev/fb1`
-- 当前实现只覆盖显示输出，不带 `indev_fb`
+- 也可通过 `UYA_GUI_FB_TTY=/dev/tty1` 覆盖输入终端
+- 当前 `fb` 输入已支持控制终端键盘热键与方向键；`evdev` 指针/触摸仍未接入
 
 ## 0.3 当前交互
 
@@ -94,6 +96,9 @@ make sim-fb-run
   - `L` 读取并回放录制
   - `F11` 切换全屏
   - `1` / `6` 重新跑 `phase4_smoke` / `phase6_smoke`
+- Framebuffer 控制终端：
+  - 支持上述键盘热键
+  - 支持方向键调节 slider
 
 ## 0.4 本次实机验证补到的兼容点
 
@@ -106,7 +111,7 @@ make sim-fb-run
 
 - `make sim-build` 仍会打印不少来自 Uya 生成 C 文件的 warning；当前不影响链接与运行
 - 截图目前已支持 `BMP` 与原始 framebuffer dump（`.uyafb`）；`PNG` 仍未接入
-- Framebuffer 专用后端已具备首版显示链路，但当前仍未实现 `indev_fb`
+- Framebuffer 专用后端已具备首版显示链路，并已支持控制终端键盘热键与方向键；`evdev` 指针/触摸仍未实现
 - 当前机器上 `/dev/fb0` 存在但普通用户无权限，`--backend fb` 会清晰返回 `Permission denied`
 - 默认文本渲染已切到内置位图字体，不再显示统一占位方框
   - ASCII：`5x7`
@@ -224,7 +229,7 @@ gui/
 │   │   └── sdl_common.uya   # SDL2 公共代码
 │   ├── fb/                  # Framebuffer 后端
 │   │   ├── disp_fb.uya      # FB 显示
-│   │   ├── indev_fb.uya     # FB 输入 (evdev)
+│   │   ├── indev_fb.uya     # FB 输入（控制终端键盘，后续可扩 evdev）
 │   │   └── tick_linux.uya   # Linux 时钟
 │   └── raw/                 # 裸机接口 (嵌入式用)
 │       ├── disp_raw.uya

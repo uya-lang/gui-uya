@@ -1,0 +1,82 @@
+use core.event.Event;
+use platform.fb.indev_fb_common.FB_EVT_NONE;
+use platform.fb.indev_fb_common.FbHostEvent;
+use platform.fb.indev_fb_common.fb_feed_host_event;
+use platform.fb.indev_fb_common.fb_host_event_none;
+use platform.indev.IInputDev;
+use platform.indev.InputManager;
+use platform.indev.KeyDriver;
+use platform.indev.input_manager_new;
+use platform.indev.key_driver_new;
+
+extern fn uya_gui_sim_fb_input_open(path: &const byte) &void;
+extern fn uya_gui_sim_fb_input_close(handle: &void) void;
+extern fn uya_gui_sim_fb_input_poll_event(handle: &void, out_evt: &FbHostEvent) i32;
+extern fn uya_gui_sim_fb_input_last_error() &byte;
+
+export struct FbInputSystem {
+    manager: InputManager,
+    key: KeyDriver,
+    key_dev: IInputDev,
+    host: &void,
+
+    fn attach_default_devices(self: &Self) void {
+        var key_iface: IInputDev = self.key;
+        self.key_dev = key_iface;
+        self.manager = input_manager_new();
+        _ = self.manager.attach(&self.key_dev);
+    }
+
+    fn init(self: &Self, path: &const byte) bool {
+        self.attach_default_devices();
+        self.host = uya_gui_sim_fb_input_open(path);
+        return self.host != null;
+    }
+
+    fn shutdown(self: &Self) void {
+        if self.host != null {
+            uya_gui_sim_fb_input_close(self.host);
+            self.host = null;
+        }
+    }
+
+    fn consume_host_event(self: &Self, raw: &FbHostEvent, timestamp: u32) void {
+        fb_feed_host_event(&self.key, raw, timestamp);
+    }
+
+    fn pump(self: &Self, timestamp: u32) i32 {
+        if self.host == null {
+            return 0;
+        }
+
+        var pumped: i32 = 0;
+        var raw: FbHostEvent = fb_host_event_none();
+        while uya_gui_sim_fb_input_poll_event(self.host, &raw) != 0 {
+            pumped = pumped + 1;
+            self.consume_host_event(&raw, timestamp);
+            raw = fb_host_event_none();
+        }
+        return pumped;
+    }
+
+    fn poll(self: &Self, out_evt: &Event) bool {
+        return self.manager.poll(out_evt);
+    }
+}
+
+export fn fb_input_system_new() FbInputSystem {
+    return FbInputSystem{
+        manager: input_manager_new(),
+        key: key_driver_new(),
+        key_dev: key_driver_new(),
+        host: null,
+    };
+}
+
+export fn fb_input_last_error() &const byte {
+    const err: &byte = uya_gui_sim_fb_input_last_error();
+    if err == null {
+        return "unknown" as &const byte;
+    }
+    return err as &const byte;
+}

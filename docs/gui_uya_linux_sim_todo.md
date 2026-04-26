@@ -267,7 +267,9 @@
 ### TODO
 
 - [x] `gui/platform/fb/disp_fb.uya`
-- [ ] 评估是否真的需要 `indev_fb.uya`
+- [x] `gui/platform/fb/indev_fb.uya`
+  - [x] 先补控制终端键盘热键与方向键
+  - [ ] `evdev` 指针/触摸后续按需扩展
 - [x] 评估 headless + 截图回归是否比 raw framebuffer 更实用
 - [x] 若做 framebuffer 模式，补权限/设备节点说明
 - [x] 若做 headless 模式，优先支持离屏渲染 + 导出截图
@@ -281,6 +283,7 @@
 - [x] `make sim-fb-run`
   - [x] 通过 `--backend fb` 复用同一套 simulator app/runtime
   - [x] `disp_fb.uya` + `fb_host.c` 已可打开 `/dev/fb0`、查询分辨率并做 ARGB8888 -> 设备像素格式写回
+  - [x] `indev_fb.uya` + `fb_host.c` 已可从控制终端读取键盘热键与方向键
   - [x] 在当前机器上已验证“无权限访问 `/dev/fb0` 时返回清晰 `Permission denied`”
 
 ---
@@ -298,7 +301,7 @@ make sim-run SIM_ARGS="--max-frames 3 --screenshot build/sim/makerun.bmp"
 ## 当前遗留项
 
 - `make sim-build` 仍会打印较多由 Uya 生成 C 代码带来的 warning，但不阻塞链接与运行
-- `indev_fb` 仍未开始，当前 framebuffer 模式默认不带输入
+- Framebuffer 模式已支持控制终端键盘热键与方向键；`evdev` 指针/触摸输入仍待后续补齐
 - 默认内置字体已修复占位方框问题，已支持 `U+4E00..U+9FFF` 常用中文显示，并对彩色/灰度 framebuffer 启用轻量字形抗锯齿；完整 Unicode 字体排版链路仍待后续补齐
 
 ### 验收

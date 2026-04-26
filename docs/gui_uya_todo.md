@@ -429,7 +429,7 @@
     - [x] `framebuffer_get_pixel`
     - [x] `framebuffer_set_pixel`
     - [x] `framebuffer_clear`
-- [ ] 修复当前类型检查错误并接回稳定构建
+- [x] 修复当前类型检查错误并接回稳定构建
 
 #### Day 3-4: 渲染上下文
 - [x] `render/ctx.uya` - 渲染上下文
@@ -456,7 +456,7 @@
     - [x] `fn fill_arc(self, cx, cy, r, start, end, color) void`
   - [x] 调试辅助: `ctx_pixel()`
 - [x] 基础 render 测试草案 (`test_render_ctx.uya`)
-- [ ] 修复当前 render 测试中的 move 语义问题
+- [x] 修复当前 render 测试中的 move 语义问题
 
 #### Day 5: 像素格式优化
 - [x] 各像素格式特化读写路径
@@ -465,7 +465,7 @@
   - [x] I1 单色位图绘制
   - [x] I4 4bpp 索引色
 - [ ] 内联汇编优化 (关键路径)
-- [ ] 修复编译后补齐稳定单元测试
+- [x] 修复编译后补齐稳定单元测试
 
 ### Week 9: 高级绘制
 
@@ -491,7 +491,7 @@
   - [x] 引用计数管理
   - [x] 内存预算控制
 - [x] 资源路径测试草案 (`test_render_assets.uya`)
-- [ ] 修复 move 语义后纳入稳定回归
+- [x] 修复 move 语义后纳入稳定回归
 
 #### Day 3: 文本渲染
 - [x] `render/font.uya` - 字体引擎

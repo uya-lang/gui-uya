@@ -1,0 +1,27 @@
+use platform.indev.KeyDriver;
+
+export const FB_EVT_NONE: u8 = 0u8;
+export const FB_EVT_KEY_DOWN: u8 = 1u8;
+
+export struct FbHostEvent {
+    kind: u8,
+    key_code: u16,
+    reserved: u8,
+}
+
+export fn fb_host_event_none() FbHostEvent {
+    return FbHostEvent{
+        kind: FB_EVT_NONE,
+        key_code: 0u16,
+        reserved: 0u8,
+    };
+}
+
+export fn fb_feed_host_event(key: &KeyDriver, raw: &FbHostEvent, timestamp: u32) void {
+    if key == null || raw == null {
+        return;
+    }
+    if raw.kind == FB_EVT_KEY_DOWN {
+        key.feed(-1, timestamp, raw.key_code, true);
+    }
+}
