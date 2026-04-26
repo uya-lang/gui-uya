@@ -28,7 +28,8 @@
 - 2026-04-26 已完成 Phase 5 仓库内闭环: 优化 `core/{color,dirty_region}.uya`、`platform/disp.uya`、`render/{ctx,img,batch,gpu,zerocopy}.uya` 与 `res/cache.uya`，新增 `tests/test_phase5_runtime.uya`、旋转图像回归、CI benchmark、`build/phase5_bench.txt` 与 [gui_uya_phase5_report.md](./gui_uya_phase5_report.md)。
 - 2026-04-26 已完成 Phase 6 第一轮仓库内闭环: 新增 `phase6_smoke`、`tests/test_phase6_examples.uya`、`examples/demo_{clock,music,settings,dashboard,game,perf}.uya`，补齐快速入门/API 索引/主题/性能/移植/架构文档，并新增 [gui_uya_phase6_report.md](./gui_uya_phase6_report.md)。
 - 2026-04-26 已补文字渲染效果对比基线: 新增 `make text-compare`、`gui/text_render_compare.uya`、`examples/text_render_compare.uya` 与 [gui_uya_text_vs_lvgl.md](./gui_uya_text_vs_lvgl.md)，完成仓库内可复现样张；完整帧率/内存/体积对比仍待后续补齐。
-- 2026-04-26 已把默认 widget 文本接到可缩放字体链路: `render/font.uya` 新增 `TTC` 解析与系统 CJK `TTC` 懒加载缓存，`widget/base.uya` 现会按 `font_size` 优先解析系统 TTF/TTC；缺字仍保留内置 `5x7/8x8` 保底回退。
+- 2026-04-26 已补一条可运行的 LVGL 对照样张路径: 新增 `make lvgl-text-compare`，会用官方 LVGL + Tiny TTF 生成 `build/text_compare/lvgl_text_render_samples.bmp`，便于和当前 UyaGUI 样张直接比对。
+- 2026-04-26 已把默认 widget 文本接到 GUI 内部可缩放字体链路: `render/font.uya` 新增 GUI 层 DPI 逻辑字号换算、内嵌 `DejaVuSans` UI 字体兜底缓存、系统 CJK `TTC` 候选探测与 TTF 缺字回退；`widget/base.uya` 现会按 `font_size` 优先解析系统 UI/CJK TTF/TTC，不可用时再回退到内嵌 UI 字体，最后才落到内置 `5x7/8x8` 保底字形。
 - Phase 1 已落地模块仍完整可见: `style/*`、`theme`、`event_dispatch`、`platform/indev`、`layout/*`、`dirty_region`、`benchmarks/core_bench.uya`、`examples/phase1_smoke.uya`。
 - 以下 Phase 2 条目中的 `[x]` 表示“代码/接口已经写出或已有测试草案”，不代表当前工作区已经恢复绿色构建。
 - 仍未开始或明显不足: 完整图片解码链路、硬件 GPU / DMA 后端实装、与 LVGL 的对比基准、目标板/显示实机兼容验证、正式发布动作。
@@ -519,6 +520,8 @@
   - [x] SDL2 模拟器文本显示继续复用 Uya framebuffer，不依赖 `SDL_ttf`
   - [x] 复合字形（TrueType `glyf` composite）支持
   - [x] 轻量 hinting / grid fitting 开关
+  - [x] GUI 层 DPI 逻辑字号到像素高度映射
+  - [x] TTF 缺字时的系统 CJK 高质量 fallback
   - [x] 更高性能 glyph cache（固定槽位缓存与命中统计）
   - [ ] CFF/OTF（Type 2 / CID-keyed）进一步支持
 

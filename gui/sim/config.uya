@@ -15,6 +15,12 @@ fn sim_clamp_positive_i32(value: i32, fallback: i32) i32 {
 export enum SimDemoKind {
     Phase4,
     Phase6,
+    Clock,
+    Music,
+    Settings,
+    Dashboard,
+    Game,
+    Perf,
 }
 
 export enum SimBackendKind {
@@ -54,7 +60,53 @@ export fn sim_demo_name(kind: SimDemoKind) &const byte {
     if kind == SimDemoKind.Phase6 {
         return "阶段6" as &const byte;
     }
+    if kind == SimDemoKind.Clock {
+        return "时钟" as &const byte;
+    }
+    if kind == SimDemoKind.Music {
+        return "音乐" as &const byte;
+    }
+    if kind == SimDemoKind.Settings {
+        return "设置" as &const byte;
+    }
+    if kind == SimDemoKind.Dashboard {
+        return "看板" as &const byte;
+    }
+    if kind == SimDemoKind.Game {
+        return "游戏" as &const byte;
+    }
+    if kind == SimDemoKind.Perf {
+        return "性能" as &const byte;
+    }
     return "阶段4" as &const byte;
+}
+
+export fn sim_demo_default_width(kind: SimDemoKind) u16 {
+    if kind == SimDemoKind.Clock
+        || kind == SimDemoKind.Music
+        || kind == SimDemoKind.Settings
+        || kind == SimDemoKind.Dashboard
+        || kind == SimDemoKind.Game
+        || kind == SimDemoKind.Perf {
+        return 640;
+    }
+    return 320;
+}
+
+export fn sim_demo_default_height(kind: SimDemoKind) u16 {
+    if kind == SimDemoKind.Clock
+        || kind == SimDemoKind.Music
+        || kind == SimDemoKind.Settings
+        || kind == SimDemoKind.Dashboard
+        || kind == SimDemoKind.Game
+        || kind == SimDemoKind.Perf {
+        return 480;
+    }
+    return 240;
+}
+
+export fn sim_demo_is_phase(kind: SimDemoKind) bool {
+    return kind == SimDemoKind.Phase4 || kind == SimDemoKind.Phase6;
 }
 
 export fn sim_backend_name(kind: SimBackendKind) &const byte {
@@ -79,8 +131,8 @@ export fn sim_config_default() SimConfig {
         backend: SimBackendKind.Sdl2,
         gpu: SimGpuKind.Auto,
         demo: SimDemoKind.Phase4,
-        width: 320,
-        height: 240,
+        width: 640,
+        height: 480,
         scale: 3,
         fullscreen: false,
         hud_enabled: true,
@@ -128,6 +180,18 @@ export fn sim_config_from_runtime() SimConfig {
             if sim_cstr_eq(arg as &const byte, "--demo") && next != null {
                 if sim_cstr_eq(next as &const byte, "phase6") {
                     cfg.demo = SimDemoKind.Phase6;
+                } else if sim_cstr_eq(next as &const byte, "clock") {
+                    cfg.demo = SimDemoKind.Clock;
+                } else if sim_cstr_eq(next as &const byte, "music") {
+                    cfg.demo = SimDemoKind.Music;
+                } else if sim_cstr_eq(next as &const byte, "settings") {
+                    cfg.demo = SimDemoKind.Settings;
+                } else if sim_cstr_eq(next as &const byte, "dashboard") {
+                    cfg.demo = SimDemoKind.Dashboard;
+                } else if sim_cstr_eq(next as &const byte, "game") {
+                    cfg.demo = SimDemoKind.Game;
+                } else if sim_cstr_eq(next as &const byte, "perf") {
+                    cfg.demo = SimDemoKind.Perf;
                 } else {
                     cfg.demo = SimDemoKind.Phase4;
                 }

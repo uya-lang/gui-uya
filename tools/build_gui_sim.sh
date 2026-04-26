@@ -11,6 +11,7 @@ OUT_BIN="$BUILD_DIR/gui_uya_sim"
 OUT_GEN_O="$BUILD_DIR/gui_uya_sim.generated.o"
 OUT_SDL_O="$BUILD_DIR/gui_uya_sim.sdl_host.o"
 OUT_FB_O="$BUILD_DIR/gui_uya_sim.fb_host.o"
+OUT_CIMPORT_SIDECAR="${OUT_C}imports.sh"
 MODE="${MODE:-debug}"
 
 mkdir -p "$BUILD_DIR"
@@ -61,13 +62,52 @@ FB_HOST_C="$ROOT_DIR/gui/platform/fb/fb_host.c"
     -c "$FB_HOST_C" \
     -o "$OUT_FB_O"
 
+declare -a CIMPORT_OBJECTS=()
+declare -a CIMPORT_LDFLAGS=()
+
+if [ -f "$OUT_CIMPORT_SIDECAR" ]; then
+    # shellcheck disable=SC1090
+    . "$OUT_CIMPORT_SIDECAR"
+
+    ci=0
+    while [ "$ci" -lt "${UYA_CIMPORT_COUNT:-0}" ]; do
+        src_var="UYA_CIMPORT_SRC_${ci}"
+        cflagc_var="UYA_CIMPORT_CFLAGC_${ci}"
+        src_path="${!src_var}"
+        cflagc="${!cflagc_var:-0}"
+        obj_path="$BUILD_DIR/gui_uya_sim.cimport.${ci}.o"
+
+        compile_cmd=("$CC_BIN" -std=c99 -g "$CC_OPT" -fno-builtin -fvisibility=hidden)
+        cj=0
+        while [ "$cj" -lt "$cflagc" ]; do
+            cflag_var="UYA_CIMPORT_CFLAG_${ci}_${cj}"
+            compile_cmd+=("${!cflag_var}")
+            cj=$((cj + 1))
+        done
+        compile_cmd+=(-c "$src_path" -o "$obj_path")
+        "${compile_cmd[@]}"
+        CIMPORT_OBJECTS+=("$obj_path")
+        ci=$((ci + 1))
+    done
+
+    ldflagc="${UYA_CIMPORT_LDFLAGC:-0}"
+    li=0
+    while [ "$li" -lt "$ldflagc" ]; do
+        ldflag_var="UYA_CIMPORT_LDFLAG_${li}"
+        CIMPORT_LDFLAGS+=("${!ldflag_var}")
+        li=$((li + 1))
+    done
+fi
+
 "$CC_BIN" -g "$CC_OPT" \
     "$OUT_GEN_O" \
     "$OUT_SDL_O" \
     "$OUT_FB_O" \
+    "${CIMPORT_OBJECTS[@]}" \
     -o "$OUT_BIN" \
     "${SDL_LIBS[@]}" \
     -ldl \
-    -lm
+    -lm \
+    "${CIMPORT_LDFLAGS[@]}"
 
 echo "$OUT_BIN"

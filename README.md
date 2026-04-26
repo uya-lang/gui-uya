@@ -95,14 +95,16 @@ make sim-fb-run
 
 ```bash
 make sim-run SIM_ARGS="--demo phase6 --max-frames 120"
+make sim-run SIM_ARGS="--demo dashboard --scale 1"
+make sim-run SIM_ARGS="--demo music --scale 1"
 make sim-run SIM_ARGS="--max-frames 3 --screenshot build/sim/manual.bmp"
 make sim-headless SIM_HEADLESS_ARGS="--max-frames 5 --screenshot build/sim/headless.bmp"
 ```
 
 可用运行参数：
 
-- `--demo phase4|phase6`
-- `--width N --height N --scale N`
+- `--demo phase4|phase6|clock|music|settings|dashboard|game|perf`
+- `--width N --height N --scale N`（默认 `640x480`，`scale=3`）
 - `--fullscreen | --windowed`
 - `--root PATH`
 - `--title TEXT`
@@ -121,6 +123,7 @@ make sim-headless SIM_HEADLESS_ARGS="--max-frames 5 --screenshot build/sim/headl
 - `L`：回放录制
 - `F11`：切换全屏
 - `1` / `6`：切换 `phase4` / `phase6` 场景
+- `C` / `M` / `S` / `D` / `G` / `B`：切换 `clock` / `music` / `settings` / `dashboard` / `game` / `perf`
 
 当前内置字体说明：
 

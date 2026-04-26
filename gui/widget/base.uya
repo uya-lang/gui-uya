@@ -15,6 +15,8 @@ use render.font.Font;
 use render.font.FontBitmapFormat;
 use render.font.FontRenderKind;
 use render.font.font_default;
+use render.font.font_ui_default_ref;
+use render.font.font_ui_pixel_height;
 use render.font.font_system_ui_ref;
 use render.font.text_width;
 use style.DEFAULT_STYLE;
@@ -364,9 +366,14 @@ export fn widget_font(style: &Style) &Font {
     const font_ptr: &void = style.get_ptr_or(StyleProp.Font, null);
     if font_ptr == null {
         const font_size: u8 = (style.get_u32_or(StyleProp.FontSize, 14u32) as! u8).value;
-        const resolved: &Font = font_system_ui_ref(font_size);
+        const resolved_height: u8 = font_ui_pixel_height(font_size);
+        const resolved: &Font = font_system_ui_ref(resolved_height);
         if resolved != null {
             return resolved;
+        }
+        const ui_fallback: &Font = font_ui_default_ref(resolved_height);
+        if ui_fallback != null {
+            return ui_fallback;
         }
         return widget_default_font_ref();
     }

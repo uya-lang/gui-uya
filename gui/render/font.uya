@@ -11,20 +11,38 @@ use libc.sys_open;
 use platform.disp.PixelFormat;
 use render.ctx.RenderCtx;
 
+extern fn malloc(size: usize) &void;
+extern fn free(ptr: &void) void;
+
 const CJK_GLYPH_8X8_BYTES: &[const byte] = @embed("cjk_unifont_4e00_9fff_8x8.bin");
+const DEFAULT_UI_FONT_BYTES: &[const byte] = @embed("DejaVuSans.ttf");
 const CJK_UNIFIED_START: u32 = 0x4E00u32;
 const CJK_UNIFIED_END: u32 = 0x9FFFu32;
-const SYSTEM_UI_FONT_PRIMARY_PATH: &const byte = "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc\0";
+const SYSTEM_UI_FONT_PRIMARY_PATH: &const byte = "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc\0";
+const SYSTEM_UI_FONT_SECONDARY_PATH: &const byte = "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc\0";
 const SYSTEM_UI_FONT_FALLBACK_PATH: &const byte = "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc\0";
 const GLYPH_EDGE_AA_ORTHO_ALPHA: i32 = 30;
 const GLYPH_EDGE_AA_DIAG_ALPHA: i32 = 12;
 const GLYPH_EDGE_AA_MAX_ALPHA: i32 = 96;
+const TTF_SMALL_DARKEN_HEIGHT_MAX: u16 = 14u16;
+const TTF_SMALL_DARKEN_COVERAGE_MIN: i32 = 12;
+const TTF_SMALL_DARKEN_HINT_LOW_MAX: i32 = 64;
+const TTF_SMALL_DARKEN_HINT_LOW_BOOST: i32 = 64;
+const TTF_SMALL_DARKEN_HINT_MID_MAX: i32 = 96;
+const TTF_SMALL_DARKEN_HINT_MID_BOOST: i32 = 16;
+const TTF_SMALL_DARKEN_PLAIN_LOW_MAX: i32 = 64;
+const TTF_SMALL_DARKEN_PLAIN_LOW_BOOST: i32 = 40;
+const TTF_SMALL_DARKEN_PLAIN_MID_MAX: i32 = 96;
+const TTF_SMALL_DARKEN_PLAIN_MID_BOOST: i32 = 12;
+const TTF_NATIVE_PLAIN_SHIFT_X: f64 = 0.35;
+const TTF_NATIVE_PLAIN_SHIFT_Y: f64 = 0.15;
 const BUILTIN_FONT_ASCII_CAPACITY: i32 = 128;
 const BUILTIN_FONT_KERNING_CAPACITY: i32 = 8;
 const BUILTIN_FONT_PRINTABLE_COUNT: u16 = 95u16;
 const FONT_LOOKUP_MISSING: i16 = -1;
 const TTF_GLYPH_FALLBACK_ID: u32 = 0xFFFFFFFFu32;
 const TTF_SFNT_OFFSET_INVALID: u32 = 0xFFFFFFFFu32;
+export const UI_FONT_BASE_DPI: u16 = 96u16;
 export const BITMAP_FONT_GLYPH_CAPACITY: i32 = 128;
 export const BITMAP_FONT_UNICODE_CAPACITY: i32 = 64;
 export const BITMAP_FONT_KERNING_CAPACITY: i32 = 64;
@@ -70,6 +88,11 @@ export struct Glyph {
     offset_x: i8,
     offset_y: i8,
     bitmap_offset: u32,
+}
+
+struct ResolvedGlyph {
+    font: &Font,
+    glyph: Glyph,
 }
 
 export struct GlyphLookupEntry {
@@ -183,6 +206,7 @@ export struct TtfFontAsset {
     pixel_height: u16,
     scale: f64,
     hint_enabled: bool,
+    native_backend: &void,
 }
 
 struct SystemUiFontSlot {
@@ -213,7 +237,10 @@ var _system_ui_font_data: &const byte = null;
 var _system_ui_font_len: usize = 0usize;
 var _system_ui_font_ready: bool = false;
 var _system_ui_font_attempted: bool = false;
+var _ui_default_font_slots: [SystemUiFontSlot: 16] = [];
+var _ui_default_font_slots_ready: bool = false;
 var _system_ui_font_slots: [SystemUiFontSlot: 16] = [];
+var _font_ui_dpi: u16 = UI_FONT_BASE_DPI;
 
 fn glyph_pack7(r0: u8, r1: u8, r2: u8, r3: u8, r4: u8, r5: u8, r6: u8) u64 {
     return (r0 as u64)
@@ -1155,6 +1182,11 @@ fn ttf_build_edges_recursive(asset: &TtfFontAsset, glyph_id: u16, x_min_px: i32,
 }
 
 fn ttf_build_edges(asset: &TtfFontAsset, glyph_id: u16, edge_count: &i32) bool {
+    const identity: TtfTransform = ttf_identity_transform();
+    return ttf_build_edges_with_transform(asset, glyph_id, &identity, edge_count);
+}
+
+fn ttf_build_edges_with_transform(asset: &TtfFontAsset, glyph_id: u16, transform: &TtfTransform, edge_count: &i32) bool {
     edge_count[0] = 0;
     var x_min_px: i32 = 0;
     var y_min_px: i32 = 0;
@@ -1163,10 +1195,9 @@ fn ttf_build_edges(asset: &TtfFontAsset, glyph_id: u16, edge_count: &i32) bool {
     if !ttf_glyph_bounds_pixels(asset, glyph_id, &x_min_px, &y_min_px, &x_max_px, &y_max_px) {
         return false;
     }
-    const identity: TtfTransform = ttf_identity_transform();
     _ = x_max_px;
     _ = y_min_px;
-    return ttf_build_edges_recursive(asset, glyph_id, x_min_px, y_max_px, &identity, 0, edge_count);
+    return ttf_build_edges_recursive(asset, glyph_id, x_min_px, y_max_px, transform, 0, edge_count);
 }
 
 fn ttf_edges_contain_point(edge_count: i32, x: f64, y: f64) bool {
@@ -1202,13 +1233,46 @@ fn ttf_rasterize_glyph_coverage(edge_count: i32, glyph: &Glyph, dst: &byte, dst_
     }
 }
 
-fn ttf_draw_coverage_bitmap(ctx: &RenderCtx, x: i16, y: i16, glyph: &Glyph, color: &Color, coverage: &const byte, stride: usize) void {
+fn ttf_optimize_small_coverage(asset: &TtfFontAsset, coverage: u8) u8 {
+    if asset == null || coverage == 0u8 || coverage == 255u8 {
+        return coverage;
+    }
+    if asset.pixel_height == 0u16 || asset.pixel_height > TTF_SMALL_DARKEN_HEIGHT_MAX {
+        return coverage;
+    }
+
+    var value: i32 = coverage as i32;
+    if value < TTF_SMALL_DARKEN_COVERAGE_MIN {
+        return 0u8;
+    }
+
+    if asset.hint_enabled {
+        if value < TTF_SMALL_DARKEN_HINT_LOW_MAX {
+            value = value + TTF_SMALL_DARKEN_HINT_LOW_BOOST;
+        } else if value < TTF_SMALL_DARKEN_HINT_MID_MAX {
+            value = value + TTF_SMALL_DARKEN_HINT_MID_BOOST;
+        }
+    } else {
+        if value < TTF_SMALL_DARKEN_PLAIN_LOW_MAX {
+            value = value + TTF_SMALL_DARKEN_PLAIN_LOW_BOOST;
+        } else if value < TTF_SMALL_DARKEN_PLAIN_MID_MAX {
+            value = value + TTF_SMALL_DARKEN_PLAIN_MID_BOOST;
+        }
+    }
+
+    if value > 255 {
+        value = 255;
+    }
+    return (value as! u8).value;
+}
+
+fn ttf_draw_coverage_bitmap(ctx: &RenderCtx, x: i16, y: i16, glyph: &Glyph, color: &Color, coverage: &const byte, stride: usize, asset: &TtfFontAsset) void {
     const antialias: bool = glyph_antialias_enabled(ctx);
     var row: i32 = 0;
     while row < glyph.height as i32 {
         var col: i32 = 0;
         while col < glyph.width as i32 {
-            const alpha: u8 = coverage[row as usize * stride + col as usize] as u8;
+            const alpha: u8 = ttf_optimize_small_coverage(asset, coverage[row as usize * stride + col as usize] as u8);
             if alpha == 255u8 || (!antialias && alpha >= 128u8) {
                 ctx.draw_pixel(x + col as i16, y + row as i16, color[0]);
             } else if antialias && alpha != 0u8 {
@@ -1218,6 +1282,22 @@ fn ttf_draw_coverage_bitmap(ctx: &RenderCtx, x: i16, y: i16, glyph: &Glyph, colo
         }
         row = row + 1;
     }
+}
+
+fn ttf_render_native_bitmap(asset: &TtfFontAsset, glyph: &Glyph, dst: &byte, stride: usize) bool {
+    const native: &void = ttf_native_backend(asset);
+    if native == null || glyph.bitmap_offset == TTF_GLYPH_FALLBACK_ID {
+        return false;
+    }
+    return uya_stb_font_render_glyph(
+        native,
+        (glyph.bitmap_offset as! u16).value,
+        dst,
+        stride,
+        glyph.width as i32,
+        glyph.height as i32,
+        asset.hint_enabled as i32
+    ) != 0;
 }
 
 fn draw_ttf_glyph(ctx: &RenderCtx, x: i16, y: i16, font: &Font, glyph: &Glyph, color: &Color) bool {
@@ -1232,11 +1312,39 @@ fn draw_ttf_glyph(ctx: &RenderCtx, x: i16, y: i16, font: &Font, glyph: &Glyph, c
         return true;
     }
 
+    const native: &void = ttf_native_backend(asset);
+    if native != null {
+        const cache_idx_native: i32 = ttf_cache_lookup(asset, glyph);
+        if cache_idx_native >= 0 {
+            const cache_offset_native: usize = ttf_cache_slot_offset(cache_idx_native);
+            if cache_offset_native < TTF_CACHE_STORAGE_BYTES as usize {
+                ttf_draw_coverage_bitmap(ctx, x, y, glyph, color, &(_ttf_cache_storage[cache_offset_native]), TTF_CACHE_SLOT_DIM as usize, asset);
+                return true;
+            }
+        }
+
+        const reserve_idx_native: i32 = ttf_cache_reserve(asset, glyph);
+        if reserve_idx_native >= 0 {
+            const cache_offset_native: usize = ttf_cache_slot_offset(reserve_idx_native);
+            if cache_offset_native < TTF_CACHE_STORAGE_BYTES as usize
+                && ttf_render_native_bitmap(asset, glyph, &(_ttf_cache_storage[cache_offset_native]), TTF_CACHE_SLOT_DIM as usize) {
+                ttf_draw_coverage_bitmap(ctx, x, y, glyph, color, &(_ttf_cache_storage[cache_offset_native]), TTF_CACHE_SLOT_DIM as usize, asset);
+                return true;
+            }
+        }
+
+        var native_scratch: [byte: 4096] = [];
+        if ttf_render_native_bitmap(asset, glyph, &native_scratch[0], glyph.width as usize) {
+            ttf_draw_coverage_bitmap(ctx, x, y, glyph, color, &native_scratch[0], glyph.width as usize, asset);
+            return true;
+        }
+    }
+
     const cache_idx: i32 = ttf_cache_lookup(asset, glyph);
     if cache_idx >= 0 {
         const cache_offset: usize = ttf_cache_slot_offset(cache_idx);
         if cache_offset < TTF_CACHE_STORAGE_BYTES as usize {
-            ttf_draw_coverage_bitmap(ctx, x, y, glyph, color, &(_ttf_cache_storage[cache_offset]), TTF_CACHE_SLOT_DIM as usize);
+            ttf_draw_coverage_bitmap(ctx, x, y, glyph, color, &(_ttf_cache_storage[cache_offset]), TTF_CACHE_SLOT_DIM as usize, asset);
             return true;
         }
     }
@@ -1254,14 +1362,14 @@ fn draw_ttf_glyph(ctx: &RenderCtx, x: i16, y: i16, font: &Font, glyph: &Glyph, c
         const cache_offset: usize = ttf_cache_slot_offset(reserve_idx);
         if cache_offset < TTF_CACHE_STORAGE_BYTES as usize {
             ttf_rasterize_glyph_coverage(edge_count, glyph, &(_ttf_cache_storage[cache_offset]), TTF_CACHE_SLOT_DIM as usize);
-            ttf_draw_coverage_bitmap(ctx, x, y, glyph, color, &(_ttf_cache_storage[cache_offset]), TTF_CACHE_SLOT_DIM as usize);
+            ttf_draw_coverage_bitmap(ctx, x, y, glyph, color, &(_ttf_cache_storage[cache_offset]), TTF_CACHE_SLOT_DIM as usize, asset);
             return true;
         }
     }
 
     var scratch: [byte: 4096] = [];
     ttf_rasterize_glyph_coverage(edge_count, glyph, &scratch[0], glyph.width as usize);
-    ttf_draw_coverage_bitmap(ctx, x, y, glyph, color, &scratch[0], glyph.width as usize);
+    ttf_draw_coverage_bitmap(ctx, x, y, glyph, color, &scratch[0], glyph.width as usize, asset);
     return true;
 }
 
@@ -1412,15 +1520,20 @@ Font {
         var total: i32 = 0;
         var i: usize = 0usize;
         var prev_codepoint: u32 = 0u32;
+        var prev_font: &Font = null;
+        var last_font: &Font = null;
         var last_is_cjk: bool = false;
         while i < len {
             const decoded: DecodedCodePoint = decode_codepoint(text, len, i);
-            const glyph: Glyph = self.get_glyph(decoded.codepoint);
-            if prev_codepoint != 0u32 {
-                total = total + self.kerning_adjust(prev_codepoint, glyph.codepoint);
+            const resolved: ResolvedGlyph = resolve_glyph_for_font(self, decoded.codepoint);
+            const glyph: Glyph = resolved.glyph;
+            if prev_codepoint != 0u32 && prev_font == resolved.font {
+                total = total + resolved.font.kerning_adjust(prev_codepoint, glyph.codepoint);
             }
             total = total + glyph.advance as i32;
             prev_codepoint = glyph.codepoint;
+            prev_font = resolved.font;
+            last_font = resolved.font;
             last_is_cjk = glyph_is_cjk(glyph.codepoint);
             if decoded.span <= 1usize || i + decoded.span > len {
                 i = i + 1usize;
@@ -1429,10 +1542,11 @@ Font {
             }
         }
         if total > 0
-            && self.render_kind != FontRenderKind.BitmapAtlas
-            && self.render_kind != FontRenderKind.TrueTypeOutline
+            && last_font != null
+            && last_font.render_kind != FontRenderKind.BitmapAtlas
+            && last_font.render_kind != FontRenderKind.TrueTypeOutline
             && !last_is_cjk {
-            total = total - self.tracking as i32;
+            total = total - last_font.tracking as i32;
         }
         return total as i16;
     }
@@ -1459,6 +1573,33 @@ fn font_empty() Font {
         builtin_cjk: false,
         backend: null,
     };
+}
+
+fn font_runtime_height(font: &Font) u8 {
+    if font == null {
+        return 14u8;
+    }
+    if font.height > 0u8 {
+        return font.height;
+    }
+    if font.glyph_height > 0u8 {
+        return font.glyph_height;
+    }
+    return 14u8;
+}
+
+fn font_resolve_ui_height(logical_height: u16) u16 {
+    if logical_height == 0u16 {
+        return 0u16;
+    }
+    const scaled: u32 = ((logical_height as u32) * (_font_ui_dpi as u32) + (UI_FONT_BASE_DPI as u32 / 2u32)) / UI_FONT_BASE_DPI as u32;
+    if scaled == 0u32 {
+        return 1u16;
+    }
+    if scaled > 255u32 {
+        return 255u16;
+    }
+    return (scaled as! u16).value;
 }
 
 fn ttf_identity_transform() TtfTransform {
@@ -1735,7 +1876,28 @@ fn ttf_backend(font: &Font) &TtfFontAsset {
     return font.backend as &TtfFontAsset;
 }
 
+fn ttf_native_backend(asset: &TtfFontAsset) &void {
+    if asset == null {
+        return null;
+    }
+    return asset.native_backend;
+}
+
+fn uya_stb_backend(handle: &void) &TtfFontAsset {
+    if handle == null {
+        return null;
+    }
+    return handle as &TtfFontAsset;
+}
+
 fn ttf_font_asset_reset(asset: &TtfFontAsset) void {
+    if asset == null {
+        return;
+    }
+    if asset.native_backend != null {
+        uya_stb_font_destroy(asset.native_backend);
+        asset.native_backend = null;
+    }
     asset.font = font_empty();
     asset.data = null;
     asset.len = 0usize;
@@ -1761,6 +1923,7 @@ fn ttf_font_asset_reset(asset: &TtfFontAsset) void {
     asset.pixel_height = 0u16;
     asset.scale = 0.0;
     asset.hint_enabled = true;
+    asset.native_backend = null;
 }
 
 export fn ttf_font_asset_new() TtfFontAsset {
@@ -1790,9 +1953,194 @@ export fn ttf_font_asset_new() TtfFontAsset {
         pixel_height: 0u16,
         scale: 0.0,
         hint_enabled: true,
+        native_backend: null,
     };
     ttf_font_asset_reset(&asset);
     return asset;
+}
+
+fn ttf_native_plain_transform(asset: &TtfFontAsset) TtfTransform {
+    var transform: TtfTransform = ttf_identity_transform();
+    if asset == null || asset.scale <= 0.0 {
+        return transform;
+    }
+    transform.dx = TTF_NATIVE_PLAIN_SHIFT_X / asset.scale;
+    transform.dy = 0.0 - (TTF_NATIVE_PLAIN_SHIFT_Y / asset.scale);
+    return transform;
+}
+
+fn ttf_scale_for_mapping_em(asset: &TtfFontAsset, pixel_height: u16) f64 {
+    if asset == null || asset.units_per_em == 0u16 || pixel_height == 0u16 {
+        return 0.0;
+    }
+    return pixel_height as f64 / asset.units_per_em as f64;
+}
+
+fn uya_stb_font_create(data: &const byte, data_len: usize, sfnt_offset: u32, pixel_height: u16) &void {
+    if data == null || data_len < 12usize || pixel_height == 0u16 {
+        return null;
+    }
+    if sfnt_offset == TTF_SFNT_OFFSET_INVALID || sfnt_offset as usize >= data_len {
+        return null;
+    }
+
+    const raw: &void = malloc(@size_of(TtfFontAsset) as usize);
+    if raw == null {
+        return null;
+    }
+
+    const backend: &TtfFontAsset = raw as &TtfFontAsset;
+    backend[0] = ttf_font_asset_new();
+    if !ttf_font_init_with_sfnt_offset(backend, "", data, data_len, sfnt_offset, pixel_height) {
+        free(raw);
+        return null;
+    }
+    backend.scale = ttf_scale_for_mapping_em(backend, pixel_height);
+    if backend.scale <= 0.0 {
+        free(raw);
+        return null;
+    }
+    return raw;
+}
+
+fn uya_stb_font_destroy(handle: &void) void {
+    if handle != null {
+        free(handle);
+    }
+}
+
+fn uya_stb_font_find_glyph_index(handle: &void, codepoint: u32) i32 {
+    const backend: &TtfFontAsset = uya_stb_backend(handle);
+    if backend == null {
+        return 0;
+    }
+    return ttf_map_codepoint(backend, codepoint) as i32;
+}
+
+fn uya_stb_font_get_glyph_metrics(handle: &void, codepoint: u32, glyph_id_out: &u16, advance_px_out: &i32,
+                                  x1_out: &i32, y1_out: &i32, x2_out: &i32, y2_out: &i32) i32 {
+    const backend: &TtfFontAsset = uya_stb_backend(handle);
+    if backend == null {
+        return 0;
+    }
+
+    const glyph_id: u16 = ttf_map_codepoint(backend, codepoint);
+    if glyph_id == 0u16 || glyph_id >= backend.num_glyphs {
+        return 0;
+    }
+
+    var x_min_px: i32 = 0;
+    var y_min_px: i32 = 0;
+    var x_max_px: i32 = 0;
+    var y_max_px: i32 = 0;
+    if !ttf_glyph_bounds_pixels(backend, glyph_id, &x_min_px, &y_min_px, &x_max_px, &y_max_px) {
+        return 0;
+    }
+
+    if glyph_id_out != null {
+        glyph_id_out[0] = glyph_id;
+    }
+    if advance_px_out != null {
+        advance_px_out[0] = ttf_round_i32(ttf_glyph_advance_units(backend, glyph_id) as f64 * backend.scale);
+    }
+    if x1_out != null {
+        x1_out[0] = x_min_px;
+    }
+    if y1_out != null {
+        y1_out[0] = 0 - y_max_px;
+    }
+    if x2_out != null {
+        x2_out[0] = x_max_px;
+    }
+    if y2_out != null {
+        y2_out[0] = 0 - y_min_px;
+    }
+    return 1;
+}
+
+fn uya_stb_font_get_kerning_adjust(handle: &void, left_codepoint: u32, right_codepoint: u32) i32 {
+    const backend: &TtfFontAsset = uya_stb_backend(handle);
+    if backend == null {
+        return 0;
+    }
+    if backend.kern_pair_count == 0u16 {
+        return 0;
+    }
+
+    const left_glyph: u16 = ttf_map_codepoint(backend, left_codepoint);
+    const right_glyph: u16 = ttf_map_codepoint(backend, right_codepoint);
+    if left_glyph == 0u16 || right_glyph == 0u16 {
+        return 0;
+    }
+
+    var i: i32 = 0;
+    while i < backend.kern_pair_count as i32 {
+        const pair_offset: usize = backend.kern_pair_offset as usize + (i as usize) * 6usize;
+        const pair_left: u16 = ttf_read_u16(backend.data, backend.len, pair_offset);
+        const pair_right: u16 = ttf_read_u16(backend.data, backend.len, pair_offset + 2usize);
+        if pair_left == left_glyph && pair_right == right_glyph {
+            const value_units: i16 = ttf_read_i16(backend.data, backend.len, pair_offset + 4usize);
+            return ttf_round_i32(value_units as f64 * backend.scale);
+        }
+        i = i + 1;
+    }
+    return 0;
+}
+
+fn uya_stb_font_render_glyph(handle: &void, glyph_id: u16, dst: &byte, dst_stride: usize,
+                             width: i32, height: i32, hint_enabled: i32) i32 {
+    const backend: &TtfFontAsset = uya_stb_backend(handle);
+    if backend == null || dst == null || dst_stride == 0usize {
+        return 0;
+    }
+    if width <= 0 || height <= 0 {
+        return 1;
+    }
+
+    var row: i32 = 0;
+    while row < height {
+        var col: i32 = 0;
+        while col < width {
+            dst[row as usize * dst_stride + col as usize] = 0u8;
+            col = col + 1;
+        }
+        row = row + 1;
+    }
+
+    if glyph_id == 0u16 || glyph_id >= backend.num_glyphs {
+        return 1;
+    }
+
+    const prev_hint_enabled: bool = backend.hint_enabled;
+    backend.hint_enabled = hint_enabled != 0;
+
+    var edge_count: i32 = 0;
+    var built: bool = false;
+    if backend.hint_enabled {
+        built = ttf_build_edges(backend, glyph_id, &edge_count);
+    } else {
+        const transform: TtfTransform = ttf_native_plain_transform(backend);
+        built = ttf_build_edges_with_transform(backend, glyph_id, &transform, &edge_count);
+    }
+    backend.hint_enabled = prev_hint_enabled;
+    if !built {
+        return 0;
+    }
+    if edge_count == 0 {
+        return 1;
+    }
+
+    const glyph: Glyph = Glyph{
+        codepoint: 0u32,
+        width: (ttf_clamp_i32(width, 0, 255) as! u8).value,
+        height: (ttf_clamp_i32(height, 0, 255) as! u8).value,
+        advance: 0u8,
+        offset_x: 0,
+        offset_y: 0,
+        bitmap_offset: glyph_id as u32,
+    };
+    ttf_rasterize_glyph_coverage(edge_count, &glyph, dst, dst_stride);
+    return 1;
 }
 
 fn ttf_select_sfnt_offset(data: &const byte, len: usize) u32 {
@@ -1880,6 +2228,7 @@ fn system_ui_font_source_init() bool {
     var mapped: &const byte = null;
     var mapped_len: usize = 0usize;
     if !system_ui_font_map_file(SYSTEM_UI_FONT_PRIMARY_PATH, &mapped, &mapped_len)
+        && !system_ui_font_map_file(SYSTEM_UI_FONT_SECONDARY_PATH, &mapped, &mapped_len)
         && !system_ui_font_map_file(SYSTEM_UI_FONT_FALLBACK_PATH, &mapped, &mapped_len) {
         return false;
     }
@@ -1888,6 +2237,22 @@ fn system_ui_font_source_init() bool {
     _system_ui_font_len = mapped_len;
     _system_ui_font_ready = true;
     return true;
+}
+
+fn ui_default_font_slots_reset() void {
+    var i: i32 = 0;
+    while i < SYSTEM_UI_FONT_SLOT_CAPACITY {
+        system_ui_font_slot_reset(&_ui_default_font_slots[i as usize]);
+        i = i + 1;
+    }
+}
+
+fn ui_default_font_slots_init() void {
+    if _ui_default_font_slots_ready {
+        return;
+    }
+    ui_default_font_slots_reset();
+    _ui_default_font_slots_ready = true;
 }
 
 fn ttf_select_cmap(asset: &TtfFontAsset) void {
@@ -1940,6 +2305,82 @@ fn ttf_select_kern(asset: &TtfFontAsset) void {
         cursor = cursor + length as usize;
         i = i + 1;
     }
+}
+
+fn ttf_font_init_with_sfnt_offset(asset: &TtfFontAsset, name: &const byte, data: &const byte, len: usize,
+                                  sfnt_offset: u32, pixel_height: u16) bool {
+    if asset == null || data == null || len < 12usize || pixel_height == 0u16 {
+        return false;
+    }
+    if sfnt_offset == TTF_SFNT_OFFSET_INVALID || sfnt_offset as usize + 12usize > len {
+        return false;
+    }
+
+    asset.data = data;
+    asset.len = len;
+    asset.pixel_height = pixel_height;
+    asset.sfnt_offset = sfnt_offset;
+
+    var table_len: u32 = 0u32;
+    asset.cmap_offset = ttf_find_table_offset(data, len, asset.sfnt_offset, ttf_tag('c' as u8, 'm' as u8, 'a' as u8, 'p' as u8), &table_len);
+    asset.head_offset = ttf_find_table_offset(data, len, asset.sfnt_offset, ttf_tag('h' as u8, 'e' as u8, 'a' as u8, 'd' as u8), &table_len);
+    asset.hhea_offset = ttf_find_table_offset(data, len, asset.sfnt_offset, ttf_tag('h' as u8, 'h' as u8, 'e' as u8, 'a' as u8), &table_len);
+    asset.hmtx_offset = ttf_find_table_offset(data, len, asset.sfnt_offset, ttf_tag('h' as u8, 'm' as u8, 't' as u8, 'x' as u8), &table_len);
+    var maxp_offset: u32 = ttf_find_table_offset(data, len, asset.sfnt_offset, ttf_tag('m' as u8, 'a' as u8, 'x' as u8, 'p' as u8), &table_len);
+    asset.loca_offset = ttf_find_table_offset(data, len, asset.sfnt_offset, ttf_tag('l' as u8, 'o' as u8, 'c' as u8, 'a' as u8), &table_len);
+    asset.glyf_offset = ttf_find_table_offset(data, len, asset.sfnt_offset, ttf_tag('g' as u8, 'l' as u8, 'y' as u8, 'f' as u8), &table_len);
+    asset.kern_offset = ttf_find_table_offset(data, len, asset.sfnt_offset, ttf_tag('k' as u8, 'e' as u8, 'r' as u8, 'n' as u8), &table_len);
+    if asset.cmap_offset == 0u32 || asset.head_offset == 0u32 || asset.hhea_offset == 0u32
+        || asset.hmtx_offset == 0u32 || maxp_offset == 0u32 || asset.loca_offset == 0u32
+        || asset.glyf_offset == 0u32 {
+        return false;
+    }
+
+    asset.units_per_em = ttf_read_u16(data, len, asset.head_offset as usize + 18usize);
+    asset.index_to_loc_format = ttf_read_i16(data, len, asset.head_offset as usize + 50usize);
+    asset.ascent = ttf_read_i16(data, len, asset.hhea_offset as usize + 4usize);
+    asset.descent = ttf_read_i16(data, len, asset.hhea_offset as usize + 6usize);
+    asset.line_gap = ttf_read_i16(data, len, asset.hhea_offset as usize + 8usize);
+    asset.num_hmetrics = ttf_read_u16(data, len, asset.hhea_offset as usize + 34usize);
+    asset.num_glyphs = ttf_read_u16(data, len, maxp_offset as usize + 4usize);
+    if asset.units_per_em == 0u16 || asset.num_glyphs == 0u16 || asset.num_hmetrics == 0u16 {
+        return false;
+    }
+
+    const vertical_units: i32 = asset.ascent as i32 - asset.descent as i32;
+    if vertical_units <= 0 {
+        return false;
+    }
+
+    asset.scale = pixel_height as f64 / vertical_units as f64;
+    ttf_select_cmap(asset);
+    ttf_select_kern(asset);
+    if asset.cmap4_offset == 0u32 && asset.cmap12_offset == 0u32 {
+        return false;
+    }
+
+    asset.font = Font{
+        name: name,
+        height: (ttf_clamp_i32(pixel_height as i32, 1, 255) as! u8).value,
+        baseline: (ttf_clamp_i32(ttf_round_i32(asset.ascent as f64 * asset.scale), 0, 255) as! u8).value,
+        line_height: (ttf_clamp_i32(ttf_round_i32((vertical_units + asset.line_gap as i32) as f64 * asset.scale), 1, 255) as! u8).value,
+        glyph_width: (ttf_clamp_i32(pixel_height as i32 / 2 + 1, 1, 255) as! u8).value,
+        glyph_height: (ttf_clamp_i32(pixel_height as i32, 1, 255) as! u8).value,
+        tracking: 0,
+        glyph_count: asset.num_glyphs,
+        glyphs: null,
+        glyph_lut: null,
+        kerning: null,
+        kerning_count: asset.kern_pair_count,
+        bitmap_data: null,
+        bitmap_stride: 0u16,
+        bitmap_format: FontBitmapFormat.None,
+        render_kind: FontRenderKind.TrueTypeOutline,
+        builtin_cjk: false,
+        backend: asset as &void,
+    };
+    asset.native_backend = null;
+    return true;
 }
 
 fn ttf_map_codepoint_cmap4(asset: &TtfFontAsset, codepoint: u32) u16 {
@@ -2008,6 +2449,84 @@ fn ttf_map_codepoint(asset: &TtfFontAsset, codepoint: u32) u16 {
         }
     }
     return ttf_map_codepoint_cmap12(asset, codepoint);
+}
+
+fn ttf_has_codepoint(asset: &TtfFontAsset, codepoint: u32) bool {
+    if asset == null || asset.data == null {
+        return false;
+    }
+    const native: &void = ttf_native_backend(asset);
+    if native != null {
+        return uya_stb_font_find_glyph_index(native, codepoint) > 0;
+    }
+    if asset.num_glyphs == 0u16 {
+        return false;
+    }
+    const glyph_id: u16 = ttf_map_codepoint(asset, codepoint);
+    return glyph_id != 0u16 && glyph_id < asset.num_glyphs;
+}
+
+fn font_has_codepoint(font: &Font, codepoint: u32) bool {
+    if font == null {
+        return false;
+    }
+
+    if font.render_kind == FontRenderKind.TrueTypeOutline {
+        const asset: &TtfFontAsset = ttf_backend(font);
+        return ttf_has_codepoint(asset, codepoint);
+    }
+
+    var idx: i32 = font.lookup_index(codepoint);
+    if idx >= 0 {
+        return true;
+    }
+    const normalized: u32 = glyph_normalize_codepoint(codepoint);
+    if normalized != codepoint {
+        idx = font.lookup_index(normalized);
+        if idx >= 0 {
+            return true;
+        }
+    }
+    return font.builtin_cjk && glyph_is_cjk(codepoint);
+}
+
+fn resolve_glyph_for_font(font: &Font, codepoint: u32) ResolvedGlyph {
+    if font == null {
+        return ResolvedGlyph{
+            font: null,
+            glyph: Glyph{
+                codepoint: '?' as u32,
+                width: 0u8,
+                height: 0u8,
+                advance: 0u8,
+                offset_x: 0,
+                offset_y: 0,
+                bitmap_offset: 0u32,
+            },
+        };
+    }
+
+    if font_has_codepoint(font, codepoint) {
+        return ResolvedGlyph{
+            font: font,
+            glyph: font.get_glyph(codepoint),
+        };
+    }
+
+    if glyph_is_cjk(codepoint) {
+        const cjk_font: &Font = font_system_ui_ref(font_runtime_height(font));
+        if cjk_font != null && cjk_font != font && font_has_codepoint(cjk_font, codepoint) {
+            return ResolvedGlyph{
+                font: cjk_font,
+                glyph: cjk_font.get_glyph(codepoint),
+            };
+        }
+    }
+
+    return ResolvedGlyph{
+        font: font,
+        glyph: font.get_glyph(codepoint),
+    };
 }
 
 fn ttf_glyph_offset(asset: &TtfFontAsset, glyph_id: u16) u32 {
@@ -2099,6 +2618,35 @@ fn ttf_glyph_for_codepoint(font: &Font, codepoint: u32) Glyph {
         return font_dynamic_glyph(font, codepoint);
     }
 
+    const native: &void = ttf_native_backend(asset);
+    if native != null {
+        var glyph_id_native: u16 = 0u16;
+        var advance_px_native: i32 = 0;
+        var x1_native: i32 = 0;
+        var y1_native: i32 = 0;
+        var x2_native: i32 = 0;
+        var y2_native: i32 = 0;
+        if uya_stb_font_get_glyph_metrics(native, codepoint, &glyph_id_native, &advance_px_native, &x1_native, &y1_native, &x2_native, &y2_native) != 0 {
+            const width_px_native: i32 = x2_native - x1_native;
+            const height_px_native: i32 = y2_native - y1_native;
+            const width_u8_native: u8 = (ttf_clamp_i32(width_px_native, 0, 255) as! u8).value;
+            const height_u8_native: u8 = (ttf_clamp_i32(height_px_native, 0, 255) as! u8).value;
+            const advance_u8_native: u8 = (ttf_clamp_i32(advance_px_native, 0, 255) as! u8).value;
+            const offset_x_i8_native: i8 = (ttf_clamp_i32(x1_native, -128, 127) as! i8).value;
+            const offset_y_px_native: i32 = asset.font.baseline as i32 + y1_native;
+            const offset_y_i8_native: i8 = (ttf_clamp_i32(offset_y_px_native, -128, 127) as! i8).value;
+            return Glyph{
+                codepoint: codepoint,
+                width: width_u8_native,
+                height: height_u8_native,
+                advance: advance_u8_native,
+                offset_x: offset_x_i8_native,
+                offset_y: offset_y_i8_native,
+                bitmap_offset: glyph_id_native as u32,
+            };
+        }
+    }
+
     var glyph_id: u16 = ttf_map_codepoint(asset, codepoint);
     if glyph_id == 0u16 || glyph_id >= asset.num_glyphs {
         const fallback: Glyph = font_dynamic_glyph(font, codepoint);
@@ -2134,7 +2682,15 @@ fn ttf_glyph_for_codepoint(font: &Font, codepoint: u32) Glyph {
 
 fn ttf_kerning_adjust(font: &Font, left: u32, right: u32) i32 {
     const asset: &TtfFontAsset = ttf_backend(font);
-    if asset == null || asset.kern_pair_count == 0u16 {
+    if asset == null {
+        return 0;
+    }
+
+    const native: &void = ttf_native_backend(asset);
+    if native != null {
+        return uya_stb_font_get_kerning_adjust(native, left, right);
+    }
+    if asset.kern_pair_count == 0u16 {
         return 0;
     }
 
@@ -2164,69 +2720,14 @@ export fn ttf_font_load_memory(asset: &TtfFontAsset, name: &const byte, data: &c
     }
 
     ttf_font_asset_reset(asset);
-    asset.data = data;
-    asset.len = len;
-    asset.pixel_height = pixel_height;
-    asset.sfnt_offset = ttf_select_sfnt_offset(data, len);
-    if asset.sfnt_offset == TTF_SFNT_OFFSET_INVALID {
+    const sfnt_offset: u32 = ttf_select_sfnt_offset(data, len);
+    if sfnt_offset == TTF_SFNT_OFFSET_INVALID {
         return false;
     }
-
-    var table_len: u32 = 0u32;
-    asset.cmap_offset = ttf_find_table_offset(data, len, asset.sfnt_offset, ttf_tag('c' as u8, 'm' as u8, 'a' as u8, 'p' as u8), &table_len);
-    asset.head_offset = ttf_find_table_offset(data, len, asset.sfnt_offset, ttf_tag('h' as u8, 'e' as u8, 'a' as u8, 'd' as u8), &table_len);
-    asset.hhea_offset = ttf_find_table_offset(data, len, asset.sfnt_offset, ttf_tag('h' as u8, 'h' as u8, 'e' as u8, 'a' as u8), &table_len);
-    asset.hmtx_offset = ttf_find_table_offset(data, len, asset.sfnt_offset, ttf_tag('h' as u8, 'm' as u8, 't' as u8, 'x' as u8), &table_len);
-    var maxp_offset: u32 = ttf_find_table_offset(data, len, asset.sfnt_offset, ttf_tag('m' as u8, 'a' as u8, 'x' as u8, 'p' as u8), &table_len);
-    asset.loca_offset = ttf_find_table_offset(data, len, asset.sfnt_offset, ttf_tag('l' as u8, 'o' as u8, 'c' as u8, 'a' as u8), &table_len);
-    asset.glyf_offset = ttf_find_table_offset(data, len, asset.sfnt_offset, ttf_tag('g' as u8, 'l' as u8, 'y' as u8, 'f' as u8), &table_len);
-    asset.kern_offset = ttf_find_table_offset(data, len, asset.sfnt_offset, ttf_tag('k' as u8, 'e' as u8, 'r' as u8, 'n' as u8), &table_len);
-    if asset.cmap_offset == 0u32 || asset.head_offset == 0u32 || asset.hhea_offset == 0u32 || asset.hmtx_offset == 0u32 || maxp_offset == 0u32 || asset.loca_offset == 0u32 || asset.glyf_offset == 0u32 {
+    if !ttf_font_init_with_sfnt_offset(asset, name, data, len, sfnt_offset, pixel_height) {
         return false;
     }
-
-    asset.units_per_em = ttf_read_u16(data, len, asset.head_offset as usize + 18usize);
-    asset.index_to_loc_format = ttf_read_i16(data, len, asset.head_offset as usize + 50usize);
-    asset.ascent = ttf_read_i16(data, len, asset.hhea_offset as usize + 4usize);
-    asset.descent = ttf_read_i16(data, len, asset.hhea_offset as usize + 6usize);
-    asset.line_gap = ttf_read_i16(data, len, asset.hhea_offset as usize + 8usize);
-    asset.num_hmetrics = ttf_read_u16(data, len, asset.hhea_offset as usize + 34usize);
-    asset.num_glyphs = ttf_read_u16(data, len, maxp_offset as usize + 4usize);
-    if asset.units_per_em == 0u16 || asset.num_glyphs == 0u16 || asset.num_hmetrics == 0u16 {
-        return false;
-    }
-
-    const vertical_units: i32 = asset.ascent as i32 - asset.descent as i32;
-    if vertical_units <= 0 {
-        return false;
-    }
-    asset.scale = pixel_height as f64 / vertical_units as f64;
-    ttf_select_cmap(asset);
-    ttf_select_kern(asset);
-    if asset.cmap4_offset == 0u32 && asset.cmap12_offset == 0u32 {
-        return false;
-    }
-
-    asset.font = Font{
-        name: name,
-        height: (ttf_clamp_i32(pixel_height as i32, 1, 255) as! u8).value,
-        baseline: (ttf_clamp_i32(ttf_round_i32(asset.ascent as f64 * asset.scale), 0, 255) as! u8).value,
-        line_height: (ttf_clamp_i32(ttf_round_i32((vertical_units + asset.line_gap as i32) as f64 * asset.scale), 1, 255) as! u8).value,
-        glyph_width: (ttf_clamp_i32(pixel_height as i32 / 2 + 1, 1, 255) as! u8).value,
-        glyph_height: (ttf_clamp_i32(pixel_height as i32, 1, 255) as! u8).value,
-        tracking: 0,
-        glyph_count: asset.num_glyphs,
-        glyphs: null,
-        glyph_lut: null,
-        kerning: null,
-        kerning_count: asset.kern_pair_count,
-        bitmap_data: null,
-        bitmap_stride: 0u16,
-        bitmap_format: FontBitmapFormat.None,
-        render_kind: FontRenderKind.TrueTypeOutline,
-        builtin_cjk: false,
-        backend: asset as &void,
-    };
+    asset.native_backend = uya_stb_font_create(data, len, asset.sfnt_offset, pixel_height);
     return true;
 }
 
@@ -2561,6 +3062,48 @@ export fn font_system_vector() Font {
     };
 }
 
+export fn font_ui_default_ref(pixel_height: u8) &Font {
+    if pixel_height == 0u8 {
+        return null;
+    }
+
+    ui_default_font_slots_init();
+    const requested_height: u16 = pixel_height as u16;
+    var free_idx: i32 = -1;
+    var i: i32 = 0;
+    while i < SYSTEM_UI_FONT_SLOT_CAPACITY {
+        const slot: &SystemUiFontSlot = &_ui_default_font_slots[i as usize];
+        if slot.ready && slot.pixel_height == requested_height {
+            return &slot.asset.font;
+        }
+        if free_idx < 0 && !slot.ready {
+            free_idx = i;
+        }
+        i = i + 1;
+    }
+
+    if free_idx < 0 {
+        free_idx = 0;
+    }
+    if free_idx < 0 || free_idx >= SYSTEM_UI_FONT_SLOT_CAPACITY {
+        return null;
+    }
+
+    const slot_idx: usize = (free_idx as! usize).value;
+    if slot_idx >= SYSTEM_UI_FONT_SLOT_CAPACITY as usize {
+        return null;
+    }
+    const slot: &SystemUiFontSlot = &_ui_default_font_slots[slot_idx];
+    slot.asset = ttf_font_asset_new();
+    if !ttf_font_load_memory(&slot.asset, "UiSans", DEFAULT_UI_FONT_BYTES.ptr, DEFAULT_UI_FONT_BYTES.len, requested_height) {
+        system_ui_font_slot_reset(slot);
+        return null;
+    }
+    slot.pixel_height = requested_height;
+    slot.ready = true;
+    return &slot.asset.font;
+}
+
 export fn font_system_ui_ref(pixel_height: u8) &Font {
     if pixel_height == 0u8 {
         return null;
@@ -2605,6 +3148,29 @@ export fn font_system_ui_ref(pixel_height: u8) &Font {
     return &slot.asset.font;
 }
 
+export fn font_ui_set_dpi(dpi: u16) void {
+    if dpi == 0u16 {
+        _font_ui_dpi = UI_FONT_BASE_DPI;
+        return;
+    }
+    _font_ui_dpi = dpi;
+}
+
+export fn font_ui_dpi() u16 {
+    return _font_ui_dpi;
+}
+
+export fn font_ui_pixel_height(logical_height: u8) u8 {
+    if logical_height == 0u8 {
+        return 0u8;
+    }
+    return (font_resolve_ui_height(logical_height as u16) as! u8).value;
+}
+
+export fn font_ui_reset_runtime() void {
+    _font_ui_dpi = UI_FONT_BASE_DPI;
+}
+
 export fn font_default() Font {
     return font_system_default();
 }
@@ -2625,15 +3191,18 @@ export fn draw_text(ctx: &RenderCtx, x: i16, y: i16, text: &const byte, len: usi
     var cursor: i16 = x;
     var i: usize = 0usize;
     var prev_codepoint: u32 = 0u32;
+    var prev_font: &Font = null;
     while i < len {
         const decoded: DecodedCodePoint = decode_codepoint(text, len, i);
-        const glyph: Glyph = font.get_glyph(decoded.codepoint);
-        if prev_codepoint != 0u32 {
-            cursor = cursor + font.kerning_adjust(prev_codepoint, glyph.codepoint) as i16;
+        const resolved: ResolvedGlyph = resolve_glyph_for_font(font, decoded.codepoint);
+        const glyph: Glyph = resolved.glyph;
+        if prev_codepoint != 0u32 && prev_font == resolved.font {
+            cursor = cursor + resolved.font.kerning_adjust(prev_codepoint, glyph.codepoint) as i16;
         }
-        draw_glyph(ctx, cursor + glyph.offset_x as i16, y + glyph.offset_y as i16, font, &glyph, &color);
+        draw_glyph(ctx, cursor + glyph.offset_x as i16, y + glyph.offset_y as i16, resolved.font, &glyph, &color);
         cursor = cursor + glyph.advance as i16;
         prev_codepoint = glyph.codepoint;
+        prev_font = resolved.font;
         if decoded.span <= 1usize || i + decoded.span > len {
             i = i + 1usize;
         } else {

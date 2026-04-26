@@ -1,4 +1,6 @@
 use core.color.Color;
+use core.rect.Rect;
+use libc.snprintf;
 use platform.disp.PixelFormat;
 use platform.disp.framebuffer_new;
 use render.ctx.RenderCtx;
@@ -10,45 +12,80 @@ use widget.lbl.Label;
 use widget.page.Page;
 use widget.panel.Panel;
 
-export fn run_demo_game() i32 {
-    var bytes: [byte: 32768] = [];
-    var board_bytes: [byte: 4096] = [];
-    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 96, 80, 384, PixelFormat.ARGB8888));
-    ctx.clear(Color{ r: 252, g: 248, b: 241, a: 255 });
+fn game_pause_label(paused: bool) &const byte {
+    if paused {
+        return "Resume" as &const byte;
+    }
+    return "Pause" as &const byte;
+}
 
+fn game_board_player_x(score_value: i32) i16 {
+    const idx: i32 = (score_value / 4) % 4;
+    return (8 + idx * 14) as i16;
+}
+
+fn game_board_player_y(score_value: i32) i16 {
+    const idx: i32 = ((score_value / 4) / 4) % 4;
+    return (8 + idx * 14) as i16;
+}
+
+export fn render_demo_game_state(ctx: &RenderCtx, origin_x: i16, origin_y: i16, score_value: i32, paused: bool) void {
+    var board_bytes: [byte: 16384] = [];
+    var score_text: [byte: 32] = [];
     var page: Page = Page.new("Game");
-    page.widget.size(96, 80);
+    page.widget.at(origin_x, origin_y);
+    page.widget.size(640, 480);
     page.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 252, g: 248, b: 241, a: 255 });
 
     var board: Panel = Panel.new();
-    board.widget.at(4, 4);
-    board.widget.size(88, 72);
+    board.widget.at(32, 32);
+    board.widget.size(576, 416);
 
     var title: Label = Label.new("Pocket Grid");
-    title.widget.at(8, 6);
-    title.widget.size(50, 10);
+    title.widget.at(32, 24);
+    title.widget.size(220, 32);
+    title.widget.base.style.set_u32(StyleProp.FontSize, 24u32);
 
-    var score: Label = Label.new("Score 128");
-    score.widget.at(58, 6);
-    score.widget.size(22, 10);
+    _ = snprintf(&score_text[0], 32usize, "Score %d" as &const byte, score_value);
+    var score: Label = Label.new(&score_text[0]);
+    score.widget.at(376, 24);
+    score.widget.size(168, 32);
+    score.widget.base.style.set_u32(StyleProp.FontSize, 22u32);
     score.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 217, g: 119, b: 6, a: 255 });
 
-    var canvas: Canvas = Canvas.with_buffer(&board_bytes[0], 16, 16, 64, PixelFormat.ARGB8888);
-    canvas.widget.at(10, 20);
-    canvas.widget.size(44, 44);
+    var canvas: Canvas = Canvas.with_buffer(&board_bytes[0], 64, 64, 256, PixelFormat.ARGB8888);
+    canvas.widget.at(48, 96);
+    canvas.widget.size(240, 240);
     canvas.begin_draw().clear(Color{ r: 255, g: 255, b: 255, a: 255 });
-    canvas.begin_draw().fill_rect(Rect{ x: 0, y: 0, w: 16, h: 16 }, Color{ r: 241, g: 245, b: 249, a: 255 });
-    canvas.begin_draw().fill_rect(Rect{ x: 2, y: 2, w: 4, h: 4 }, Color{ r: 37, g: 99, b: 235, a: 255 });
-    canvas.begin_draw().fill_rect(Rect{ x: 10, y: 10, w: 4, h: 4 }, Color{ r: 34, g: 197, b: 94, a: 255 });
-    canvas.begin_draw().draw_rect(Rect{ x: 1, y: 1, w: 14, h: 14 }, Color{ r: 148, g: 163, b: 184, a: 255 }, 1);
+    canvas.begin_draw().fill_rect(Rect{ x: 0, y: 0, w: 64, h: 64 }, Color{ r: 241, g: 245, b: 249, a: 255 });
+    canvas.begin_draw().draw_rect(Rect{ x: 8, y: 8, w: 48, h: 48 }, Color{ r: 203, g: 213, b: 225, a: 255 }, 1);
+    canvas.begin_draw().draw_rect(Rect{ x: 22, y: 8, w: 1, h: 48 }, Color{ r: 226, g: 232, b: 240, a: 255 }, 1);
+    canvas.begin_draw().draw_rect(Rect{ x: 36, y: 8, w: 1, h: 48 }, Color{ r: 226, g: 232, b: 240, a: 255 }, 1);
+    canvas.begin_draw().draw_rect(Rect{ x: 50, y: 8, w: 1, h: 48 }, Color{ r: 226, g: 232, b: 240, a: 255 }, 1);
+    canvas.begin_draw().draw_rect(Rect{ x: 8, y: 22, w: 48, h: 1 }, Color{ r: 226, g: 232, b: 240, a: 255 }, 1);
+    canvas.begin_draw().draw_rect(Rect{ x: 8, y: 36, w: 48, h: 1 }, Color{ r: 226, g: 232, b: 240, a: 255 }, 1);
+    canvas.begin_draw().draw_rect(Rect{ x: 8, y: 50, w: 48, h: 1 }, Color{ r: 226, g: 232, b: 240, a: 255 }, 1);
+    canvas.begin_draw().fill_rect(
+        Rect{ x: game_board_player_x(score_value), y: game_board_player_y(score_value), w: 12, h: 12 },
+        Color{ r: 37, g: 99, b: 235, a: 255 }
+    );
+    canvas.begin_draw().fill_rect(Rect{ x: 44, y: 44, w: 8, h: 8 }, Color{ r: 34, g: 197, b: 94, a: 255 });
+    if paused {
+        canvas.begin_draw().fill_rect(Rect{ x: 8, y: 8, w: 48, h: 48 }, Color{ r: 15, g: 23, b: 42, a: 120 });
+        canvas.begin_draw().fill_rect(Rect{ x: 24, y: 18, w: 5, h: 20 }, Color{ r: 248, g: 250, b: 252, a: 255 });
+        canvas.begin_draw().fill_rect(Rect{ x: 35, y: 18, w: 5, h: 20 }, Color{ r: 248, g: 250, b: 252, a: 255 });
+    }
+    canvas.begin_draw().draw_rect(Rect{ x: 4, y: 4, w: 56, h: 56 }, Color{ r: 148, g: 163, b: 184, a: 255 }, 2);
     canvas.end_draw();
 
     var restart: Button = Button.filled("Restart");
-    restart.widget.at(58, 26);
-    restart.widget.size(22, 18);
-    var pause: Button = Button.outlined("Pause");
-    pause.widget.at(58, 48);
-    pause.widget.size(22, 18);
+    restart.widget.at(360, 140);
+    restart.widget.size(160, 56);
+    restart.widget.base.style.set_u32(StyleProp.FontSize, 20u32);
+    var pause: Button = Button.outlined(game_pause_label(paused));
+    pause.widget.at(360, 220);
+    pause.widget.size(160, 56);
+    pause.widget.base.style.set_u32(StyleProp.FontSize, 20u32);
 
     page.add(board.obj());
     board.add(title.obj());
@@ -56,8 +93,18 @@ export fn run_demo_game() i32 {
     board.add(canvas.obj());
     board.add(restart.obj());
     board.add(pause.obj());
-    page.render(&ctx);
+    page.render(ctx);
+}
 
+export fn render_demo_game(ctx: &RenderCtx, origin_x: i16, origin_y: i16) void {
+    render_demo_game_state(ctx, origin_x, origin_y, 128, false);
+}
+
+export fn run_demo_game() i32 {
+    var bytes: [byte: 1228800] = [];
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 640, 480, 2560, PixelFormat.ARGB8888));
+    ctx.clear(Color{ r: 252, g: 248, b: 241, a: 255 });
+    render_demo_game(&ctx, 0, 0);
     if ctx.stats.image_ops == 0u32 || ctx.stats.text_ops == 0u32 {
         return 1;
     }

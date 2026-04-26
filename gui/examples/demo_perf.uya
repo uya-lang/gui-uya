@@ -10,37 +10,38 @@ use widget.lbl.Label;
 use widget.page.Page;
 use widget.panel.Panel;
 
-export fn run_demo_perf() i32 {
-    var bytes: [byte: 32768] = [];
-    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 96, 80, 384, PixelFormat.ARGB8888));
-    ctx.clear(Color{ r: 248, g: 250, b: 252, a: 255 });
-
+export fn render_demo_perf(ctx: &RenderCtx, origin_x: i16, origin_y: i16) void {
     var page: Page = Page.new("Perf");
-    page.widget.size(96, 80);
+    page.widget.at(origin_x, origin_y);
+    page.widget.size(640, 480);
+    page.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 248, g: 250, b: 252, a: 255 });
 
     var hud: Panel = Panel.new();
-    hud.widget.at(4, 4);
-    hud.widget.size(88, 72);
+    hud.widget.at(32, 32);
+    hud.widget.size(576, 416);
     hud.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 15, g: 23, b: 42, a: 255 });
 
     var fps: Label = Label.new("FPS 60");
-    fps.widget.at(8, 8);
-    fps.widget.size(20, 10);
+    fps.widget.at(40, 32);
+    fps.widget.size(120, 28);
+    fps.widget.base.style.set_u32(StyleProp.FontSize, 20u32);
     fps.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 248, g: 250, b: 252, a: 255 });
 
     var ram: Label = Label.new("RAM 928B");
-    ram.widget.at(34, 8);
-    ram.widget.size(24, 10);
+    ram.widget.at(188, 32);
+    ram.widget.size(140, 28);
+    ram.widget.base.style.set_u32(StyleProp.FontSize, 20u32);
     ram.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 248, g: 250, b: 252, a: 255 });
 
     var batch: Label = Label.new("BATCH 51ms");
-    batch.widget.at(58, 8);
-    batch.widget.size(22, 10);
+    batch.widget.at(372, 32);
+    batch.widget.size(160, 28);
+    batch.widget.base.style.set_u32(StyleProp.FontSize, 20u32);
     batch.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 248, g: 250, b: 252, a: 255 });
 
     var chart: Chart = Chart.new();
-    chart.widget.at(8, 24);
-    chart.widget.size(72, 34);
+    chart.widget.at(40, 96);
+    chart.widget.size(496, 248);
     chart.chart_type = ChartType.Line;
     _ = chart.add_point(48);
     _ = chart.add_point(52);
@@ -54,8 +55,14 @@ export fn run_demo_perf() i32 {
     hud.add(ram.obj());
     hud.add(batch.obj());
     hud.add(chart.obj());
-    page.render(&ctx);
+    page.render(ctx);
+}
 
+export fn run_demo_perf() i32 {
+    var bytes: [byte: 1228800] = [];
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 640, 480, 2560, PixelFormat.ARGB8888));
+    ctx.clear(Color{ r: 248, g: 250, b: 252, a: 255 });
+    render_demo_perf(&ctx, 0, 0);
     if ctx.stats.text_ops == 0u32 || ctx.stats.line_ops == 0u32 {
         return 1;
     }

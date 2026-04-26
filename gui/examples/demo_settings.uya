@@ -10,42 +10,43 @@ use widget.panel.Panel;
 use widget.slider.Slider;
 use widget.switch.Switch;
 
-export fn run_demo_settings() i32 {
-    var bytes: [byte: 32768] = [];
-    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 96, 80, 384, PixelFormat.ARGB8888));
-    ctx.clear(Color{ r: 245, g: 248, b: 252, a: 255 });
-
+export fn render_demo_settings_state(ctx: &RenderCtx, origin_x: i16, origin_y: i16, wifi_enabled: bool, alerts_enabled: bool, brightness_value: i32) void {
     var page: Page = Page.new("Settings");
-    page.widget.size(96, 80);
+    page.widget.at(origin_x, origin_y);
+    page.widget.size(640, 480);
     page.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 245, g: 248, b: 252, a: 255 });
 
     var panel: Panel = Panel.new();
-    panel.widget.at(4, 4);
-    panel.widget.size(88, 72);
+    panel.widget.at(40, 32);
+    panel.widget.size(560, 416);
 
     var title: Label = Label.new("Settings");
-    title.widget.at(8, 6);
-    title.widget.size(72, 10);
+    title.widget.at(40, 32);
+    title.widget.size(220, 36);
+    title.widget.base.style.set_u32(StyleProp.FontSize, 28u32);
     title.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 15, g: 23, b: 42, a: 255 });
 
     var wifi_label: Label = Label.new("Wi-Fi");
-    wifi_label.widget.at(8, 20);
-    wifi_label.widget.size(28, 10);
-    var wifi: Switch = Switch.new(true);
-    wifi.widget.at(52, 16);
+    wifi_label.widget.at(40, 104);
+    wifi_label.widget.size(160, 24);
+    wifi_label.widget.base.style.set_u32(StyleProp.FontSize, 18u32);
+    var wifi: Switch = Switch.new(wifi_enabled);
+    wifi.widget.at(416, 92);
 
     var notif_label: Label = Label.new("Alerts");
-    notif_label.widget.at(8, 38);
-    notif_label.widget.size(28, 10);
-    var notif: Switch = Switch.new(false);
-    notif.widget.at(52, 34);
+    notif_label.widget.at(40, 176);
+    notif_label.widget.size(160, 24);
+    notif_label.widget.base.style.set_u32(StyleProp.FontSize, 18u32);
+    var notif: Switch = Switch.new(alerts_enabled);
+    notif.widget.at(416, 164);
 
     var bright_label: Label = Label.new("Brightness");
-    bright_label.widget.at(8, 56);
-    bright_label.widget.size(40, 10);
-    var brightness: Slider = Slider.new(0, 100, 68);
-    brightness.widget.at(8, 66);
-    brightness.widget.size(72, 6);
+    bright_label.widget.at(40, 264);
+    bright_label.widget.size(200, 24);
+    bright_label.widget.base.style.set_u32(StyleProp.FontSize, 18u32);
+    var brightness: Slider = Slider.new(0, 100, brightness_value);
+    brightness.widget.at(40, 312);
+    brightness.widget.size(480, 20);
 
     page.add(panel.obj());
     panel.add(title.obj());
@@ -55,8 +56,18 @@ export fn run_demo_settings() i32 {
     panel.add(notif.obj());
     panel.add(bright_label.obj());
     panel.add(brightness.obj());
-    page.render(&ctx);
+    page.render(ctx);
+}
 
+export fn render_demo_settings(ctx: &RenderCtx, origin_x: i16, origin_y: i16) void {
+    render_demo_settings_state(ctx, origin_x, origin_y, true, false, 68);
+}
+
+export fn run_demo_settings() i32 {
+    var bytes: [byte: 1228800] = [];
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 640, 480, 2560, PixelFormat.ARGB8888));
+    ctx.clear(Color{ r: 245, g: 248, b: 252, a: 255 });
+    render_demo_settings(&ctx, 0, 0);
     if ctx.stats.text_ops == 0u32 || ctx.stats.circle_ops == 0u32 {
         return 1;
     }

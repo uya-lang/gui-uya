@@ -1,3 +1,8 @@
+use core.event.Event;
+use core.event.EventType;
+use core.event.InputDev;
+use core.event.event_point;
+use core.point.Point;
 use platform.disp.FrameBuffer;
 use platform.disp.PixelFormat;
 use platform.disp.framebuffer_new;
@@ -8,6 +13,7 @@ use sim.app.sim_app_new;
 use sim.common.sim_cstr_eq;
 use sim.common.SIM_KEY_F11;
 use sim.config.SimConfig;
+use sim.config.SimDemoKind;
 use sim.config.SimGpuKind;
 use sim.config.sim_config_default;
 use sim.config.sim_gpu_name;
@@ -21,6 +27,8 @@ export const TEST_SIM_APP_MODULE: i32 = 1;
 test "sim config defaults to auto gpu and exposes names" {
     const cfg: SimConfig = sim_config_default();
     try assert_eq_i32(cfg.gpu as i32, SimGpuKind.Auto as i32);
+    try assert_eq_i32(cfg.width as i32, 640);
+    try assert_eq_i32(cfg.height as i32, 480);
     try assert_eq_bool(sim_cstr_eq(sim_gpu_name(SimGpuKind.Auto), "auto"), true);
     try assert_eq_bool(sim_cstr_eq(sim_gpu_name(SimGpuKind.Software), "software"), true);
     try assert_eq_bool(sim_cstr_eq(sim_gpu_name(SimGpuKind.Gles2), "gles2"), true);
@@ -85,4 +93,82 @@ test "sim app renders and reacts to playback-style input" {
     app.render(&ctx);
     try assert_eq_bool(ctx.stats.text_ops > 0u32, true);
     try assert_eq_bool(ctx.stats.image_ops > 0u32, true);
+}
+
+test "sim app can render standalone dashboard demo mode" {
+    var app: SimApp = sim_app_new();
+    var cfg: SimConfig = sim_config_default();
+    const width: u16 = 640;
+    const height: u16 = 480;
+    cfg.demo = SimDemoKind.Dashboard;
+    cfg.width = width;
+    cfg.height = height;
+    try assert_eq_bool(app.init(cfg), true);
+
+    var pixels: [byte: 1228800] = [];
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&pixels[0], width, height, width * 4u16, PixelFormat.ARGB8888));
+    app.render(&ctx);
+    try assert_eq_bool(ctx.stats.text_ops > 0u32, true);
+    try assert_eq_bool(ctx.stats.line_ops > 0u32, true);
+}
+
+test "standalone music demo reacts to touch click" {
+    var app: SimApp = sim_app_new();
+    var cfg: SimConfig = sim_config_default();
+    cfg.demo = SimDemoKind.Music;
+    cfg.width = 640;
+    cfg.height = 480;
+    try assert_eq_bool(app.init(cfg), true);
+    try assert_eq_bool(app.music_playing, false);
+
+    var click_evt: Event = event_point(EventType.Click, InputDev.Touch, -1, 40u32, Point{ x: 64, y: 260 });
+    app.handle_translated_event(&click_evt);
+    try assert_eq_bool(app.music_playing, true);
+}
+
+test "standalone dashboard and game demos react to touch and playback taps" {
+    var app: SimApp = sim_app_new();
+    var cfg: SimConfig = sim_config_default();
+    cfg.demo = SimDemoKind.Dashboard;
+    cfg.width = 640;
+    cfg.height = 480;
+    try assert_eq_bool(app.init(cfg), true);
+
+    var dashboard_click: Event = event_point(EventType.Click, InputDev.Touch, -1, 40u32, Point{ x: 440, y: 200 });
+    app.handle_translated_event(&dashboard_click);
+    try assert_eq_i32(app.dashboard_metric, 1);
+
+    app.switch_demo(SimDemoKind.Game, "test");
+    const score_before_click: i32 = app.game_score;
+    var game_click: Event = event_point(EventType.Click, InputDev.Touch, -1, 50u32, Point{ x: 180, y: 220 });
+    app.handle_translated_event(&game_click);
+    try assert_eq_bool(app.game_score > score_before_click, true);
+
+    const score_before_playback: i32 = app.game_score;
+    var down: RecordedEvent = RecordedEvent{
+        frame_offset: 0u32,
+        kind: RecorderEventKind.TouchDown,
+        x: 180,
+        y: 220,
+        value: 0,
+        key_code: 0u16,
+        reserved: 0u16,
+    };
+    var up: RecordedEvent = RecordedEvent{
+        frame_offset: 10u32,
+        kind: RecorderEventKind.TouchUp,
+        x: 180,
+        y: 220,
+        value: 0,
+        key_code: 0u16,
+        reserved: 0u16,
+    };
+    app.handle_recorded_event(&down, 100u32);
+    app.handle_recorded_event(&up, 110u32);
+    try assert_eq_bool(app.game_score > score_before_playback, true);
+
+    try assert_eq_bool(app.game_paused, false);
+    var pause_click: Event = event_point(EventType.Click, InputDev.Touch, -1, 60u32, Point{ x: 460, y: 290 });
+    app.handle_translated_event(&pause_click);
+    try assert_eq_bool(app.game_paused, true);
 }

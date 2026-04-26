@@ -11,48 +11,63 @@ use widget.page.Page;
 use widget.panel.Panel;
 use widget.slider.Slider;
 
-export fn run_demo_music() i32 {
-    var bytes: [byte: 32768] = [];
-    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 96, 80, 384, PixelFormat.ARGB8888));
-    ctx.clear(Color{ r: 247, g: 244, b: 255, a: 255 });
+fn music_track_name(index: i32) &const byte {
+    if index == 0 {
+        return "Night Transit" as &const byte;
+    }
+    if index == 1 {
+        return "Soft Voltage" as &const byte;
+    }
+    return "Dawn Drive" as &const byte;
+}
 
+export fn render_demo_music_state(ctx: &RenderCtx, origin_x: i16, origin_y: i16, track_idx: i32, playing: bool, progress_value: i32) void {
     var page: Page = Page.new("Music");
-    page.widget.size(96, 80);
+    page.widget.at(origin_x, origin_y);
+    page.widget.size(640, 480);
     page.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 247, g: 244, b: 255, a: 255 });
 
     var hero: Panel = Panel.new();
-    hero.widget.at(4, 4);
-    hero.widget.size(88, 34);
+    hero.widget.at(32, 32);
+    hero.widget.size(576, 168);
 
     var title: Label = Label.new("Now Playing");
-    title.widget.at(8, 6);
-    title.widget.size(72, 10);
+    title.widget.at(28, 24);
+    title.widget.size(240, 28);
+    title.widget.base.style.set_u32(StyleProp.FontSize, 18u32);
     title.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 76, g: 29, b: 149, a: 255 });
 
-    var track: Label = Label.new("Night Transit");
-    track.widget.at(8, 18);
-    track.widget.size(72, 10);
+    var track: Label = Label.new(music_track_name(track_idx));
+    track.widget.at(28, 66);
+    track.widget.size(320, 42);
+    track.widget.base.style.set_u32(StyleProp.FontSize, 30u32);
 
     var play: Button = Button.filled("Play");
-    play.widget.at(8, 40);
-    play.widget.size(26, 20);
+    if playing {
+        play = Button.filled("Pause");
+    }
+    play.widget.at(40, 232);
+    play.widget.size(132, 56);
+    play.widget.base.style.set_u32(StyleProp.FontSize, 20u32);
 
     var next: Button = Button.outlined("Next");
-    next.widget.at(38, 40);
-    next.widget.size(26, 20);
+    next.widget.at(188, 232);
+    next.widget.size(132, 56);
+    next.widget.base.style.set_u32(StyleProp.FontSize, 20u32);
 
-    var progress: Slider = Slider.new(0, 100, 42);
-    progress.widget.at(68, 42);
-    progress.widget.size(20, 16);
+    var progress: Slider = Slider.new(0, 100, progress_value);
+    progress.widget.at(352, 246);
+    progress.widget.size(216, 28);
 
     var queue: ListView = ListView.new();
-    queue.widget.at(4, 62);
-    queue.widget.size(88, 14);
-    queue.item_height = 7;
+    queue.widget.at(32, 320);
+    queue.widget.size(576, 128);
+    queue.widget.base.style.set_u32(StyleProp.FontSize, 18u32);
+    queue.item_height = 36;
     queue.add_item("01 Night Transit");
     queue.add_item("02 Soft Voltage");
     queue.add_item("03 Dawn Drive");
-    queue.select(1);
+    queue.select(track_idx);
 
     page.add(hero.obj());
     page.add(play.obj());
@@ -61,8 +76,18 @@ export fn run_demo_music() i32 {
     page.add(queue.obj());
     hero.add(title.obj());
     hero.add(track.obj());
-    page.render(&ctx);
+    page.render(ctx);
+}
 
+export fn render_demo_music(ctx: &RenderCtx, origin_x: i16, origin_y: i16) void {
+    render_demo_music_state(ctx, origin_x, origin_y, 1, false, 42);
+}
+
+export fn run_demo_music() i32 {
+    var bytes: [byte: 1228800] = [];
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 640, 480, 2560, PixelFormat.ARGB8888));
+    ctx.clear(Color{ r: 247, g: 244, b: 255, a: 255 });
+    render_demo_music(&ctx, 0, 0);
     if ctx.stats.text_ops == 0u32 || ctx.stats.rect_ops == 0u32 {
         return 1;
     }

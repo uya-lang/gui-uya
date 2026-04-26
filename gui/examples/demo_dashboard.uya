@@ -11,46 +11,86 @@ use style.theme.theme_manager_new;
 use widget.btn.Button;
 use widget.chart.Chart;
 use widget.chart.ChartType;
+use widget.grid_view.GridCellContentMode;
+use widget.grid_view.GridContentAlign;
 use widget.grid_view.GridView;
 use widget.lbl.Label;
 use widget.page.Page;
 use widget.panel.Panel;
 
-export fn run_demo_dashboard() i32 {
-    var bytes: [byte: 36864] = [];
-    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 112, 72, 448, PixelFormat.ARGB8888));
-    ctx.clear(Color{ r: 15, g: 23, b: 42, a: 255 });
+fn dashboard_metric_title(metric: i32) &const byte {
+    if metric == 1 {
+        return "Ops Dashboard / NET" as &const byte;
+    }
+    if metric == 2 {
+        return "Ops Dashboard / MEM" as &const byte;
+    }
+    return "Ops Dashboard / CPU" as &const byte;
+}
 
+export fn render_demo_dashboard_state(ctx: &RenderCtx, origin_x: i16, origin_y: i16, metric: i32) void {
     var page: Page = Page.new("Dashboard");
-    page.widget.size(112, 72);
+    page.widget.at(origin_x, origin_y);
+    page.widget.size(640, 480);
+    page.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 15, g: 23, b: 42, a: 255 });
 
     var shell: Panel = Panel.new();
-    shell.widget.at(4, 4);
-    shell.widget.size(104, 64);
+    shell.widget.at(24, 24);
+    shell.widget.size(592, 432);
 
-    var title: Label = Label.new("Ops Dashboard");
-    title.widget.at(8, 6);
-    title.widget.size(88, 10);
+    var title: Label = Label.new(dashboard_metric_title(metric));
+    title.widget.at(28, 24);
+    title.widget.size(240, 32);
+    title.widget.base.style.set_u32(StyleProp.FontSize, 28u32);
 
     var chart: Chart = Chart.new();
-    chart.widget.at(8, 18);
-    chart.widget.size(58, 36);
+    chart.widget.at(28, 88);
+    chart.widget.size(336, 248);
     chart.chart_type = ChartType.Area;
-    _ = chart.add_point(18);
-    _ = chart.add_point(26);
-    _ = chart.add_point(21);
-    _ = chart.add_point(34);
-    _ = chart.add_point(29);
+    if metric == 1 {
+        _ = chart.add_point(26);
+        _ = chart.add_point(32);
+        _ = chart.add_point(24);
+        _ = chart.add_point(38);
+        _ = chart.add_point(30);
+    } else if metric == 2 {
+        _ = chart.add_point(20);
+        _ = chart.add_point(22);
+        _ = chart.add_point(28);
+        _ = chart.add_point(31);
+        _ = chart.add_point(36);
+    } else {
+        _ = chart.add_point(18);
+        _ = chart.add_point(26);
+        _ = chart.add_point(21);
+        _ = chart.add_point(34);
+        _ = chart.add_point(29);
+    }
 
     var grid: GridView = GridView.new();
-    grid.widget.at(70, 18);
-    grid.widget.size(26, 36);
+    grid.widget.at(392, 88);
+    grid.widget.size(176, 232);
     grid.columns = 1;
-    grid.item_size.w = 24;
-    grid.item_size.h = 12;
+    grid.item_size.w = 128;
+    grid.item_size.h = 60;
+    grid.row_gap = 6u8;
+    grid.cell_padding = 2u8;
+    grid.cell_content_mode = GridCellContentMode.Center;
+    grid.content_align_x = GridContentAlign.Center;
+    grid.content_align_y = GridContentAlign.Center;
     var cpu: Button = Button.outlined("CPU");
     var net: Button = Button.outlined("NET");
     var mem: Button = Button.outlined("MEM");
+    if metric == 0 {
+        cpu = Button.filled("CPU");
+    } else if metric == 1 {
+        net = Button.filled("NET");
+    } else {
+        mem = Button.filled("MEM");
+    }
+    cpu.widget.base.style.set_u32(StyleProp.FontSize, 18u32);
+    net.widget.base.style.set_u32(StyleProp.FontSize, 18u32);
+    mem.widget.base.style.set_u32(StyleProp.FontSize, 18u32);
     grid.add_child(cpu.obj());
     grid.add_child(net.obj());
     grid.add_child(mem.obj());
@@ -64,8 +104,18 @@ export fn run_demo_dashboard() i32 {
     shell.add(grid.obj());
     manager.switch_theme(ThemeVariant.Dark);
     manager.apply_to_tree(page.obj());
-    page.render(&ctx);
+    page.render(ctx);
+}
 
+export fn render_demo_dashboard(ctx: &RenderCtx, origin_x: i16, origin_y: i16) void {
+    render_demo_dashboard_state(ctx, origin_x, origin_y, 0);
+}
+
+export fn run_demo_dashboard() i32 {
+    var bytes: [byte: 1228800] = [];
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 640, 480, 2560, PixelFormat.ARGB8888));
+    ctx.clear(Color{ r: 15, g: 23, b: 42, a: 255 });
+    render_demo_dashboard(&ctx, 0, 0);
     if ctx.stats.line_ops == 0u32 || ctx.stats.text_ops == 0u32 {
         return 1;
     }

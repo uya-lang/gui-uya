@@ -24,6 +24,8 @@ use widget.btn.Button;
 use widget.canvas.Canvas;
 use widget.chart.Chart;
 use widget.chart.ChartType;
+use widget.grid_view.GridCellContentMode;
+use widget.grid_view.GridContentAlign;
 use widget.grid_view.GridView;
 use widget.img.Image;
 use widget.lbl.Label;
@@ -153,11 +155,74 @@ test "list view selection and grid view children work" {
     try assert_eq_i32(list.content_size().h as i32, 72);
 
     var grid: GridView = GridView.new();
+    var bytes: [byte: 36864] = [];
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 96, 96, 384, PixelFormat.ARGB8888));
     var a: Button = Button.outlined("1");
     var b: Button = Button.outlined("2");
+    grid.widget.at(0, 0);
+    grid.widget.size(80, 80);
+    grid.columns = 1;
+    grid.item_size.w = 32;
+    grid.item_size.h = 20;
+    grid.row_gap = 6u8;
+    grid.cell_padding = 3u8;
     grid.add_child(a.obj());
     grid.add_child(b.obj());
+    grid.render(&ctx);
     try assert_eq_i32(grid.child_count(), 2);
+    try assert_eq_i32(a.widget.base.x as i32, 11);
+    try assert_eq_i32(a.widget.base.y as i32, 11);
+    try assert_eq_i32(a.widget.base.w as i32, 26);
+    try assert_eq_i32(a.widget.base.h as i32, 14);
+    try assert_eq_i32(b.widget.base.y as i32 - a.widget.base.y as i32, 26);
+}
+
+test "grid view can center child content inside padded cells" {
+    var bytes: [byte: 36864] = [];
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 96, 96, 384, PixelFormat.ARGB8888));
+    var grid: GridView = GridView.new();
+    var button: Button = Button.outlined("C");
+
+    grid.widget.at(0, 0);
+    grid.widget.size(80, 80);
+    grid.columns = 1;
+    grid.item_size.w = 32;
+    grid.item_size.h = 20;
+    grid.cell_padding = 3u8;
+    grid.cell_content_mode = GridCellContentMode.Center;
+    button.widget.size(12, 10);
+    grid.add_child(button.obj());
+    grid.render(&ctx);
+
+    try assert_eq_i32(button.widget.base.x as i32, 18);
+    try assert_eq_i32(button.widget.base.y as i32, 13);
+    try assert_eq_i32(button.widget.base.w as i32, 12);
+    try assert_eq_i32(button.widget.base.h as i32, 10);
+}
+
+test "grid view can center the whole content block" {
+    var bytes: [byte: 36864] = [];
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 96, 96, 384, PixelFormat.ARGB8888));
+    var grid: GridView = GridView.new();
+    var a: Button = Button.outlined("A");
+    var b: Button = Button.outlined("B");
+
+    grid.widget.at(0, 0);
+    grid.widget.size(80, 80);
+    grid.columns = 1;
+    grid.item_size.w = 20;
+    grid.item_size.h = 12;
+    grid.row_gap = 4u8;
+    grid.content_align_x = GridContentAlign.Center;
+    grid.content_align_y = GridContentAlign.Center;
+    grid.add_child(a.obj());
+    grid.add_child(b.obj());
+    grid.render(&ctx);
+
+    try assert_eq_i32(a.widget.base.x as i32, 30);
+    try assert_eq_i32(a.widget.base.y as i32, 26);
+    try assert_eq_i32(b.widget.base.x as i32, 30);
+    try assert_eq_i32(b.widget.base.y as i32, 42);
 }
 
 test "chart and canvas render content" {
@@ -193,7 +258,7 @@ test "page can render nested widgets" {
     var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 48, 32, 192, PixelFormat.ARGB8888));
     var page: Page = Page.new("Page");
     var panel: Panel = Panel.new();
-    var button: Button = Button.filled("Go");
+    var button: Button = Button.filled("A");
 
     page.widget.size(48, 32);
     page.widget.base.style.set_u32(StyleProp.PaddingLeft, 0u32);
@@ -207,7 +272,7 @@ test "page can render nested widgets" {
     panel.widget.base.style.set_u32(StyleProp.PaddingTop, 2u32);
     panel.widget.base.style.set_u32(StyleProp.PaddingBottom, 2u32);
     button.widget.at(4, 4);
-    button.widget.size(16, 10);
+    button.widget.size(20, 12);
 
     page.add(panel.obj());
     panel.add(button.obj());

@@ -8,10 +8,12 @@ BENCH_APP ?= gui/bench_suite.uya
 TEST_ENTRY ?= gui/test_suite.uya
 RENDER_TEST_ENTRY ?= gui/render_test_suite.uya
 TEXT_COMPARE_APP ?= gui/text_render_compare.uya
+LVGL_COMPARE_DIR ?= tools/lvgl_compare
+LVGL_COMPARE_BUILD_DIR ?= $(BUILD_DIR)/lvgl_compare
 MODE ?= debug
 UYA_OPT := $(if $(filter release,$(MODE)),-O3,-O0)
 
-.PHONY: build test bench bench-report docs-api ci clean hooks build-arm build-riscv build-esp32 sim-build sim-run sim-debug sim-headless text-compare
+.PHONY: build test bench bench-report docs-api ci clean hooks build-arm build-riscv build-esp32 sim-build sim-run sim-debug sim-headless text-compare lvgl-text-compare
 
 SIM_BUILD_DIR ?= $(BUILD_DIR)/sim
 SIM_BIN ?= $(SIM_BUILD_DIR)/gui_uya_sim
@@ -41,6 +43,12 @@ bench-report:
 text-compare:
 	@mkdir -p $(BUILD_DIR)/text_compare
 	$(UYA) run $(TEXT_COMPARE_APP) $(UYA_OPT)
+
+lvgl-text-compare:
+	@mkdir -p $(LVGL_COMPARE_BUILD_DIR)
+	cmake -S $(LVGL_COMPARE_DIR) -B $(LVGL_COMPARE_BUILD_DIR)
+	cmake --build $(LVGL_COMPARE_BUILD_DIR) -j
+	SDL_VIDEODRIVER=dummy $(LVGL_COMPARE_BUILD_DIR)/lvgl_text_compare
 
 docs-api:
 	bash tools/gen_gui_api_docs.sh

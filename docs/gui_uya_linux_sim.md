@@ -41,6 +41,10 @@ make sim-run SIM_ARGS="--gpu gles2 --max-frames 120"
 # 运行 phase6 并限定帧数，适合 CI / smoke
 make sim-run SIM_ARGS="--demo phase6 --max-frames 120"
 
+# 直接显示更复杂的单独 demo
+make sim-run SIM_ARGS="--demo dashboard --scale 1"
+make sim-run SIM_ARGS="--demo music --scale 1"
+
 # 打开调试 HUD / profiler
 make sim-debug
 
@@ -60,9 +64,9 @@ make sim-fb-run
 
 ## 0.2 运行参数
 
-- `--demo phase4|phase6`
+- `--demo phase4|phase6|clock|music|settings|dashboard|game|perf`
 - `--gpu auto|software|gles2`（默认 `auto`，`auto` 会在 GLES2 不可用时回退到 software）
-- `--width N --height N --scale N`（默认 `scale=3`）
+- `--width N --height N --scale N`（默认 `640x480`，`scale=3`）
 - `--fullscreen | --windowed`
 - `--root PATH`
 - `--title TEXT`
@@ -72,6 +76,11 @@ make sim-fb-run
 - `--max-frames N`
 - `--profile-every N`
 - `--hud | --no-hud`
+
+常用切换热键：
+
+- `1` / `6`：切到 `phase4` / `phase6`
+- `C` / `M` / `S` / `D` / `G` / `B`：切到 `clock` / `music` / `settings` / `dashboard` / `game` / `perf`
 
 ### Headless 专用入口
 

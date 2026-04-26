@@ -19,6 +19,9 @@ use render.font.TextAlign;
 use render.font.draw_text;
 use render.font.draw_text_aligned;
 use render.font.font_default;
+use render.font.font_ui_pixel_height;
+use render.font.font_ui_reset_runtime;
+use render.font.font_ui_set_dpi;
 use render.font.font_system_compact;
 use render.font.font_system_ui_ref;
 use render.font.font_system_vector;
@@ -160,7 +163,7 @@ test "font can draw chinese glyphs" {
     try assert_eq_bool(ctx_pixel(&ctx, 11, 0) == white_expect, true);
 }
 
-test "ttf missing chinese glyphs fall back to builtin cjk bitmap" {
+test "ttf missing chinese glyphs prefer scalable cjk fallback before builtin bitmap" {
     var bytes: [byte: 1024] = [];
     var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 16, 16, 64, PixelFormat.ARGB8888));
     var asset: TtfFontAsset = ttf_font_asset_new();
@@ -171,17 +174,26 @@ test "ttf missing chinese glyphs fall back to builtin cjk bitmap" {
 
     const white_expect: Color = Color{ r: 255, g: 255, b: 255, a: 255 };
     const black_expect: Color = Color{ r: 0, g: 0, b: 0, a: 255 };
+    const system_cjk: &Font = font_system_ui_ref(12u8);
     ctx.clear(Color{ r: 0, g: 0, b: 0, a: 255 });
+    draw_text(&ctx, 0, 0, "中文", 6usize, &asset.font, Color{ r: 255, g: 255, b: 255, a: 255 });
+    if system_cjk != null {
+        try assert_eq_bool(text_width("中文", 6usize, &asset.font) >= 18, true);
+        try assert_eq_i32(
+            text_width("中", 3usize, &asset.font) as i32,
+            text_width("中", 3usize, system_cjk) as i32
+        );
+        return;
+    }
 
     try assert_eq_i32(text_width("中文", 6usize, &asset.font) as i32, 16);
-    draw_text(&ctx, 0, 0, "中文", 6usize, &asset.font, Color{ r: 255, g: 255, b: 255, a: 255 });
-
     try assert_eq_bool(ctx_pixel(&ctx, 3, 0) == white_expect, true);
     try assert_eq_bool(ctx_pixel(&ctx, 7, 0) == black_expect, true);
     try assert_eq_bool(ctx_pixel(&ctx, 11, 0) == white_expect, true);
 }
 
-test "widget font resolves scalable system ui font by font size when available" {
+test "widget font resolves scalable ui font and honors dpi scaling in gui core" {
+    font_ui_reset_runtime();
     var small_style: Style = style_default();
     var large_style: Style = style_default();
     small_style.set_u32(StyleProp.FontSize, 11u32);
@@ -189,14 +201,18 @@ test "widget font resolves scalable system ui font by font size when available" 
 
     const small_font: &Font = widget_font(&small_style);
     const large_font: &Font = widget_font(&large_style);
-    const direct_font: &Font = font_system_ui_ref(14u8);
-    if direct_font == null || small_font.render_kind != FontRenderKind.TrueTypeOutline || large_font.render_kind != FontRenderKind.TrueTypeOutline {
-        return;
-    }
-
+    try assert_eq_bool(small_font.render_kind == FontRenderKind.TrueTypeOutline, true);
+    try assert_eq_bool(large_font.render_kind == FontRenderKind.TrueTypeOutline, true);
     try assert_eq_i32(small_font.height as i32, 11);
     try assert_eq_i32(large_font.height as i32, 14);
-    try assert_eq_bool(text_width("中文", 6usize, small_font) < text_width("中文", 6usize, large_font), true);
+    try assert_eq_bool(text_width("Hint", 4usize, small_font) < text_width("Hint", 4usize, large_font), true);
+
+    font_ui_set_dpi(144u16);
+    const scaled_font: &Font = widget_font(&large_style);
+    try assert_eq_i32(font_ui_pixel_height(14u8) as i32, 21);
+    try assert_eq_i32(scaled_font.height as i32, 21);
+    try assert_eq_bool(text_width("Hint", 4usize, large_font) < text_width("Hint", 4usize, scaled_font), true);
+    font_ui_reset_runtime();
 }
 
 test "font antialiases diagonal edges" {

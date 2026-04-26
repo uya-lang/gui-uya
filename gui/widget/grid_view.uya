@@ -56,6 +56,17 @@ fn grid_render_obj(obj: &GuiObj, ctx: &RenderCtx) void {
 
 export const MAX_GRID_ITEMS: i32 = 128;
 
+export enum GridCellContentMode {
+    Fill,
+    Center,
+}
+
+export enum GridContentAlign {
+    Start,
+    Center,
+    End,
+}
+
 struct GridViewRenderAdapter : IGuiRenderCallback {}
 
 var GRID_VIEW_RENDER_ADAPTER: IGuiRenderCallback = GridViewRenderAdapter{};
@@ -64,9 +75,29 @@ export struct GridView : IContainer {
     widget: Widget,
     columns: u8,
     item_size: Size,
+    row_gap: u8,
+    col_gap: u8,
+    cell_padding: u8,
+    cell_content_mode: GridCellContentMode,
+    content_align_x: GridContentAlign,
+    content_align_y: GridContentAlign,
     items: [&GuiObj: 128],
     item_count: u16,
     scroll_y: i16,
+}
+
+fn grid_aligned_offset(align: GridContentAlign, outer_size: i32, content_size: i32) i16 {
+    const free_space: i32 = outer_size - content_size;
+    if free_space <= 0 {
+        return 0;
+    }
+    if align == GridContentAlign.Center {
+        return (free_space / 2) as i16;
+    }
+    if align == GridContentAlign.End {
+        return free_space as i16;
+    }
+    return 0;
 }
 
 GridViewRenderAdapter {
@@ -96,6 +127,12 @@ GridView {
             widget: widget,
             columns: 3,
             item_size: Size{ w: 56, h: 56 },
+            row_gap: 0u8,
+            col_gap: 0u8,
+            cell_padding: 0u8,
+            cell_content_mode: GridCellContentMode.Fill,
+            content_align_x: GridContentAlign.Start,
+            content_align_y: GridContentAlign.Start,
             items: [],
             item_count: 0,
             scroll_y: 0,
@@ -116,14 +153,35 @@ GridView {
 
     fn render(self: &Self, ctx: &RenderCtx) void {
         const inner: Rect = widget_draw_surface(&self.widget, ctx);
+        const area: Rect = self.widget.base.screen_area();
         const cols: i32 = self.columns as i32;
+        const step_x: i32 = self.item_size.w as i32 + self.col_gap as i32;
+        const step_y: i32 = self.item_size.h as i32 + self.row_gap as i32;
+        var row_count: i32 = 0;
+        if cols > 0 && self.item_count > 0u16 {
+            row_count = ((self.item_count as i32) + cols - 1) / cols;
+        }
+        var used_cols: i32 = self.item_count as i32;
+        if used_cols > cols {
+            used_cols = cols;
+        }
+        var content_w: i32 = 0;
+        var content_h: i32 = 0;
+        if used_cols > 0 {
+            content_w = used_cols * self.item_size.w as i32 + (used_cols - 1) * self.col_gap as i32;
+        }
+        if row_count > 0 {
+            content_h = row_count * self.item_size.h as i32 + (row_count - 1) * self.row_gap as i32;
+        }
+        const content_x: i16 = inner.x + grid_aligned_offset(self.content_align_x, inner.w as i32, content_w);
+        const content_y: i16 = inner.y + grid_aligned_offset(self.content_align_y, inner.h as i32, content_h);
         ctx.push_clip(inner);
         var idx: i32 = 0;
         while idx < self.item_count as i32 {
             const row: i32 = idx / cols;
             const col: i32 = idx % cols;
-            const cell_x: i16 = inner.x + (col * self.item_size.w as i32) as i16;
-            const cell_y: i16 = inner.y + (row * self.item_size.h as i32 - self.scroll_y as i32) as i16;
+            const cell_x: i16 = content_x + (col * step_x) as i16;
+            const cell_y: i16 = content_y + (row * step_y - self.scroll_y as i32) as i16;
             const cell: Rect = Rect{
                 x: cell_x,
                 y: cell_y,
@@ -139,10 +197,47 @@ GridView {
             ctx.draw_round_rect(cell, 6, Color{ r: 234, g: 238, b: 245, a: 255 }, 1);
             const child: &GuiObj = self.items[idx as usize];
             if child != null {
-                child.x = cell.x - self.widget.base.x;
-                child.y = cell.y - self.widget.base.y;
-                child.w = cell.w;
-                child.h = cell.h;
+                const cell_pad: i16 = self.cell_padding as i16;
+                var content_w: i32 = cell.w as i32 - cell_pad as i32 * 2;
+                var content_h: i32 = cell.h as i32 - cell_pad as i32 * 2;
+                if content_w < 0 {
+                    content_w = 0;
+                }
+                if content_h < 0 {
+                    content_h = 0;
+                }
+                var child_rect: Rect = Rect{
+                    x: cell.x + cell_pad,
+                    y: cell.y + cell_pad,
+                    w: (content_w as! u16).value,
+                    h: (content_h as! u16).value,
+                };
+                if self.cell_content_mode == GridCellContentMode.Center {
+                    var desired_w: i32 = child.w as i32;
+                    var desired_h: i32 = child.h as i32;
+                    if desired_w > content_w {
+                        desired_w = content_w;
+                    }
+                    if desired_h > content_h {
+                        desired_h = content_h;
+                    }
+                    if desired_w < 0 {
+                        desired_w = 0;
+                    }
+                    if desired_h < 0 {
+                        desired_h = 0;
+                    }
+                    child_rect = Rect{
+                        x: child_rect.x + ((content_w - desired_w) / 2) as i16,
+                        y: child_rect.y + ((content_h - desired_h) / 2) as i16,
+                        w: (desired_w as! u16).value,
+                        h: (desired_h as! u16).value,
+                    };
+                }
+                child.x = child_rect.x - area.x;
+                child.y = child_rect.y - area.y;
+                child.w = child_rect.w;
+                child.h = child_rect.h;
                 child.render(ctx);
             }
             idx = idx + 1;

@@ -1,6 +1,7 @@
 use core.event.Event;
 use core.event.EventType;
 use core.event.InputDev;
+use core.event.event_point;
 use core.event_dispatch.EventDispatcher;
 use core.event_dispatch.event_dispatcher_new;
 use core.obj.gui_obj_register;
@@ -11,6 +12,12 @@ use core.color.Color;
 use core.point.POINT_ZERO;
 use core.point.Point;
 use core.rect.Rect;
+use examples.demo_clock.render_demo_clock;
+use examples.demo_dashboard.render_demo_dashboard_state;
+use examples.demo_game.render_demo_game_state;
+use examples.demo_music.render_demo_music_state;
+use examples.demo_perf.render_demo_perf;
+use examples.demo_settings.render_demo_settings_state;
 use examples.phase4_smoke.run_phase4_smoke;
 use examples.phase6_smoke.run_phase6_smoke;
 use libc.snprintf;
@@ -38,6 +45,9 @@ use sim.common.SIM_KEY_UP;
 use sim.config.SimConfig;
 use sim.config.SimDemoKind;
 use sim.config.sim_config_default;
+use sim.config.sim_demo_default_height;
+use sim.config.sim_demo_default_width;
+use sim.config.sim_demo_is_phase;
 use sim.config.sim_demo_name;
 use sim.profiler.ProfilerSnapshot;
 use sim.profiler.SimProfiler;
@@ -87,6 +97,21 @@ const SIM_PREVIEW_RGB_BYTES: [byte: 48] = [
     174, 213, 129,  255, 138, 101,  186, 104, 200,  255, 202, 40,
     144, 202, 249,  129, 212, 250,  174, 234, 0,    255, 204, 128
 ];
+const STANDALONE_DRAG_NONE: i32 = 0;
+const STANDALONE_DRAG_MUSIC_PROGRESS: i32 = 1;
+const STANDALONE_DRAG_SETTINGS_BRIGHTNESS: i32 = 2;
+const MUSIC_TRACK_COUNT: i32 = 3;
+const SETTINGS_PANEL_X: i16 = 40;
+const SETTINGS_PANEL_Y: i16 = 32;
+const DASHBOARD_SHELL_X: i16 = 24;
+const DASHBOARD_SHELL_Y: i16 = 24;
+const DASHBOARD_BUTTON_X: i16 = 416;
+const DASHBOARD_BUTTON_Y: i16 = 110;
+const DASHBOARD_BUTTON_W: i16 = 128;
+const DASHBOARD_BUTTON_H: i16 = 56;
+const DASHBOARD_BUTTON_STEP_Y: i16 = 66;
+const GAME_BOARD_X: i16 = 32;
+const GAME_BOARD_Y: i16 = 32;
 
 export struct SimApp {
     config: SimConfig,
@@ -129,9 +154,20 @@ export struct SimApp {
     phase4_result: i32,
     phase6_result: i32,
     last_chart_tick_ms: u32,
+    standalone_anim_tick_ms: u32,
     pending_exit: bool,
     pending_screenshot: bool,
     pending_fullscreen_toggle: bool,
+    music_track_idx: i32,
+    music_playing: bool,
+    music_progress: i32,
+    settings_wifi: bool,
+    settings_alerts: bool,
+    settings_brightness: i32,
+    dashboard_metric: i32,
+    game_score: i32,
+    game_paused: bool,
+    standalone_drag_target: i32,
 }
 
 struct AppButtonClickAdapter : IWidgetEventCallback {}
@@ -151,6 +187,16 @@ fn sim_chart_sample(value: i32, taps: i32, wheel: i16) i32 {
         sample = 100;
     }
     return sample;
+}
+
+fn sim_clamp_i32(value: i32, min: i32, max: i32) i32 {
+    if value < min {
+        return min;
+    }
+    if value > max {
+        return max;
+    }
+    return value;
 }
 
 AppButtonClickAdapter {
@@ -206,8 +252,13 @@ SimApp {
         self.pending_screenshot = false;
         self.pending_fullscreen_toggle = false;
         self.last_chart_tick_ms = 0u32;
-        self.phase4_result = run_phase4_smoke();
+        self.standalone_anim_tick_ms = 0u32;
+        self.reset_standalone_demo_state(config.demo);
         self.phase6_result = -2;
+        self.phase4_result = -2;
+        if sim_demo_is_phase(config.demo) {
+            self.phase4_result = run_phase4_smoke();
+        }
         if config.demo == SimDemoKind.Phase6 {
             self.phase6_result = run_phase6_smoke();
         }
@@ -380,27 +431,21 @@ SimApp {
     }
 
     fn refresh_phase_label(self: &Self) void {
-        if self.phase6_result == -2 {
-            _ = snprintf(
-                &self.phase_text[0],
-                SIM_TEXT_CAPACITY as usize,
-                "阶段4=%s  阶段6=待运行" as &const byte,
-                self.phase_ok_text(self.phase4_result)
-            );
-        } else {
-            _ = snprintf(
-                &self.phase_text[0],
-                SIM_TEXT_CAPACITY as usize,
-                "阶段4=%s  阶段6=%s" as &const byte,
-                self.phase_ok_text(self.phase4_result),
-                self.phase_ok_text(self.phase6_result)
-            );
-        }
+        _ = snprintf(
+            &self.phase_text[0],
+            SIM_TEXT_CAPACITY as usize,
+            "阶段4=%s  阶段6=%s" as &const byte,
+            self.phase_ok_text(self.phase4_result),
+            self.phase_ok_text(self.phase6_result)
+        );
         self.phase_label.set_text(&self.phase_text[0]);
     }
 
     fn phase_ok_text(self: &Self, code: i32) &const byte {
         _ = self;
+        if code == -2 {
+            return "待运行";
+        }
         if code == 0 {
             return "正常";
         }
@@ -459,9 +504,242 @@ SimApp {
         _ = sim_copy_cstr(
             &self.help_text[0],
             SIM_TEXT_CAPACITY as usize,
-            "Esc退出 | P截图 | R录制 | L回放 | F11全屏 | 方向键或滚轮调节滑块"
+            "Esc退出 | P截图 | R录制 | L回放 | 1/6阶段 | C/M/S/D/G/B切换 demo"
         );
         self.help_label.set_text(&self.help_text[0]);
+    }
+
+    fn current_demo_origin_x(self: &Self) i16 {
+        var demo_w: i32 = sim_demo_default_width(self.config.demo) as i32;
+        var origin: i32 = (self.config.width as i32 - demo_w) / 2;
+        if origin < 0 {
+            origin = 0;
+        }
+        return (origin as! i16).value;
+    }
+
+    fn current_demo_origin_y(self: &Self) i16 {
+        var demo_h: i32 = sim_demo_default_height(self.config.demo) as i32;
+        var origin: i32 = (self.config.height as i32 - demo_h) / 2;
+        if origin < 0 {
+            origin = 0;
+        }
+        return (origin as! i16).value;
+    }
+
+    fn switch_demo(self: &Self, demo: SimDemoKind, status: &const byte) void {
+        self.config.demo = demo;
+        self.reset_standalone_demo_state(demo);
+        if demo == SimDemoKind.Phase4 {
+            self.phase4_result = run_phase4_smoke();
+        } else if demo == SimDemoKind.Phase6 {
+            if self.phase4_result == -2 {
+                self.phase4_result = run_phase4_smoke();
+            }
+            self.phase6_result = run_phase6_smoke();
+        }
+        self.refresh_title_label();
+        self.refresh_phase_label();
+        self.refresh_status_label(status);
+    }
+
+    fn render_selected_demo(self: &Self, ctx: &RenderCtx) void {
+        const origin_x: i16 = self.current_demo_origin_x();
+        const origin_y: i16 = self.current_demo_origin_y();
+        if self.config.demo == SimDemoKind.Clock {
+            render_demo_clock(ctx, origin_x, origin_y);
+            return;
+        }
+        if self.config.demo == SimDemoKind.Music {
+            render_demo_music_state(ctx, origin_x, origin_y, self.music_track_idx, self.music_playing, self.music_progress);
+            return;
+        }
+        if self.config.demo == SimDemoKind.Settings {
+            render_demo_settings_state(ctx, origin_x, origin_y, self.settings_wifi, self.settings_alerts, self.settings_brightness);
+            return;
+        }
+        if self.config.demo == SimDemoKind.Dashboard {
+            render_demo_dashboard_state(ctx, origin_x, origin_y, self.dashboard_metric);
+            return;
+        }
+        if self.config.demo == SimDemoKind.Game {
+            render_demo_game_state(ctx, origin_x, origin_y, self.game_score, self.game_paused);
+            return;
+        }
+        if self.config.demo == SimDemoKind.Perf {
+            render_demo_perf(ctx, origin_x, origin_y);
+        }
+    }
+
+    fn reset_standalone_demo_state(self: &Self, demo: SimDemoKind) void {
+        _ = demo;
+        self.music_track_idx = 1;
+        self.music_playing = false;
+        self.music_progress = 42;
+        self.settings_wifi = true;
+        self.settings_alerts = false;
+        self.settings_brightness = 68;
+        self.dashboard_metric = 0;
+        self.game_score = 128;
+        self.game_paused = false;
+        self.standalone_drag_target = STANDALONE_DRAG_NONE;
+        self.standalone_anim_tick_ms = 0u32;
+    }
+
+    fn standalone_local_point(self: &Self, point: Point) Point {
+        return Point{
+            x: (point.x as i32 - self.current_demo_origin_x() as i32) as i16,
+            y: (point.y as i32 - self.current_demo_origin_y() as i32) as i16,
+        };
+    }
+
+    fn standalone_rect_contains(self: &Self, point: Point, x: i16, y: i16, w: u16, h: u16) bool {
+        _ = self;
+        return Rect{ x: x, y: y, w: w, h: h }.contains(point);
+    }
+
+    fn standalone_slider_percent(self: &Self, point_x: i16, left: i16, width: u16) i32 {
+        _ = self;
+        const local: i32 = sim_clamp_i32(point_x as i32 - left as i32, 0, width as i32);
+        if width == 0u16 {
+            return 0;
+        }
+        return (local * 100) / width as i32;
+    }
+
+    fn select_music_track(self: &Self, idx: i32) void {
+        self.music_track_idx = sim_clamp_i32(idx, 0, MUSIC_TRACK_COUNT - 1);
+    }
+
+    fn handle_music_demo_touch(self: &Self, evt: &Event, local: Point) void {
+        if evt.event_type == EventType.Press {
+            if self.standalone_rect_contains(local, 352, 246, 216, 28) {
+                self.standalone_drag_target = STANDALONE_DRAG_MUSIC_PROGRESS;
+                self.music_progress = self.standalone_slider_percent(local.x, 352, 216);
+            }
+            return;
+        }
+        if evt.event_type == EventType.Drag {
+            if self.standalone_drag_target == STANDALONE_DRAG_MUSIC_PROGRESS {
+                self.music_progress = self.standalone_slider_percent(local.x, 352, 216);
+            }
+            return;
+        }
+        if evt.event_type == EventType.Release || evt.event_type == EventType.DragEnd {
+            self.standalone_drag_target = STANDALONE_DRAG_NONE;
+            return;
+        }
+        if evt.event_type != EventType.Click {
+            return;
+        }
+
+        if self.standalone_rect_contains(local, 40, 232, 132, 56) {
+            self.music_playing = !self.music_playing;
+            self.standalone_anim_tick_ms = 0u32;
+            return;
+        }
+        if self.standalone_rect_contains(local, 188, 232, 132, 56) {
+            self.select_music_track((self.music_track_idx + 1) % MUSIC_TRACK_COUNT);
+            self.music_progress = 0;
+            return;
+        }
+        if self.standalone_rect_contains(local, 352, 246, 216, 28) {
+            self.music_progress = self.standalone_slider_percent(local.x, 352, 216);
+            return;
+        }
+        if self.standalone_rect_contains(local, 32, 320, 576, 128) {
+            const row: i32 = (local.y as i32 - 320) / 36;
+            if row >= 0 && row < MUSIC_TRACK_COUNT {
+                self.select_music_track(row);
+                self.music_progress = 0;
+            }
+        }
+    }
+
+    fn handle_settings_demo_touch(self: &Self, evt: &Event, local: Point) void {
+        if evt.event_type == EventType.Press {
+            if self.standalone_rect_contains(local, SETTINGS_PANEL_X + 40, SETTINGS_PANEL_Y + 312, 480, 20) {
+                self.standalone_drag_target = STANDALONE_DRAG_SETTINGS_BRIGHTNESS;
+                self.settings_brightness = self.standalone_slider_percent(local.x, SETTINGS_PANEL_X + 40, 480);
+            }
+            return;
+        }
+        if evt.event_type == EventType.Drag {
+            if self.standalone_drag_target == STANDALONE_DRAG_SETTINGS_BRIGHTNESS {
+                self.settings_brightness = self.standalone_slider_percent(local.x, SETTINGS_PANEL_X + 40, 480);
+            }
+            return;
+        }
+        if evt.event_type == EventType.Release || evt.event_type == EventType.DragEnd {
+            self.standalone_drag_target = STANDALONE_DRAG_NONE;
+            return;
+        }
+        if evt.event_type != EventType.Click {
+            return;
+        }
+
+        if self.standalone_rect_contains(local, SETTINGS_PANEL_X + 416, SETTINGS_PANEL_Y + 92, 52, 30) {
+            self.settings_wifi = !self.settings_wifi;
+            return;
+        }
+        if self.standalone_rect_contains(local, SETTINGS_PANEL_X + 416, SETTINGS_PANEL_Y + 164, 52, 30) {
+            self.settings_alerts = !self.settings_alerts;
+            return;
+        }
+        if self.standalone_rect_contains(local, SETTINGS_PANEL_X + 40, SETTINGS_PANEL_Y + 312, 480, 20) {
+            self.settings_brightness = self.standalone_slider_percent(local.x, SETTINGS_PANEL_X + 40, 480);
+        }
+    }
+
+    fn handle_dashboard_demo_touch(self: &Self, evt: &Event, local: Point) void {
+        _ = self;
+        if evt.event_type != EventType.Click {
+            return;
+        }
+        if self.standalone_rect_contains(local, DASHBOARD_SHELL_X + DASHBOARD_BUTTON_X, DASHBOARD_SHELL_Y + DASHBOARD_BUTTON_Y, DASHBOARD_BUTTON_W, DASHBOARD_BUTTON_H) {
+            self.dashboard_metric = 0;
+        } else if self.standalone_rect_contains(local, DASHBOARD_SHELL_X + DASHBOARD_BUTTON_X, DASHBOARD_SHELL_Y + DASHBOARD_BUTTON_Y + DASHBOARD_BUTTON_STEP_Y, DASHBOARD_BUTTON_W, DASHBOARD_BUTTON_H) {
+            self.dashboard_metric = 1;
+        } else if self.standalone_rect_contains(local, DASHBOARD_SHELL_X + DASHBOARD_BUTTON_X, DASHBOARD_SHELL_Y + DASHBOARD_BUTTON_Y + DASHBOARD_BUTTON_STEP_Y * 2, DASHBOARD_BUTTON_W, DASHBOARD_BUTTON_H) {
+            self.dashboard_metric = 2;
+        }
+    }
+
+    fn handle_game_demo_touch(self: &Self, evt: &Event, local: Point) void {
+        if evt.event_type != EventType.Click {
+            return;
+        }
+        if self.standalone_rect_contains(local, GAME_BOARD_X + 360, GAME_BOARD_Y + 140, 160, 56) {
+            self.game_score = 128;
+            self.game_paused = false;
+            return;
+        }
+        if self.standalone_rect_contains(local, GAME_BOARD_X + 360, GAME_BOARD_Y + 220, 160, 56) {
+            self.game_paused = !self.game_paused;
+            return;
+        }
+        if self.standalone_rect_contains(local, GAME_BOARD_X + 48, GAME_BOARD_Y + 96, 240, 240) && !self.game_paused {
+            self.game_score = sim_clamp_i32(self.game_score + 4, 0, 9999);
+        }
+    }
+
+    fn handle_standalone_touch_event(self: &Self, evt: &Event) void {
+        const local: Point = self.standalone_local_point(evt.point());
+        if self.config.demo == SimDemoKind.Music {
+            self.handle_music_demo_touch(evt, local);
+            return;
+        }
+        if self.config.demo == SimDemoKind.Settings {
+            self.handle_settings_demo_touch(evt, local);
+            return;
+        }
+        if self.config.demo == SimDemoKind.Dashboard {
+            self.handle_dashboard_demo_touch(evt, local);
+            return;
+        }
+        if self.config.demo == SimDemoKind.Game {
+            self.handle_game_demo_touch(evt, local);
+        }
     }
 
     fn on_button_click(self: &Self) void {
@@ -515,6 +793,16 @@ SimApp {
 
     fn update(self: &Self, delta_ms: u32, now_ms: u32) void {
         _ = delta_ms;
+        if self.config.demo == SimDemoKind.Music && self.music_playing {
+            if self.standalone_anim_tick_ms == 0u32 || now_ms - self.standalone_anim_tick_ms >= 120u32 {
+                self.standalone_anim_tick_ms = now_ms;
+                self.music_progress = self.music_progress + 1;
+                if self.music_progress > 100 {
+                    self.music_progress = 0;
+                    self.select_music_track((self.music_track_idx + 1) % MUSIC_TRACK_COUNT);
+                }
+            }
+        }
         if self.toggle.checked && (self.last_chart_tick_ms == 0u32 || now_ms - self.last_chart_tick_ms >= 140u32) {
             self.last_chart_tick_ms = now_ms;
             if self.chart.point_count >= 60u16 {
@@ -538,6 +826,11 @@ SimApp {
     }
 
     fn render(self: &Self, ctx: &RenderCtx) void {
+        if !sim_demo_is_phase(self.config.demo) {
+            ctx.clear(Color{ r: 226, g: 232, b: 240, a: 255 });
+            self.render_selected_demo(ctx);
+            return;
+        }
         ctx.clear(Color{ r: 241, g: 245, b: 249, a: 255 });
         self.page.render(ctx);
     }
@@ -555,6 +848,11 @@ SimApp {
         if evt.dev_type == InputDev.Touch {
             self.last_pointer = evt.point();
             self.record_touch_edge(evt);
+            if !sim_demo_is_phase(self.config.demo) {
+                self.handle_standalone_touch_event(evt);
+                self.refresh_input_label();
+                return;
+            }
             var working: Event = evt[0];
             _ = self.dispatcher.dispatch(working, &self.tree);
             self.refresh_input_label();
@@ -575,12 +873,50 @@ SimApp {
         if record {
             _ = self.recorder.record_event(now_ms, RecorderEventKind.Hover, hover_point.x, hover_point.y, 0, 0u16);
         }
+        if !sim_demo_is_phase(self.config.demo) {
+            self.refresh_input_label();
+            return;
+        }
         _ = self.dispatcher.process_hover(&self.tree, hover_point, now_ms);
         self.refresh_input_label();
     }
 
     fn handle_recorded_event(self: &Self, evt: &RecordedEvent, now_ms: u32) void {
         const point: Point = Point{ x: evt.x, y: evt.y };
+        if !sim_demo_is_phase(self.config.demo) {
+            if evt.kind == RecorderEventKind.Hover {
+                self.handle_hover_coords(point.x, point.y, now_ms, false);
+                return;
+            }
+            if evt.kind == RecorderEventKind.TouchDown {
+                self.last_pointer = point;
+                var press_evt: Event = event_point(EventType.Press, InputDev.Touch, -1, now_ms, point);
+                self.handle_standalone_touch_event(&press_evt);
+                self.refresh_input_label();
+                return;
+            }
+            if evt.kind == RecorderEventKind.TouchUp {
+                self.last_pointer = point;
+                var release_evt: Event = event_point(EventType.Release, InputDev.Touch, -1, now_ms, point);
+                self.handle_standalone_touch_event(&release_evt);
+                var click_evt: Event = event_point(EventType.Click, InputDev.Touch, -1, now_ms, point);
+                self.handle_standalone_touch_event(&click_evt);
+                self.refresh_input_label();
+                return;
+            }
+            if evt.kind == RecorderEventKind.KeyDown {
+                self.handle_key_event(evt.key_code, true, now_ms, false);
+                return;
+            }
+            if evt.kind == RecorderEventKind.KeyUp {
+                self.handle_key_event(evt.key_code, false, now_ms, false);
+                return;
+            }
+            if evt.kind == RecorderEventKind.Wheel {
+                self.handle_wheel_event(evt.value as i16, now_ms, false);
+                return;
+            }
+        }
         if evt.kind == RecorderEventKind.Hover {
             self.handle_hover_coords(point.x, point.y, now_ms, false);
             return;
@@ -613,6 +949,19 @@ SimApp {
     fn handle_wheel_event(self: &Self, delta: i16, now_ms: u32, record: bool) void {
         _ = now_ms;
         self.last_wheel = delta;
+        if !sim_demo_is_phase(self.config.demo) {
+            const local: Point = self.standalone_local_point(self.last_pointer);
+            if self.config.demo == SimDemoKind.Music && self.standalone_rect_contains(local, 352, 246, 216, 28) {
+                self.music_progress = sim_clamp_i32(self.music_progress + delta as i32 * 4, 0, 100);
+            } else if self.config.demo == SimDemoKind.Settings && self.standalone_rect_contains(local, 40, 312, 480, 20) {
+                self.settings_brightness = sim_clamp_i32(self.settings_brightness + delta as i32 * 4, 0, 100);
+            }
+            if record {
+                _ = self.recorder.record_event(now_ms, RecorderEventKind.Wheel, self.last_pointer.x, self.last_pointer.y, delta as i32, 0u16);
+            }
+            self.refresh_input_label();
+            return;
+        }
         self.slider.set_value(self.slider.get_value() + delta as i32 * 4);
         if record {
             _ = self.recorder.record_event(now_ms, RecorderEventKind.Wheel, self.last_pointer.x, self.last_pointer.y, delta as i32, 0u16);
@@ -656,13 +1005,21 @@ SimApp {
                     self.refresh_status_label("没有可用回放");
                 }
             } else if key_code == '1' as u16 {
-                self.phase4_result = run_phase4_smoke();
-                self.refresh_phase_label();
-                self.refresh_status_label("已重跑阶段4");
+                self.switch_demo(SimDemoKind.Phase4, "已切到阶段4");
             } else if key_code == '6' as u16 {
-                self.phase6_result = run_phase6_smoke();
-                self.refresh_phase_label();
-                self.refresh_status_label("已重跑阶段6");
+                self.switch_demo(SimDemoKind.Phase6, "已切到阶段6");
+            } else if key_code == 'c' as u16 || key_code == 'C' as u16 {
+                self.switch_demo(SimDemoKind.Clock, "已切到时钟 demo");
+            } else if key_code == 'm' as u16 || key_code == 'M' as u16 {
+                self.switch_demo(SimDemoKind.Music, "已切到音乐 demo");
+            } else if key_code == 's' as u16 || key_code == 'S' as u16 {
+                self.switch_demo(SimDemoKind.Settings, "已切到设置 demo");
+            } else if key_code == 'd' as u16 || key_code == 'D' as u16 {
+                self.switch_demo(SimDemoKind.Dashboard, "已切到看板 demo");
+            } else if key_code == 'g' as u16 || key_code == 'G' as u16 {
+                self.switch_demo(SimDemoKind.Game, "已切到游戏 demo");
+            } else if key_code == 'b' as u16 || key_code == 'B' as u16 {
+                self.switch_demo(SimDemoKind.Perf, "已切到性能 demo");
             } else if key_code == SIM_KEY_LEFT || key_code == SIM_KEY_DOWN {
                 self.slider.set_value(self.slider.get_value() - 4);
             } else if key_code == SIM_KEY_RIGHT || key_code == SIM_KEY_UP {
@@ -790,8 +1147,19 @@ export fn sim_app_new() SimApp {
         phase4_result: -1,
         phase6_result: -2,
         last_chart_tick_ms: 0u32,
+        standalone_anim_tick_ms: 0u32,
         pending_exit: false,
         pending_screenshot: false,
         pending_fullscreen_toggle: false,
+        music_track_idx: 1,
+        music_playing: false,
+        music_progress: 42,
+        settings_wifi: true,
+        settings_alerts: false,
+        settings_brightness: 68,
+        dashboard_metric: 0,
+        game_score: 128,
+        game_paused: false,
+        standalone_drag_target: STANDALONE_DRAG_NONE,
     };
 }

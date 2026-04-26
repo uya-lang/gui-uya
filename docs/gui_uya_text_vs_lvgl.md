@@ -29,6 +29,18 @@ build/text_compare/uya_text_render_samples.png
 
 这 4 组基本覆盖了当前仓库实际存在的文字路径：内置位图字、简化矢量字、纯 Uya TTF 轮廓栅格化，以及 hinting 开关对小字号的影响。
 
+如需生成一张可直接对照的 LVGL 样张，可运行：
+
+```bash
+make lvgl-text-compare
+```
+
+会生成：
+
+```text
+build/text_compare/lvgl_text_render_samples.bmp
+```
+
 当前样张已经优化为：
 
 - 每个面板上方显示 `1x` 原始尺寸
@@ -48,14 +60,14 @@ build/text_compare/uya_text_render_samples.png
 - 单色 `I1` framebuffer 保持硬边渲染
 - 内置 kerning：当前只覆盖少量硬编码字偶，例如 `AV`
 - TTF 路径：支持纯 Uya 轮廓解析、复合字形、glyph cache、小字号 hinting 开关，以及 `TTC` 集合字体
-- 默认 widget 字体现在会优先按 `font_size` 懒加载系统 CJK `TTC` 字体；缺字时可回退到内置位图字
-- 当前没有发现 RTL / BiDi / 阿拉伯文 shaping / 完整字体 fallback 链的实现
+- GUI 层默认 widget 字体现在会先按 `font_size` + DPI 解析系统 UI/CJK TTF/TTC，不可用时再回退到内嵌可缩放 UI TTF
+- 当前已经有一条实用 fallback 链：`UI/TTF -> 系统 CJK -> 内置位图`；但还没有 RTL / BiDi / 阿拉伯文 shaping / emoji 等更完整文本栈
 
 从样张能直接看出的现象是：
 
 - 内置位图字的边缘已经不是“纯硬锯齿”，但本质仍是小尺寸点阵字放大后的效果
 - `TTF hinted 11px` 比 `TTF plain 11px` 更收敛，竖线和斜线更稳
-- 核心保底中文仍保留 `8x8` 点阵，但默认控件路径在系统存在 CJK `TTC` 时，已经能切到可缩放字形
+- 核心保底中文仍保留 `8x8` 点阵，但默认控件和缺字 TTF 路径已经能优先切到可缩放中文字形
 
 ---
 
@@ -121,9 +133,10 @@ build/text_compare/uya_text_render_samples.png
 当前 UyaGUI：
 
 - 核心保底中文仍来自固定 `8x8` 点阵
-- Linux/hosted 默认 widget 路径现在会优先尝试系统 CJK `TTC`，成功时可得到可缩放中文字形
-- 优点是保底路径仍然占用可控，同时常见桌面环境已经能拿到更自然的中文边缘
-- 缺点是当前系统 CJK 字体仍依赖宿主环境，不是完全自带的字体资产方案
+- 默认 widget 路径现在会先走系统 UI/CJK TTF/TTC；在系统字体不可用时，才回退到仓库内可缓存的可缩放 UI TTF
+- 普通 TTF 路径在缺少中文字形时，也不再只剩 `8x8` 点阵保底，而是会先尝试系统 CJK fallback
+- 优点是英文/数字和中文都能在 GUI 层拿到更稳定的小字号观感，同时保底路径仍占用可控
+- 缺点是高质量 CJK 仍依赖宿主环境字体，不是完全自带的中文字体资产方案
 
 LVGL：
 
@@ -133,8 +146,8 @@ LVGL：
 结论：
 
 - 如果只看“当前仓库自带保底路径”，LVGL 接入外部字体引擎后的上限仍明显更高
-- 如果看当前 Linux/hosted 默认 widget 效果，UyaGUI 已经从“纯 8x8 保底”迈到“系统 CJK TTF + 保底回退”的阶段
-- 但 UyaGUI 还缺少自带字体资产、完整 fallback 链和复杂排版能力，距离 LVGL 的成熟字体生态仍有明显差距
+- 如果看当前 GUI 默认字体链路，UyaGUI 已经从“纯 8x8 保底”迈到“系统 UI/CJK TTF + 内嵌 UI fallback + 位图兜底”的阶段
+- 但 UyaGUI 还缺少自带中文字体资产、复杂排版能力，以及更广覆盖的 fallback 链，距离 LVGL 的成熟字体生态仍有明显差距
 
 ### 4.5 复杂脚本
 
@@ -151,7 +164,7 @@ LVGL：
 
 如果只比较“当前仓库已经落地的真实效果”，可以归纳成一句话：
 
-> UyaGUI 现在已经具备可用的英文字体渲染基线，TTF hinted 路径也已经摸到接近现代 GUI 字体链路的门槛；默认 widget 中文也开始接入系统 CJK TTF，但在自带字体资产、完整 fallback、复杂脚本和排版能力上，和 LVGL 的成熟字体生态相比还有明显差距。
+> UyaGUI 现在已经具备可用的英文字体渲染基线，TTF hinted 路径也已经摸到接近现代 GUI 字体链路的门槛；默认 widget 与缺字 TTF 中文都已经能接入可缩放 CJK fallback，但在自带中文字体资产、复杂脚本和更广文本生态上，和 LVGL 的成熟字体生态相比还有明显差距。
 
 更细一点：
 
@@ -166,7 +179,7 @@ LVGL：
 
 如果目标是把 UyaGUI 的文字效果继续往 LVGL 靠，优先级建议如下：
 
-1. 增加完整字体 fallback 链，而不是只做“TTF 缺字 -> 内置位图”兜底
+1. 把当前 `UI/TTF -> 系统 CJK -> 位图` 的 fallback 链继续扩展到 emoji / 更多脚本，而不是只覆盖 Latin/CJK 主路径
 2. 把当前“依赖系统 CJK TTC”的默认中文路径，升级成仓库自带、可缓存的 TTF/bitmap atlas 方案
 3. 扩大 kerning 覆盖，至少不要只停留在少量硬编码字偶
 4. 增加 RTL / BiDi / Arabic shaping 能力
