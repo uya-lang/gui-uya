@@ -126,7 +126,9 @@ make sim-headless SIM_HEADLESS_ARGS="--max-frames 5 --screenshot build/sim/headl
 
 - 默认字体为内置 `5x7` 位图字形
 - 英文、数字和常见标点可正常显示
-- 目前 UTF-8 非 ASCII 字符会回退为 `?`
+- 已支持 `U+4E00..U+9FFF` 常用 CJK 统一表意文字的内置 `8x8` 点阵显示
+- 常见全角标点会归一化到 ASCII 标点显示
+- 其余未覆盖的 Unicode 字符仍会回退为 `?`
 
 ## 交叉编译入口
 
@@ -207,7 +209,7 @@ make build-esp32
 - `make sim-build` 能完成链接，但由 Uya 生成的 C 文件仍会产生较多编译 warning；目前不影响 `make sim-run` 正常使用。
 - 当前截图输出为原始 framebuffer dump（`.uyafb`），尚未接入 PNG/BMP 编码。
 - Framebuffer 后端已具备首版显示链路，但输入侧 `indev_fb` 仍未补齐。
-- 默认内置字体当前只覆盖 ASCII 常用字符；若需要中文或更完整 Unicode，需要后续接入真正字体资源与字形栅格化链路。
+- 默认内置字体已支持 ASCII 与 `U+4E00..U+9FFF` 中文常用字，但仍未覆盖完整 Unicode 字体排版链路。
 
 ## 相关文件
 

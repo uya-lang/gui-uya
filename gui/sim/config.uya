@@ -43,9 +43,9 @@ export struct SimConfig {
 
 export fn sim_demo_name(kind: SimDemoKind) &const byte {
     if kind == SimDemoKind.Phase6 {
-        return "phase6" as &const byte;
+        return "阶段6" as &const byte;
     }
-    return "phase4" as &const byte;
+    return "阶段4" as &const byte;
 }
 
 export fn sim_backend_name(kind: SimBackendKind) &const byte {
@@ -67,7 +67,7 @@ export fn sim_config_default() SimConfig {
         show_help: false,
         profiler_report_every: 120u32,
         max_frames: 0u32,
-        title: "UyaGUI Linux Simulator" as &const byte,
+        title: "UyaGUI 模拟器" as &const byte,
         resource_root: "." as &const byte,
         fb_device_path: "" as &const byte,
         screenshot_path: "" as &const byte,

@@ -78,3 +78,19 @@ test "font glyphs are no longer placeholder boxes" {
     try assert_eq_bool(ctx_pixel(&ctx, 0, 3) == BLACK, true);
     try assert_eq_bool(ctx_pixel(&ctx, 2, 3) == white_expect, true);
 }
+
+test "font can draw chinese glyphs" {
+    var bytes: [byte: 1024] = [];
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 16, 16, 64, PixelFormat.ARGB8888));
+    const font: Font = font_default();
+    const white_expect: Color = Color{ r: 255, g: 255, b: 255, a: 255 };
+    const black_expect: Color = Color{ r: 0, g: 0, b: 0, a: 255 };
+
+    ctx.clear(Color{ r: 0, g: 0, b: 0, a: 255 });
+    try assert_eq_i32(text_width("中文", 6usize, &font) as i32, 16);
+    draw_text(&ctx, 0, 0, "中文", 6usize, &font, Color{ r: 255, g: 255, b: 255, a: 255 });
+
+    try assert_eq_bool(ctx_pixel(&ctx, 3, 0) == white_expect, true);
+    try assert_eq_bool(ctx_pixel(&ctx, 7, 0) == black_expect, true);
+    try assert_eq_bool(ctx_pixel(&ctx, 11, 0) == white_expect, true);
+}

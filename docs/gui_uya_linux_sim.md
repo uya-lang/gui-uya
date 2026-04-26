@@ -108,7 +108,11 @@ make sim-fb-run
 - 截图目前是原始 framebuffer dump（`.uyafb`），还没有接 PNG/BMP 编码
 - Framebuffer 专用后端已具备首版显示链路，但当前仍未实现 `indev_fb`
 - 当前机器上 `/dev/fb0` 存在但普通用户无权限，`--backend fb` 会清晰返回 `Permission denied`
-- 默认文本渲染已切到内置 `5x7` 位图字体，不再显示统一占位方框；当前非 ASCII 字符仍会退化为 `?`
+- 默认文本渲染已切到内置位图字体，不再显示统一占位方框
+  - ASCII：`5x7`
+  - 中文常用字：`U+4E00..U+9FFF` 的 `8x8` 内置点阵
+  - 常见全角标点会归一化到 ASCII 标点
+  - 其余未覆盖 Unicode 字符仍会退化为 `?`
 
 ---
 

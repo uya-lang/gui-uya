@@ -8,6 +8,9 @@ CC_BIN="${CC:-cc}"
 BUILD_DIR="${BUILD_DIR:-$ROOT_DIR/build/sim}"
 OUT_C="$BUILD_DIR/gui_uya_sim.c"
 OUT_BIN="$BUILD_DIR/gui_uya_sim"
+OUT_GEN_O="$BUILD_DIR/gui_uya_sim.generated.o"
+OUT_SDL_O="$BUILD_DIR/gui_uya_sim.sdl_host.o"
+OUT_FB_O="$BUILD_DIR/gui_uya_sim.fb_host.o"
 MODE="${MODE:-debug}"
 
 mkdir -p "$BUILD_DIR"
@@ -40,11 +43,28 @@ read -r -a SDL_LIBS <<<"$SDL_LIBS_STR"
 
 HOST_C="$ROOT_DIR/gui/platform/sdl2/sdl_host.c"
 FB_HOST_C="$ROOT_DIR/gui/platform/fb/fb_host.c"
+
+# 生成的 Uya C 代码会携带大量与宿主 libc / compiler 内建相关的噪声 warning，
+# 这里静默编译生成物，只保留我们手写 host glue 的真实 warning。
+"$CC_BIN" -std=c99 -g "$CC_OPT" -fno-builtin -fvisibility=hidden -w \
+    "${SDL_CFLAGS[@]}" \
+    -c "$OUT_C" \
+    -o "$OUT_GEN_O"
+
 "$CC_BIN" -std=c99 -Wall -Wextra -pedantic -g "$CC_OPT" -fvisibility=hidden \
     "${SDL_CFLAGS[@]}" \
-    "$OUT_C" \
-    "$HOST_C" \
-    "$FB_HOST_C" \
+    -c "$HOST_C" \
+    -o "$OUT_SDL_O"
+
+"$CC_BIN" -std=c99 -Wall -Wextra -pedantic -g "$CC_OPT" -fvisibility=hidden \
+    "${SDL_CFLAGS[@]}" \
+    -c "$FB_HOST_C" \
+    -o "$OUT_FB_O"
+
+"$CC_BIN" -g "$CC_OPT" \
+    "$OUT_GEN_O" \
+    "$OUT_SDL_O" \
+    "$OUT_FB_O" \
     -o "$OUT_BIN" \
     "${SDL_LIBS[@]}" \
     -ldl \

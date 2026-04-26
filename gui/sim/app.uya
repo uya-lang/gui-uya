@@ -220,7 +220,7 @@ SimApp {
         self.probe_resource_root();
         self.refresh_title_label();
         self.refresh_phase_label();
-        self.refresh_status_label("sim ready");
+        self.refresh_status_label("模拟器就绪");
         self.refresh_input_label();
         self.refresh_fs_label();
         self.refresh_metrics_label(0, 0u32, 0, 0u32, 0u32);
@@ -228,14 +228,14 @@ SimApp {
 
         if !sim_cstr_empty(self.config.record_path) {
             self.recorder.start_recording(0u32);
-            self.refresh_status_label("recording started");
+            self.refresh_status_label("开始录制");
         }
         if !sim_cstr_empty(self.config.playback_path) {
             if (self.recorder.load(self.config.playback_path) catch { 0u16; }) > 0u16 {
                 _ = self.recorder.begin_playback(0u32);
-                self.refresh_status_label("playback armed");
+                self.refresh_status_label("回放已装载");
             } else {
-                self.refresh_status_label("playback load failed");
+                self.refresh_status_label("回放加载失败");
             }
         }
         return true;
@@ -372,7 +372,7 @@ SimApp {
         _ = snprintf(
             &self.title_text[0],
             SIM_TEXT_CAPACITY as usize,
-            "%s  demo=%s" as &const byte,
+            "%s  演示=%s" as &const byte,
             self.config.title,
             sim_demo_name(self.config.demo)
         );
@@ -384,14 +384,14 @@ SimApp {
             _ = snprintf(
                 &self.phase_text[0],
                 SIM_TEXT_CAPACITY as usize,
-                "phase4=%s  phase6=pending" as &const byte,
+                "阶段4=%s  阶段6=待运行" as &const byte,
                 self.phase_ok_text(self.phase4_result)
             );
         } else {
             _ = snprintf(
                 &self.phase_text[0],
                 SIM_TEXT_CAPACITY as usize,
-                "phase4=%s  phase6=%s" as &const byte,
+                "阶段4=%s  阶段6=%s" as &const byte,
                 self.phase_ok_text(self.phase4_result),
                 self.phase_ok_text(self.phase6_result)
             );
@@ -402,9 +402,9 @@ SimApp {
     fn phase_ok_text(self: &Self, code: i32) &const byte {
         _ = self;
         if code == 0 {
-            return "ok";
+            return "正常";
         }
-        return "err";
+        return "失败";
     }
 
     fn refresh_status_label(self: &Self, text: &const byte) void {
@@ -413,11 +413,11 @@ SimApp {
     }
 
     fn refresh_fs_label(self: &Self) void {
-        const cache_state: &const byte = "ready";
+        const cache_state: &const byte = "就绪";
         _ = snprintf(
             &self.fs_text[0],
             SIM_TEXT_CAPACITY as usize,
-            "root=%s  fs=%luB  cache=%s" as &const byte,
+            "根=%s  文件=%luB  缓存=%s" as &const byte,
             self.config.resource_root,
             self.fs_probe_bytes as u64,
             cache_state
@@ -429,7 +429,7 @@ SimApp {
         _ = snprintf(
             &self.input_text[0],
             SIM_TEXT_CAPACITY as usize,
-            "ptr=%d,%d key=%u wheel=%d" as &const byte,
+            "指针=%d,%d 键=%u 滚轮=%d" as &const byte,
             self.last_pointer.x as i32,
             self.last_pointer.y as i32,
             self.last_key as u32,
@@ -443,7 +443,7 @@ SimApp {
         _ = snprintf(
             &self.metrics_text[0],
             SIM_TEXT_CAPACITY as usize,
-            "frame=%u avg=%u max=%u dirty=%d text=%u line=%u img=%u" as &const byte,
+            "帧=%u 均=%u 峰=%u 脏=%d 文=%u 线=%u 图=%u" as &const byte,
             frame_ms,
             snap.frame_avg_ms,
             snap.frame_max_ms,
@@ -459,7 +459,7 @@ SimApp {
         _ = sim_copy_cstr(
             &self.help_text[0],
             SIM_TEXT_CAPACITY as usize,
-            "Esc quit | P screenshot | R record | L playback | F11 fullscreen | arrows/wheel adjust slider"
+            "Esc退出 | P截图 | R录制 | L回放 | F11全屏 | 方向键或滚轮调节滑块"
         );
         self.help_label.set_text(&self.help_text[0]);
     }
@@ -473,7 +473,7 @@ SimApp {
         _ = snprintf(
             &self.status_text[0],
             SIM_TEXT_CAPACITY as usize,
-            "tap=%d switch=%s slider=%d" as &const byte,
+            "点击=%d 开关=%s 滑块=%d" as &const byte,
             self.tap_count,
             self.switch_text(self.toggle.checked),
             self.slider.get_value()
@@ -485,7 +485,7 @@ SimApp {
         _ = snprintf(
             &self.status_text[0],
             SIM_TEXT_CAPACITY as usize,
-            "slider=%d switch=%s taps=%d" as &const byte,
+            "滑块=%d 开关=%s 点击=%d" as &const byte,
             value,
             self.switch_text(self.toggle.checked),
             self.tap_count
@@ -497,7 +497,7 @@ SimApp {
         _ = snprintf(
             &self.status_text[0],
             SIM_TEXT_CAPACITY as usize,
-            "animation=%s slider=%d taps=%d" as &const byte,
+            "动画=%s 滑块=%d 点击=%d" as &const byte,
             self.switch_text(enabled),
             self.slider.get_value(),
             self.tap_count
@@ -508,9 +508,9 @@ SimApp {
     fn switch_text(self: &Self, enabled: bool) &const byte {
         _ = self;
         if enabled {
-            return "on";
+            return "开";
         }
-        return "off";
+        return "关";
     }
 
     fn update(self: &Self, delta_ms: u32, now_ms: u32) void {
@@ -636,33 +636,33 @@ SimApp {
                 self.pending_fullscreen_toggle = true;
             } else if key_code == 'p' as u16 || key_code == 'P' as u16 {
                 self.pending_screenshot = true;
-                self.refresh_status_label("screenshot requested");
+                self.refresh_status_label("已请求截图");
             } else if key_code == 'r' as u16 || key_code == 'R' as u16 {
                 if self.recorder.recording {
                     self.recorder.stop_recording();
                     const save_path: &const byte = self.recorder_path();
                     _ = self.recorder.save(save_path) catch {};
-                    self.refresh_status_label("recording saved");
+                    self.refresh_status_label("录制已保存");
                 } else {
                     self.recorder.start_recording(now_ms);
-                    self.refresh_status_label("recording started");
+                    self.refresh_status_label("开始录制");
                 }
             } else if key_code == 'l' as u16 || key_code == 'L' as u16 {
                 const load_path: &const byte = self.playback_path();
                 if (self.recorder.load(load_path) catch { 0u16; }) > 0u16 {
                     _ = self.recorder.begin_playback(now_ms);
-                    self.refresh_status_label("playback started");
+                    self.refresh_status_label("开始回放");
                 } else {
-                    self.refresh_status_label("playback unavailable");
+                    self.refresh_status_label("没有可用回放");
                 }
             } else if key_code == '1' as u16 {
                 self.phase4_result = run_phase4_smoke();
                 self.refresh_phase_label();
-                self.refresh_status_label("phase4 smoke reran");
+                self.refresh_status_label("已重跑阶段4");
             } else if key_code == '6' as u16 {
                 self.phase6_result = run_phase6_smoke();
                 self.refresh_phase_label();
-                self.refresh_status_label("phase6 smoke reran");
+                self.refresh_status_label("已重跑阶段6");
             } else if key_code == SIM_KEY_LEFT || key_code == SIM_KEY_DOWN {
                 self.slider.set_value(self.slider.get_value() - 4);
             } else if key_code == SIM_KEY_RIGHT || key_code == SIM_KEY_UP {
@@ -709,10 +709,10 @@ SimApp {
         const path: &const byte = self.screenshot_path();
         const written: !usize = screenshot_write_raw(path, fb);
         _ = written catch {
-            self.refresh_status_label("screenshot failed");
+            self.refresh_status_label("截图失败");
             return;
         };
-        self.refresh_status_label("screenshot written");
+        self.refresh_status_label("截图已写入");
     }
 
     fn screenshot_path(self: &Self) &const byte {
@@ -754,18 +754,18 @@ export fn sim_app_new() SimApp {
         page: Page.new("SimRoot"),
         left_panel: Panel.new(),
         right_panel: Panel.new(),
-        action_button: Button.filled("Tap +1"),
+        action_button: Button.filled("点击 +1"),
         toggle: Switch.new(true),
         slider: Slider.new(0, 100, 42),
         chart: Chart.new(),
         preview: Image.from_data(null),
-        title_label: Label.new("UyaGUI Linux Simulator"),
-        phase_label: Label.new("phase"),
-        status_label: Label.new("status"),
-        fs_label: Label.new("fs"),
-        input_label: Label.new("input"),
-        metrics_label: Label.new("metrics"),
-        help_label: Label.new("help"),
+        title_label: Label.new("UyaGUI 模拟器"),
+        phase_label: Label.new("阶段"),
+        status_label: Label.new("状态"),
+        fs_label: Label.new("文件"),
+        input_label: Label.new("输入"),
+        metrics_label: Label.new("指标"),
+        help_label: Label.new("帮助"),
         title_text: [],
         phase_text: [],
         status_text: [],

@@ -48,10 +48,17 @@ static void uya_gui_sim_init_host_allocators(void) {
         return;
     }
 
+#if defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
+#endif
     g_host_malloc_fn = (void *(*)(size_t))dlsym(RTLD_NEXT, "malloc");
     g_host_calloc_fn = (void *(*)(size_t, size_t))dlsym(RTLD_NEXT, "calloc");
     g_host_realloc_fn = (void *(*)(void *, size_t))dlsym(RTLD_NEXT, "realloc");
     g_host_free_fn = (void (*)(void *))dlsym(RTLD_NEXT, "free");
+#if defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
 }
 
 static void *uya_gui_sim_host_malloc(size_t size) {
