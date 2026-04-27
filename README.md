@@ -97,6 +97,7 @@ make sim-fb-run
 make sim-run SIM_ARGS="--demo phase6 --max-frames 120"
 make sim-run SIM_ARGS="--demo dashboard --scale 1"
 make sim-run SIM_ARGS="--demo music --scale 1"
+make sim-run SIM_ARGS="--demo novel --scale 1"
 make sim-run SIM_ARGS="--max-frames 3 --screenshot build/sim/manual.bmp"
 make sim-headless SIM_HEADLESS_ARGS="--max-frames 5 --screenshot build/sim/headless.bmp"
 make lvgl-dashboard-compare
@@ -112,7 +113,7 @@ dashboard 的成本，可运行 `make dashboard-compare LVGL_DASHBOARD_REBUILD=1
 
 可用运行参数：
 
-- `--demo phase4|phase6|clock|music|settings|dashboard|game|perf`
+- `--demo phase4|phase6|clock|music|settings|dashboard|game|perf|novel`
 - `--width N --height N --scale N`（默认 `640x480`，`scale=3`）
 - `--fullscreen | --windowed`
 - `--root PATH`
@@ -132,7 +133,8 @@ dashboard 的成本，可运行 `make dashboard-compare LVGL_DASHBOARD_REBUILD=1
 - `L`：回放录制
 - `F11`：切换全屏
 - `1` / `6`：切换 `phase4` / `phase6` 场景
-- `C` / `M` / `S` / `D` / `G` / `B`：切换 `clock` / `music` / `settings` / `dashboard` / `game` / `perf`
+- `C` / `M` / `S` / `D` / `G` / `B` / `N`：切换 `clock` / `music` / `settings` / `dashboard` / `game` / `perf` / `novel`
+- `Space`：在 `novel` demo 里切换自动滚屏
 
 当前内置字体说明：
 
@@ -197,6 +199,7 @@ make build-esp32
 - `gui/examples/demo_dashboard.uya`
 - `gui/examples/demo_game.uya`
 - `gui/examples/demo_perf.uya`
+- `gui/examples/demo_novel.uya`
 
 ## 文档导航
 

@@ -21,6 +21,7 @@ export enum SimDemoKind {
     Dashboard,
     Game,
     Perf,
+    Novel,
 }
 
 export enum SimBackendKind {
@@ -78,6 +79,9 @@ export fn sim_demo_name(kind: SimDemoKind) &const byte {
     if kind == SimDemoKind.Perf {
         return "性能" as &const byte;
     }
+    if kind == SimDemoKind.Novel {
+        return "小说" as &const byte;
+    }
     return "阶段4" as &const byte;
 }
 
@@ -87,7 +91,8 @@ export fn sim_demo_default_width(kind: SimDemoKind) u16 {
         || kind == SimDemoKind.Settings
         || kind == SimDemoKind.Dashboard
         || kind == SimDemoKind.Game
-        || kind == SimDemoKind.Perf {
+        || kind == SimDemoKind.Perf
+        || kind == SimDemoKind.Novel {
         return 640;
     }
     return 320;
@@ -99,7 +104,8 @@ export fn sim_demo_default_height(kind: SimDemoKind) u16 {
         || kind == SimDemoKind.Settings
         || kind == SimDemoKind.Dashboard
         || kind == SimDemoKind.Game
-        || kind == SimDemoKind.Perf {
+        || kind == SimDemoKind.Perf
+        || kind == SimDemoKind.Novel {
         return 480;
     }
     return 240;
@@ -192,6 +198,8 @@ export fn sim_config_from_runtime() SimConfig {
                     cfg.demo = SimDemoKind.Game;
                 } else if sim_cstr_eq(next as &const byte, "perf") {
                     cfg.demo = SimDemoKind.Perf;
+                } else if sim_cstr_eq(next as &const byte, "novel") {
+                    cfg.demo = SimDemoKind.Novel;
                 } else {
                     cfg.demo = SimDemoKind.Phase4;
                 }

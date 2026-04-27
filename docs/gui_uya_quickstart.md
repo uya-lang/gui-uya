@@ -84,3 +84,4 @@ page.render(&ctx);
 - [demo_dashboard.uya](/home/winger/uya/gui-uya/gui/examples/demo_dashboard.uya:1)
 - [demo_game.uya](/home/winger/uya/gui-uya/gui/examples/demo_game.uya:1)
 - [demo_perf.uya](/home/winger/uya/gui-uya/gui/examples/demo_perf.uya:1)
+- [demo_novel.uya](/home/winger/gui-uya/gui/examples/demo_novel.uya:1)

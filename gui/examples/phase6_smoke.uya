@@ -4,6 +4,7 @@ use examples.demo_clock.run_demo_clock;
 use examples.demo_dashboard.run_demo_dashboard;
 use examples.demo_game.run_demo_game;
 use examples.demo_music.run_demo_music;
+use examples.demo_novel.run_demo_novel;
 use examples.demo_perf.run_demo_perf;
 use examples.demo_settings.run_demo_settings;
 
@@ -26,11 +27,14 @@ export fn run_phase6_smoke() i32 {
     if run_demo_perf() != 0 {
         return 6;
     }
-    if run_custom_gauge_example() != 0 {
+    if run_demo_novel() != 0 {
         return 7;
     }
-    if run_custom_keyboard_example() != 0 {
+    if run_custom_gauge_example() != 0 {
         return 8;
+    }
+    if run_custom_keyboard_example() != 0 {
+        return 9;
     }
     return 0;
 }

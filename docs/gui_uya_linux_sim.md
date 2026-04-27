@@ -44,6 +44,7 @@ make sim-run SIM_ARGS="--demo phase6 --max-frames 120"
 # 直接显示更复杂的单独 demo
 make sim-run SIM_ARGS="--demo dashboard --scale 1"
 make sim-run SIM_ARGS="--demo music --scale 1"
+make sim-run SIM_ARGS="--demo novel --scale 1"
 
 # 打开调试 HUD / profiler
 make sim-debug
@@ -64,7 +65,7 @@ make sim-fb-run
 
 ## 0.2 运行参数
 
-- `--demo phase4|phase6|clock|music|settings|dashboard|game|perf`
+- `--demo phase4|phase6|clock|music|settings|dashboard|game|perf|novel`
 - `--gpu auto|software|gles2`（默认 `auto`，`auto` 会在 GLES2 不可用时回退到 software）
 - `--width N --height N --scale N`（默认 `640x480`，`scale=3`）
 - `--fullscreen | --windowed`
@@ -80,7 +81,8 @@ make sim-fb-run
 常用切换热键：
 
 - `1` / `6`：切到 `phase4` / `phase6`
-- `C` / `M` / `S` / `D` / `G` / `B`：切到 `clock` / `music` / `settings` / `dashboard` / `game` / `perf`
+- `C` / `M` / `S` / `D` / `G` / `B` / `N`：切到 `clock` / `music` / `settings` / `dashboard` / `game` / `perf` / `novel`
+- `Space`：在 `novel` demo 里切换自动滚屏
 
 ### Headless 专用入口
 

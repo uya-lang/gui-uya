@@ -55,6 +55,17 @@ void * uya_c_stb_font_create(const unsigned char * data, size_t data_len, uint32
     return backend;
 }
 
+int uya_c_stb_find_matching_font_offset(const unsigned char * data, size_t data_len, const char * name_utf8)
+{
+    int offset;
+
+    if(data == NULL || data_len < 12u || name_utf8 == NULL || name_utf8[0] == '\0') return -1;
+    offset = stbtt_FindMatchingFont(data, name_utf8, STBTT_MACSTYLE_DONTCARE);
+    if(offset < 0) return -1;
+    if((size_t)offset + 12u > data_len) return -1;
+    return offset;
+}
+
 void uya_c_stb_font_destroy(void * handle)
 {
     if(handle != NULL) free(handle);

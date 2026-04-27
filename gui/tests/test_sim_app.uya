@@ -12,6 +12,7 @@ use sim.app.SimApp;
 use sim.app.sim_app_new;
 use sim.common.sim_cstr_eq;
 use sim.common.SIM_KEY_F11;
+use sim.common.SIM_KEY_SPACE;
 use sim.config.SimConfig;
 use sim.config.SimDemoKind;
 use sim.config.SimGpuKind;
@@ -171,4 +172,28 @@ test "standalone dashboard and game demos react to touch and playback taps" {
     var pause_click: Event = event_point(EventType.Click, InputDev.Touch, -1, 60u32, Point{ x: 460, y: 290 });
     app.handle_translated_event(&pause_click);
     try assert_eq_bool(app.game_paused, true);
+}
+
+test "standalone novel demo exposes 10k+ chinese text and supports scrolling" {
+    var app: SimApp = sim_app_new();
+    var cfg: SimConfig = sim_config_default();
+    cfg.demo = SimDemoKind.Novel;
+    cfg.width = 640;
+    cfg.height = 480;
+    try assert_eq_bool(app.init(cfg), true);
+
+    var pixels: [byte: 1228800] = [];
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&pixels[0], cfg.width, cfg.height, cfg.width * 4u16, PixelFormat.ARGB8888));
+    app.render(&ctx);
+    try assert_eq_bool(ctx.stats.text_ops > 0u32, true);
+    try assert_eq_bool(app.novel_demo.char_count > 10000, true);
+    try assert_eq_bool(app.novel_demo.line_count > 200, true);
+
+    const scroll_before: i32 = app.novel_demo.scroll_y;
+    app.handle_wheel_event(-2, 80u32, false);
+    try assert_eq_bool(app.novel_demo.scroll_y > scroll_before, true);
+
+    try assert_eq_bool(app.novel_demo.auto_scroll, false);
+    app.handle_key_event(SIM_KEY_SPACE, true, 100u32, false);
+    try assert_eq_bool(app.novel_demo.auto_scroll, true);
 }
