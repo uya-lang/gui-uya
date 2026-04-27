@@ -8,10 +8,12 @@ use platform.disp.PixelFormat;
 use platform.disp.framebuffer_new;
 use render.ctx.RenderCtx;
 use render.ctx.render_ctx_new;
+use examples.demo_game.game_retained_new;
 use sim.app.SimApp;
 use sim.app.sim_app_new;
 use sim.common.sim_cstr_eq;
 use sim.common.SIM_KEY_F11;
+use sim.common.SIM_KEY_LEFT;
 use sim.common.SIM_KEY_SPACE;
 use sim.config.SimConfig;
 use sim.config.SimDemoKind;
@@ -127,7 +129,7 @@ test "standalone music demo reacts to touch click" {
     try assert_eq_bool(app.music_playing, true);
 }
 
-test "standalone dashboard and game demos react to touch and playback taps" {
+test "standalone dashboard and 2048 demos react to touch and playback taps" {
     var app: SimApp = sim_app_new();
     var cfg: SimConfig = sim_config_default();
     cfg.demo = SimDemoKind.Dashboard;
@@ -140,17 +142,38 @@ test "standalone dashboard and game demos react to touch and playback taps" {
     try assert_eq_i32(app.dashboard_metric, 1);
 
     app.switch_demo(SimDemoKind.Game, "test");
-    const score_before_click: i32 = app.game_score;
-    var game_click: Event = event_point(EventType.Click, InputDev.Touch, -1, 50u32, Point{ x: 180, y: 220 });
-    app.handle_translated_event(&game_click);
-    try assert_eq_bool(app.game_score > score_before_click, true);
+    app.game_demo = game_retained_new();
+    app.game_demo.ready = true;
+    app.game_demo.rng_state = 11u32;
+    app.game_demo.board[0] = 2;
+    app.game_demo.board[1] = 2;
 
-    const score_before_playback: i32 = app.game_score;
+    app.handle_key_event(SIM_KEY_LEFT, true, 50u32, false);
+    try assert_eq_i32(app.game_demo.board[0], 4);
+    try assert_eq_i32(app.game_demo.score, 4);
+
+    app.game_demo = game_retained_new();
+    app.game_demo.ready = true;
+    app.game_demo.rng_state = 19u32;
+    app.game_demo.board[0] = 2;
+    app.game_demo.board[4] = 2;
+    var press_evt: Event = event_point(EventType.Press, InputDev.Touch, -1, 60u32, Point{ x: 160, y: 260 });
+    var release_evt: Event = event_point(EventType.Release, InputDev.Touch, -1, 72u32, Point{ x: 160, y: 180 });
+    app.handle_translated_event(&press_evt);
+    app.handle_translated_event(&release_evt);
+    try assert_eq_i32(app.game_demo.board[0], 4);
+    try assert_eq_i32(app.game_demo.score, 4);
+
+    app.game_demo = game_retained_new();
+    app.game_demo.ready = true;
+    app.game_demo.rng_state = 27u32;
+    app.game_demo.board[0] = 2;
+    app.game_demo.board[4] = 2;
     var down: RecordedEvent = RecordedEvent{
         frame_offset: 0u32,
         kind: RecorderEventKind.TouchDown,
-        x: 180,
-        y: 220,
+        x: 160,
+        y: 260,
         value: 0,
         key_code: 0u16,
         reserved: 0u16,
@@ -158,20 +181,16 @@ test "standalone dashboard and game demos react to touch and playback taps" {
     var up: RecordedEvent = RecordedEvent{
         frame_offset: 10u32,
         kind: RecorderEventKind.TouchUp,
-        x: 180,
-        y: 220,
+        x: 160,
+        y: 180,
         value: 0,
         key_code: 0u16,
         reserved: 0u16,
     };
     app.handle_recorded_event(&down, 100u32);
     app.handle_recorded_event(&up, 110u32);
-    try assert_eq_bool(app.game_score > score_before_playback, true);
-
-    try assert_eq_bool(app.game_paused, false);
-    var pause_click: Event = event_point(EventType.Click, InputDev.Touch, -1, 60u32, Point{ x: 460, y: 290 });
-    app.handle_translated_event(&pause_click);
-    try assert_eq_bool(app.game_paused, true);
+    try assert_eq_i32(app.game_demo.board[0], 4);
+    try assert_eq_i32(app.game_demo.score, 4);
 }
 
 test "standalone novel demo exposes 10k+ chinese text and supports scrolling" {

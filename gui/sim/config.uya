@@ -74,7 +74,7 @@ export fn sim_demo_name(kind: SimDemoKind) &const byte {
         return "看板" as &const byte;
     }
     if kind == SimDemoKind.Game {
-        return "游戏" as &const byte;
+        return "2048" as &const byte;
     }
     if kind == SimDemoKind.Perf {
         return "性能" as &const byte;

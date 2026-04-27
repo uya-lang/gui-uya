@@ -31,7 +31,7 @@ fn sim_print_usage() void {
         "UyaGUI Linux Simulator\n"
         "  --backend sdl2|fb\n"
         "  --gpu auto|software|gles2\n"
-        "  --demo phase4|phase6|clock|music|settings|dashboard|game|perf|novel\n"
+        "  --demo phase4|phase6|clock|music|settings|dashboard|game(2048)|perf|novel\n"
         "  --width N --height N --scale N\n"
         "  --fullscreen | --windowed\n"
         "  --fb-dev /dev/fb0 --fb-tty /dev/tty --fb-input /dev/input/eventX\n"

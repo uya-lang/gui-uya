@@ -1,3 +1,7 @@
+use examples.demo_game.Game2048Retained;
+use examples.demo_game.GameMoveDir;
+use examples.demo_game.game_retained_move;
+use examples.demo_game.game_retained_new;
 use examples.demo_clock.run_demo_clock;
 use examples.demo_dashboard.run_demo_dashboard;
 use examples.demo_game.run_demo_game;
@@ -6,6 +10,7 @@ use examples.demo_novel.run_demo_novel;
 use examples.demo_perf.run_demo_perf;
 use examples.demo_settings.run_demo_settings;
 use examples.phase6_smoke.run_phase6_smoke;
+use std.testing.assert_eq_bool;
 use std.testing.assert_eq_i32;
 
 export const TEST_PHASE6_EXAMPLES_MODULE: i32 = 1;
@@ -22,4 +27,22 @@ test "phase6 demos render successfully" {
 
 test "phase6 smoke aggregates all examples" {
     try assert_eq_i32(run_phase6_smoke(), 0);
+}
+
+test "2048 move logic merges once per pair and updates score" {
+    var game: Game2048Retained = game_retained_new();
+    game.ready = true;
+    game.rng_state = 7u32;
+    game.board[0] = 2;
+    game.board[1] = 2;
+    game.board[4] = 4;
+    game.board[8] = 8;
+    game.board[9] = 8;
+
+    try assert_eq_bool(game_retained_move(&game, GameMoveDir.Left), true);
+    try assert_eq_i32(game.board[0], 4);
+    try assert_eq_i32(game.board[4], 4);
+    try assert_eq_i32(game.board[8], 16);
+    try assert_eq_i32(game.score, 20);
+    try assert_eq_i32(game.best_tile, 16);
 }

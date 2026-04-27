@@ -17,6 +17,12 @@ use examples.demo_dashboard.DashboardRetained;
 use examples.demo_dashboard.dashboard_retained_init;
 use examples.demo_dashboard.dashboard_retained_new;
 use examples.demo_dashboard.render_dashboard_retained_state;
+use examples.demo_game.Game2048Retained;
+use examples.demo_game.GameMoveDir;
+use examples.demo_game.game_retained_handle_touch;
+use examples.demo_game.game_retained_move;
+use examples.demo_game.game_retained_new;
+use examples.demo_game.game_retained_reset;
 use examples.demo_game.render_demo_game_state;
 use examples.demo_music.render_demo_music_state;
 use examples.demo_novel.NovelRetained;
@@ -52,6 +58,7 @@ use sim.common.sim_copy_cstr;
 use sim.common.sim_cstr_empty;
 use sim.common.sim_cstr_eq;
 use sim.common.SIM_KEY_DOWN;
+use sim.common.SIM_KEY_ENTER;
 use sim.common.SIM_KEY_ESCAPE;
 use sim.common.SIM_KEY_F11;
 use sim.common.SIM_KEY_LEFT;
@@ -128,8 +135,6 @@ const DASHBOARD_BUTTON_Y: i16 = 110;
 const DASHBOARD_BUTTON_W: i16 = 128;
 const DASHBOARD_BUTTON_H: i16 = 56;
 const DASHBOARD_BUTTON_STEP_Y: i16 = 66;
-const GAME_BOARD_X: i16 = 32;
-const GAME_BOARD_Y: i16 = 32;
 
 export struct SimApp {
     config: SimConfig,
@@ -184,8 +189,7 @@ export struct SimApp {
     settings_brightness: i32,
     dashboard_metric: i32,
     dashboard_retained: DashboardRetained,
-    game_score: i32,
-    game_paused: bool,
+    game_demo: Game2048Retained,
     novel_demo: NovelRetained,
     standalone_drag_target: i32,
 }
@@ -526,7 +530,7 @@ SimApp {
         _ = sim_copy_cstr(
             &self.help_text[0],
             SIM_TEXT_CAPACITY as usize,
-            "Esc退出 | P截图 | R录制 | L回放 | 1/6阶段 | C/M/S/D/G/B/N切换 demo"
+            "Esc退出 | P截图 | R录制 | L回放 | 1/6阶段 | C/M/S/D/G/B/N切换 | 2048: 方向键/拖动"
         );
         self.help_label.set_text(&self.help_text[0]);
     }
@@ -585,7 +589,7 @@ SimApp {
             return;
         }
         if self.config.demo == SimDemoKind.Game {
-            render_demo_game_state(ctx, origin_x, origin_y, self.game_score, self.game_paused);
+            render_demo_game_state(&self.game_demo, ctx, origin_x, origin_y);
             return;
         }
         if self.config.demo == SimDemoKind.Perf {
@@ -606,8 +610,7 @@ SimApp {
         self.settings_alerts = false;
         self.settings_brightness = 68;
         self.dashboard_metric = 0;
-        self.game_score = 128;
-        self.game_paused = false;
+        game_retained_reset(&self.game_demo);
         novel_retained_reset_state(&self.novel_demo);
         self.standalone_drag_target = STANDALONE_DRAG_NONE;
         self.standalone_anim_tick_ms = 0u32;
@@ -733,21 +736,7 @@ SimApp {
     }
 
     fn handle_game_demo_touch(self: &Self, evt: &Event, local: Point) void {
-        if evt.event_type != EventType.Click {
-            return;
-        }
-        if self.standalone_rect_contains(local, GAME_BOARD_X + 360, GAME_BOARD_Y + 140, 160, 56) {
-            self.game_score = 128;
-            self.game_paused = false;
-            return;
-        }
-        if self.standalone_rect_contains(local, GAME_BOARD_X + 360, GAME_BOARD_Y + 220, 160, 56) {
-            self.game_paused = !self.game_paused;
-            return;
-        }
-        if self.standalone_rect_contains(local, GAME_BOARD_X + 48, GAME_BOARD_Y + 96, 240, 240) && !self.game_paused {
-            self.game_score = sim_clamp_i32(self.game_score + 4, 0, 9999);
-        }
+        game_retained_handle_touch(&self.game_demo, evt, local);
     }
 
     fn handle_standalone_touch_event(self: &Self, evt: &Event) void {
@@ -1035,6 +1024,33 @@ SimApp {
         return false;
     }
 
+    fn handle_game_key_event(self: &Self, key_code: u16) bool {
+        if self.config.demo != SimDemoKind.Game {
+            return false;
+        }
+        if key_code == SIM_KEY_LEFT {
+            _ = game_retained_move(&self.game_demo, GameMoveDir.Left);
+            return true;
+        }
+        if key_code == SIM_KEY_RIGHT {
+            _ = game_retained_move(&self.game_demo, GameMoveDir.Right);
+            return true;
+        }
+        if key_code == SIM_KEY_UP {
+            _ = game_retained_move(&self.game_demo, GameMoveDir.Up);
+            return true;
+        }
+        if key_code == SIM_KEY_DOWN {
+            _ = game_retained_move(&self.game_demo, GameMoveDir.Down);
+            return true;
+        }
+        if key_code == SIM_KEY_SPACE || key_code == SIM_KEY_ENTER {
+            game_retained_reset(&self.game_demo);
+            return true;
+        }
+        return false;
+    }
+
     fn handle_key_event(self: &Self, key_code: u16, pressed: bool, now_ms: u32, record: bool) void {
         self.last_key = key_code;
         if record {
@@ -1083,11 +1099,12 @@ SimApp {
             } else if key_code == 'd' as u16 || key_code == 'D' as u16 {
                 self.switch_demo(SimDemoKind.Dashboard, "已切到看板 demo");
             } else if key_code == 'g' as u16 || key_code == 'G' as u16 {
-                self.switch_demo(SimDemoKind.Game, "已切到游戏 demo");
+                self.switch_demo(SimDemoKind.Game, "已切到 2048 demo");
             } else if key_code == 'b' as u16 || key_code == 'B' as u16 {
                 self.switch_demo(SimDemoKind.Perf, "已切到性能 demo");
             } else if key_code == 'n' as u16 || key_code == 'N' as u16 {
                 self.switch_demo(SimDemoKind.Novel, "已切到小说 demo");
+            } else if self.handle_game_key_event(key_code) {
             } else if self.handle_novel_key_event(key_code) {
             } else if key_code == SIM_KEY_LEFT || key_code == SIM_KEY_DOWN {
                 self.slider.set_value(self.slider.get_value() - 4);
@@ -1269,8 +1286,7 @@ export fn sim_app_new() SimApp {
         settings_brightness: 68,
         dashboard_metric: 0,
         dashboard_retained: dashboard_retained_new(),
-        game_score: 128,
-        game_paused: false,
+        game_demo: game_retained_new(),
         novel_demo: novel_retained_new(),
         standalone_drag_target: STANDALONE_DRAG_NONE,
     };
