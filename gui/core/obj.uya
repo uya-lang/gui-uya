@@ -57,6 +57,7 @@ export struct ObjFlags {
     clickable: bool,
     focusable: bool,
     dirty: bool,
+    layout_dirty: bool,
     reserved: u8,
 }
 
@@ -110,6 +111,7 @@ export fn obj_flags_default() ObjFlags {
         clickable: false,
         focusable: false,
         dirty: true,
+        layout_dirty: true,
         reserved: 0,
     };
 }
@@ -138,7 +140,6 @@ GuiObj {
         var current: &GuiObj = self.parent_ref;
         while current != null {
             current.flags.invalid = true;
-            current.flags.dirty = true;
             current = current.parent_ref;
         }
     }
@@ -167,6 +168,7 @@ GuiObj {
         self.w = r.w;
         self.h = r.h;
         self.flags.dirty = true;
+        self.flags.layout_dirty = true;
         const new_area: Rect = self.screen_area();
         self.invalidate_region(old_area.union_rect(new_area));
     }
@@ -201,7 +203,7 @@ GuiObj {
     fn layout(self: &Self, available: Rect) void {
         if self.layout_cb != null {
             self.layout_cb.invoke(self, available, self.user_data);
-            self.flags.dirty = false;
+            self.flags.layout_dirty = false;
             return;
         }
         if self.w == 0 {
@@ -210,7 +212,7 @@ GuiObj {
         if self.h == 0 {
             self.h = available.h;
         }
-        self.flags.dirty = false;
+        self.flags.layout_dirty = false;
     }
 
     fn render(self: &Self, ctx: &RenderCtx) void {
@@ -293,6 +295,7 @@ GuiObj {
         }
 
         self.child_tail = child;
+        self.flags.layout_dirty = true;
         self.invalidate();
     }
 
@@ -317,6 +320,7 @@ GuiObj {
         child.parent_idx = -1;
         child.sibling_prev = null;
         child.sibling_next = null;
+        self.flags.layout_dirty = true;
         self.invalidate();
     }
 
@@ -354,6 +358,7 @@ GuiObj {
         const old_area: Rect = self.screen_area();
         self.x = nx;
         self.y = ny;
+        self.flags.layout_dirty = true;
         self.invalidate_region(old_area.union_rect(self.screen_area()));
     }
 
@@ -364,6 +369,7 @@ GuiObj {
         const old_area: Rect = self.screen_area();
         self.w = nw;
         self.h = nh;
+        self.flags.layout_dirty = true;
         self.invalidate_region(old_area.union_rect(self.screen_area()));
     }
 

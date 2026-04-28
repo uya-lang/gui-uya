@@ -1,6 +1,8 @@
 use core.color.Color;
 use core.event.Event;
 use core.event.EventType;
+use core.obj_tree.ObjTree;
+use core.obj_tree.obj_tree_new;
 use core.point.POINT_ZERO;
 use core.point.Point;
 use core.rect.Rect;
@@ -23,6 +25,12 @@ use sim.common.sim_layout_x;
 use sim.common.sim_layout_y;
 use sim.common.SIM_DEFAULT_RES_HEIGHT;
 use sim.common.SIM_DEFAULT_RES_WIDTH;
+use style.StyleProp;
+use widget.btn.Button;
+use widget.canvas.Canvas;
+use widget.lbl.Label;
+use widget.page.Page;
+use widget.panel.Panel;
 
 extern fn malloc(size: usize) &void;
 extern fn free(ptr: &void) void;
@@ -68,6 +76,35 @@ export struct Game2048Retained {
     suppress_tap: bool,
     touch_start: Point,
     touch_last: Point,
+}
+
+export struct GamePageRetained {
+    tree: ObjTree,
+    page: Page,
+    board_canvas: Canvas,
+    side_panel: Panel,
+    title: Label,
+    subtitle: Label,
+    score_title: Label,
+    score_value: Label,
+    best_title: Label,
+    best_value: Label,
+    moves_title: Label,
+    moves_value: Label,
+    status_title: Label,
+    status_value: Label,
+    restart_btn: Button,
+    hint_title: Label,
+    hint_line1: Label,
+    hint_line2: Label,
+    board_pixels: &byte,
+    score_buf: [byte: 24],
+    best_buf: [byte: 24],
+    moves_buf: [byte: 24],
+    ready: bool,
+    board_snapshot: [i32: 16],
+    won_snapshot: bool,
+    game_over_snapshot: bool,
 }
 
 fn game_abs_i32(value: i32) i32 {
@@ -612,6 +649,252 @@ fn game_draw_tile(ctx: &RenderCtx, x: i16, y: i16, value: i32) void {
     _ = snprintf(&value_buf[0], 16usize, "%d" as &const byte, value);
     const font: &Font = game_font_tile(value);
     game_draw_centered_text(ctx, Rect{ x: rect_x, y: rect_y, w: tile_size, h: tile_size }, &value_buf[0], font, game_color_tile_text(value));
+}
+
+fn game_draw_board_canvas(canvas: &Canvas, game: &Game2048Retained) void {
+    if canvas == null || game == null {
+        return;
+    }
+    const layout: GameDemoLayout = game_layout(0, 0);
+    const board_w: u16 = layout.board_w;
+    const board_h: u16 = layout.board_h;
+    const cell_gap: i16 = layout.cell_gap;
+    const cell_size: i16 = (layout.cell_size as! i16).value;
+    canvas.begin_draw().clear(Color{ r: 181, g: 156, b: 126, a: 255 });
+    canvas.begin_draw().draw_round_rect(Rect{ x: 0, y: 0, w: board_w, h: board_h }, sim_layout_font(30u8), Color{ r: 151, g: 122, b: 91, a: 255 }, 1u8);
+
+    var row: i32 = 0;
+    while row < GAME_GRID_SIZE {
+        var col: i32 = 0;
+        while col < GAME_GRID_SIZE {
+            const x: i16 = cell_gap + col as i16 * (cell_size + cell_gap);
+            const y: i16 = cell_gap + row as i16 * (cell_size + cell_gap);
+            game_draw_tile(canvas.begin_draw(), x, y, game.board[game_board_index(row, col)]);
+            col = col + 1;
+        }
+        row = row + 1;
+    }
+
+    if game.won || game.game_over {
+        canvas.begin_draw().fill_round_rect(Rect{ x: 0, y: 0, w: board_w, h: board_h }, 30u8, Color{ r: 39, g: 23, b: 14, a: 138 });
+        game_draw_centered_text(
+            canvas.begin_draw(),
+            Rect{ x: 0, y: sim_layout_y(106), w: board_w, h: sim_layout_h(40u16) },
+            game_overlay_title(game),
+            game_font_overlay(),
+            Color{ r: 252, g: 245, b: 235, a: 255 }
+        );
+        game_draw_centered_text(
+            canvas.begin_draw(),
+            Rect{ x: sim_layout_x(20), y: sim_layout_y(150), w: board_w - sim_layout_w(40u16), h: sim_layout_h(28u16) },
+            game_overlay_subtitle(game),
+            game_font_body(),
+            Color{ r: 241, g: 221, b: 194, a: 255 }
+        );
+    }
+    canvas.end_draw();
+}
+
+fn game_board_changed(a: &GamePageRetained, game: &Game2048Retained) bool {
+    if a == null || game == null {
+        return false;
+    }
+    if a.won_snapshot != game.won || a.game_over_snapshot != game.game_over {
+        return true;
+    }
+    var i: i32 = 0;
+    while i < GAME_BOARD_CELLS {
+        if a.board_snapshot[i as usize] != game.board[i as usize] {
+            return true;
+        }
+        i = i + 1;
+    }
+    return false;
+}
+
+fn game_snapshot_board(a: &GamePageRetained, game: &Game2048Retained) void {
+    if a == null || game == null {
+        return;
+    }
+    var i: i32 = 0;
+    while i < GAME_BOARD_CELLS {
+        a.board_snapshot[i as usize] = game.board[i as usize];
+        i = i + 1;
+    }
+    a.won_snapshot = game.won;
+    a.game_over_snapshot = game.game_over;
+}
+
+export fn game_page_retained_new() GamePageRetained {
+    return GamePageRetained{
+        tree: obj_tree_new(),
+        page: Page.new("GamePage"),
+        board_canvas: Canvas.new(),
+        side_panel: Panel.new(),
+        title: Label.new("2048"),
+        subtitle: Label.new("把暖色卡片一路合成到 2048"),
+        score_title: Label.new("SCORE"),
+        score_value: Label.new("0"),
+        best_title: Label.new("BEST"),
+        best_value: Label.new("0"),
+        moves_title: Label.new("MOVES"),
+        moves_value: Label.new("0"),
+        status_title: Label.new("状态"),
+        status_value: Label.new(""),
+        restart_btn: Button.filled("新游戏"),
+        hint_title: Label.new("提示"),
+        hint_line1: Label.new("键盘: ↑↓←→"),
+        hint_line2: Label.new("触摸: 按住后拖动"),
+        board_pixels: null,
+        score_buf: [],
+        best_buf: [],
+        moves_buf: [],
+        ready: false,
+        board_snapshot: [],
+        won_snapshot: false,
+        game_over_snapshot: false,
+    };
+}
+
+export fn game_page_retained_init(page_state: &GamePageRetained, game: &Game2048Retained) void {
+    if page_state == null || page_state.ready {
+        return;
+    }
+    game_retained_init(game);
+    const layout: GameDemoLayout = game_layout(0, 0);
+
+    page_state.page.widget.at(0, 0);
+    page_state.page.widget.size(GAME_DEMO_W, GAME_DEMO_H);
+    page_state.page.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 243, g: 233, b: 217, a: 255 });
+
+    page_state.title.widget.at(sim_layout_x(40), sim_layout_y(30));
+    page_state.title.widget.size(sim_layout_w(180), sim_layout_h(28));
+    page_state.title.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(30u8) as u32);
+    page_state.title.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 88, g: 58, b: 36, a: 255 });
+    page_state.subtitle.widget.at(sim_layout_x(40), sim_layout_y(66));
+    page_state.subtitle.widget.size(sim_layout_w(300), sim_layout_h(18));
+    page_state.subtitle.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(14u8) as u32);
+    page_state.subtitle.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 132, g: 102, b: 76, a: 255 });
+
+    if page_state.board_pixels == null {
+        const bytes_len: usize = framebuffer_required_bytes(layout.board_w, layout.board_h, PixelFormat.ARGB8888);
+        page_state.board_pixels = malloc(bytes_len) as &byte;
+    }
+    if page_state.board_pixels != null {
+        page_state.board_canvas.attach_buffer(page_state.board_pixels, layout.board_w, layout.board_h, layout.board_w * 4u16, PixelFormat.ARGB8888);
+    }
+    page_state.board_canvas.widget.at(layout.board_x, layout.board_y);
+    page_state.board_canvas.widget.size(layout.board_w, layout.board_h);
+    page_state.board_canvas.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 0, g: 0, b: 0, a: 0 });
+    page_state.board_canvas.widget.base.style.set_color(StyleProp.BorderColor, Color{ r: 0, g: 0, b: 0, a: 0 });
+    page_state.board_canvas.widget.base.style.set_u32(StyleProp.BorderWidth, 0u32);
+
+    page_state.side_panel.widget.at(layout.panel_x, layout.panel_y);
+    page_state.side_panel.widget.size(layout.panel_w, layout.panel_h);
+    page_state.side_panel.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 248, g: 240, b: 228, a: 255 });
+    page_state.side_panel.widget.base.style.set_color(StyleProp.BorderColor, Color{ r: 207, g: 175, b: 133, a: 255 });
+    page_state.side_panel.widget.base.style.set_u32(StyleProp.Radius, 26u32);
+
+    page_state.score_title.widget.at(sim_layout_x(16), sim_layout_y(20));
+    page_state.score_title.widget.size(sim_layout_w(72), sim_layout_h(16));
+    page_state.score_title.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(13u8) as u32);
+    page_state.score_title.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 128, g: 101, b: 74, a: 255 });
+    page_state.score_value.widget.at(sim_layout_x(16), sim_layout_y(40));
+    page_state.score_value.widget.size(sim_layout_w(72), sim_layout_h(28));
+    page_state.score_value.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(24u8) as u32);
+    page_state.score_value.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 72, g: 49, b: 35, a: 255 });
+
+    page_state.best_title.widget.at(sim_layout_x(108), sim_layout_y(20));
+    page_state.best_title.widget.size(sim_layout_w(72), sim_layout_h(16));
+    page_state.best_title.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(13u8) as u32);
+    page_state.best_title.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 128, g: 101, b: 74, a: 255 });
+    page_state.best_value.widget.at(sim_layout_x(108), sim_layout_y(40));
+    page_state.best_value.widget.size(sim_layout_w(72), sim_layout_h(28));
+    page_state.best_value.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(24u8) as u32);
+    page_state.best_value.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 72, g: 49, b: 35, a: 255 });
+
+    page_state.moves_title.widget.at(sim_layout_x(16), sim_layout_y(100));
+    page_state.moves_title.widget.size(sim_layout_w(84), sim_layout_h(16));
+    page_state.moves_title.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(13u8) as u32);
+    page_state.moves_title.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 128, g: 101, b: 74, a: 255 });
+    page_state.moves_value.widget.at(sim_layout_x(16), sim_layout_y(120));
+    page_state.moves_value.widget.size(sim_layout_w(120), sim_layout_h(28));
+    page_state.moves_value.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(24u8) as u32);
+    page_state.moves_value.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 72, g: 49, b: 35, a: 255 });
+
+    page_state.status_title.widget.at(sim_layout_x(16), sim_layout_y(188));
+    page_state.status_title.widget.size(sim_layout_w(64), sim_layout_h(16));
+    page_state.status_title.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(13u8) as u32);
+    page_state.status_title.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 118, g: 93, b: 69, a: 255 });
+    page_state.status_value.widget.at(sim_layout_x(16), sim_layout_y(212));
+    page_state.status_value.widget.size(sim_layout_w(176), sim_layout_h(48));
+    page_state.status_value.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(16u8) as u32);
+    page_state.status_value.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 90, g: 64, b: 44, a: 255 });
+
+    page_state.restart_btn.widget.at(sim_layout_x(16), sim_layout_y(272));
+    page_state.restart_btn.widget.size(layout.restart_w, layout.restart_h);
+    page_state.restart_btn.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(16u8) as u32);
+
+    page_state.hint_title.widget.at(sim_layout_x(16), sim_layout_y(340));
+    page_state.hint_title.widget.size(sim_layout_w(64), sim_layout_h(16));
+    page_state.hint_title.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(13u8) as u32);
+    page_state.hint_title.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 118, g: 93, b: 69, a: 255 });
+    page_state.hint_line1.widget.at(sim_layout_x(16), sim_layout_y(362));
+    page_state.hint_line1.widget.size(sim_layout_w(150), sim_layout_h(16));
+    page_state.hint_line1.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(16u8) as u32);
+    page_state.hint_line1.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 90, g: 64, b: 44, a: 255 });
+    page_state.hint_line2.widget.at(sim_layout_x(16), sim_layout_y(384));
+    page_state.hint_line2.widget.size(sim_layout_w(170), sim_layout_h(16));
+    page_state.hint_line2.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(16u8) as u32);
+    page_state.hint_line2.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 90, g: 64, b: 44, a: 255 });
+
+    page_state.page.add(page_state.title.obj());
+    page_state.page.add(page_state.subtitle.obj());
+    page_state.page.add(page_state.board_canvas.obj());
+    page_state.page.add(page_state.side_panel.obj());
+    page_state.side_panel.add(page_state.score_title.obj());
+    page_state.side_panel.add(page_state.score_value.obj());
+    page_state.side_panel.add(page_state.best_title.obj());
+    page_state.side_panel.add(page_state.best_value.obj());
+    page_state.side_panel.add(page_state.moves_title.obj());
+    page_state.side_panel.add(page_state.moves_value.obj());
+    page_state.side_panel.add(page_state.status_title.obj());
+    page_state.side_panel.add(page_state.status_value.obj());
+    page_state.side_panel.add(page_state.restart_btn.obj());
+    page_state.side_panel.add(page_state.hint_title.obj());
+    page_state.side_panel.add(page_state.hint_line1.obj());
+    page_state.side_panel.add(page_state.hint_line2.obj());
+    page_state.tree.set_root(0, page_state.page.obj());
+    page_state.ready = true;
+}
+
+export fn game_page_retained_sync(page_state: &GamePageRetained, game: &Game2048Retained) void {
+    if page_state == null || game == null {
+        return;
+    }
+    game_page_retained_init(page_state, game);
+
+    _ = snprintf(&page_state.score_buf[0], 24usize, "%d" as &const byte, game.score);
+    _ = page_state.score_value.set_text(&page_state.score_buf[0]);
+    _ = snprintf(&page_state.best_buf[0], 24usize, "%d" as &const byte, game.best_tile);
+    _ = page_state.best_value.set_text(&page_state.best_buf[0]);
+    _ = snprintf(&page_state.moves_buf[0], 24usize, "%d" as &const byte, game.move_count);
+    _ = page_state.moves_value.set_text(&page_state.moves_buf[0]);
+    _ = page_state.status_value.set_text(game_status_text(game));
+
+    if game_board_changed(page_state, game) {
+        game_snapshot_board(page_state, game);
+        game_draw_board_canvas(&page_state.board_canvas, game);
+    }
+}
+
+export fn render_demo_game_retained_state(page_state: &GamePageRetained, game: &Game2048Retained, ctx: &RenderCtx, origin_x: i16, origin_y: i16) void {
+    if page_state == null || game == null || ctx == null {
+        return;
+    }
+    game_page_retained_sync(page_state, game);
+    page_state.page.widget.at(origin_x, origin_y);
+    page_state.page.render(ctx);
 }
 
 export fn render_demo_game_state(game: &Game2048Retained, ctx: &RenderCtx, origin_x: i16, origin_y: i16) void {

@@ -195,9 +195,13 @@ GridView {
     }
 
     fn scroll_to(self: &Self, y: i16) void {
+        const prev_y: i16 = self.scroll_y;
         self.scroll_y = y;
         if self.scroll_y < 0 {
             self.scroll_y = 0;
+        }
+        if self.scroll_y == prev_y {
+            return;
         }
         self.widget.base.invalidate();
     }

@@ -22,6 +22,8 @@ extern fn uya_gui_sim_sdl_display_present_begin(handle: &void, width: i32, heigh
 extern fn uya_gui_sim_sdl_display_present_region(handle: &void, pixels: &const byte, pitch: i32, width: i32, height: i32, format_tag: i32, x: i32, y: i32, w: i32, h: i32) i32;
 extern fn uya_gui_sim_sdl_display_present_end(handle: &void) i32;
 extern fn uya_gui_sim_sdl_display_set_fullscreen(handle: &void, enabled: i32) i32;
+extern fn uya_gui_sim_sdl_display_set_dirty_overlay(handle: &void, enabled: i32) i32;
+extern fn uya_gui_sim_sdl_display_consume_refresh_request(handle: &void) i32;
 extern fn uya_gui_sim_sdl_display_set_title(handle: &void, title: &const byte) void;
 extern fn uya_gui_sim_sdl_display_gpu_name(handle: &void) &byte;
 extern fn uya_gui_sim_sdl_last_error() &byte;
@@ -109,6 +111,21 @@ export struct SdlDisplay {
         ) != 0;
     }
 
+    fn refresh_front(self: &Self) bool {
+        if !self.valid() {
+            return false;
+        }
+        const front: &FrameBuffer = self.ctx.get_front_buffer();
+        return uya_gui_sim_sdl_display_present(
+            self.host,
+            front.pixels as &const byte,
+            front.stride as i32,
+            front.size.w as i32,
+            front.size.h as i32,
+            front.format as i32
+        ) != 0;
+    }
+
     fn present_dirty(self: &Self, dirty: &DirtyRegion) bool {
         if !self.valid() || dirty == null {
             return false;
@@ -124,6 +141,9 @@ export struct SdlDisplay {
         const front: &FrameBuffer = self.ctx.get_front_buffer();
         const view: DirtyRegionView = dirty.get_regions();
         if view.len <= 0 {
+            if uya_gui_sim_sdl_display_consume_refresh_request(self.host) != 0 {
+                return self.refresh_front();
+            }
             return true;
         }
 
@@ -171,6 +191,13 @@ export struct SdlDisplay {
 
     fn toggle_fullscreen(self: &Self) bool {
         return self.set_fullscreen(!self.fullscreen);
+    }
+
+    fn set_dirty_overlay(self: &Self, enabled: bool) bool {
+        if self.host == null {
+            return false;
+        }
+        return uya_gui_sim_sdl_display_set_dirty_overlay(self.host, enabled as i32) != 0;
     }
 
     fn set_title(self: &Self, title: &const byte) void {

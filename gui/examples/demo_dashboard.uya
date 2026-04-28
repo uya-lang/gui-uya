@@ -1,4 +1,6 @@
 use core.color.Color;
+use core.obj_tree.ObjTree;
+use core.obj_tree.obj_tree_new;
 use platform.disp.PixelFormat;
 use platform.disp.framebuffer_new;
 use platform.disp.framebuffer_required_bytes;
@@ -30,6 +32,7 @@ extern fn malloc(size: usize) &void;
 extern fn free(ptr: &void) void;
 
 export struct DashboardRetained {
+    tree: ObjTree,
     page: Page,
     shell: Panel,
     title: Label,
@@ -78,6 +81,7 @@ fn dashboard_fill_chart(chart: &Chart, metric: i32) void {
 
 export fn dashboard_retained_new() DashboardRetained {
     return DashboardRetained{
+        tree: obj_tree_new(),
         page: Page.new("Dashboard"),
         shell: Panel.new(),
         title: Label.new("Ops Dashboard / CPU"),
@@ -136,6 +140,7 @@ export fn dashboard_retained_init(dashboard: &DashboardRetained) void {
     dashboard.shell.add(dashboard.title.obj());
     dashboard.shell.add(dashboard.chart.obj());
     dashboard.shell.add(dashboard.grid.obj());
+    dashboard.tree.set_root(0, dashboard.page.obj());
     dashboard.manager.switch_theme(ThemeVariant.Dark);
     dashboard.manager.apply_to_tree(dashboard.page.obj());
     dashboard.page.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 0, g: 0, b: 0, a: 0 });

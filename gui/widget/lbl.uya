@@ -3,6 +3,7 @@ use core.color.TRANSPARENT;
 use core.obj.GuiObj;
 use core.obj.IGuiRenderCallback;
 use core.rect.Rect;
+use libc.strncmp;
 use render.ctx.RenderCtx;
 use render.font.Font;
 use render.font.draw_text;
@@ -123,14 +124,28 @@ Label {
     }
 
     fn set_text(self: &Self, text: &const byte) &Label {
+        const next_len: usize = widget_text_len(text);
+        if self.text == null && text == null {
+            return self;
+        }
+        if self.text != null
+            && text != null
+            && self.text != text
+            && self.text_len == next_len
+            && strncmp(self.text as *const byte, text as *const byte, next_len) == 0 {
+            return self;
+        }
         self.text = text;
-        self.text_len = widget_text_len(text);
+        self.text_len = next_len;
         self.layout_dirty = true;
         self.widget.base.invalidate();
         return self;
     }
 
     fn set_align(self: &Self, align: TextAlign) &Label {
+        if self.align == align {
+            return self;
+        }
         self.align = align;
         self.widget.base.invalidate();
         return self;

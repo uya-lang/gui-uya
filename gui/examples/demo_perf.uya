@@ -1,4 +1,6 @@
 use core.color.Color;
+use core.obj_tree.ObjTree;
+use core.obj_tree.obj_tree_new;
 use platform.disp.PixelFormat;
 use platform.disp.framebuffer_new;
 use platform.disp.framebuffer_required_bytes;
@@ -21,52 +23,89 @@ use widget.panel.Panel;
 extern fn malloc(size: usize) &void;
 extern fn free(ptr: &void) void;
 
+export struct PerfRetained {
+    tree: ObjTree,
+    page: Page,
+    hud: Panel,
+    fps: Label,
+    ram: Label,
+    batch: Label,
+    chart: Chart,
+    ready: bool,
+}
+
+export fn perf_retained_new() PerfRetained {
+    return PerfRetained{
+        tree: obj_tree_new(),
+        page: Page.new("Perf"),
+        hud: Panel.new(),
+        fps: Label.new("FPS 60"),
+        ram: Label.new("RAM 928B"),
+        batch: Label.new("BATCH 51ms"),
+        chart: Chart.new(),
+        ready: false,
+    };
+}
+
+export fn perf_retained_init(perf: &PerfRetained) void {
+    if perf == null || perf.ready {
+        return;
+    }
+
+    perf.page.widget.at(0, 0);
+    perf.page.widget.size(SIM_DEFAULT_RES_WIDTH, SIM_DEFAULT_RES_HEIGHT);
+    perf.page.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 248, g: 250, b: 252, a: 255 });
+
+    perf.hud.widget.at(sim_layout_x(32), sim_layout_y(32));
+    perf.hud.widget.size(sim_layout_w(576), sim_layout_h(416));
+    perf.hud.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 15, g: 23, b: 42, a: 255 });
+
+    perf.fps.widget.at(sim_layout_x(40), sim_layout_y(32));
+    perf.fps.widget.size(sim_layout_w(120), sim_layout_h(28));
+    perf.fps.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(20u8) as u32);
+    perf.fps.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 248, g: 250, b: 252, a: 255 });
+
+    perf.ram.widget.at(sim_layout_x(188), sim_layout_y(32));
+    perf.ram.widget.size(sim_layout_w(140), sim_layout_h(28));
+    perf.ram.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(20u8) as u32);
+    perf.ram.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 248, g: 250, b: 252, a: 255 });
+
+    perf.batch.widget.at(sim_layout_x(372), sim_layout_y(32));
+    perf.batch.widget.size(sim_layout_w(160), sim_layout_h(28));
+    perf.batch.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(20u8) as u32);
+    perf.batch.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 248, g: 250, b: 252, a: 255 });
+
+    perf.chart.widget.at(sim_layout_x(40), sim_layout_y(96));
+    perf.chart.widget.size(sim_layout_w(496), sim_layout_h(248));
+    perf.chart.chart_type = ChartType.Line;
+    _ = perf.chart.add_point(48);
+    _ = perf.chart.add_point(52);
+    _ = perf.chart.add_point(49);
+    _ = perf.chart.add_point(51);
+    _ = perf.chart.add_point(50);
+    _ = perf.chart.add_point(47);
+
+    perf.page.add(perf.hud.obj());
+    perf.hud.add(perf.fps.obj());
+    perf.hud.add(perf.ram.obj());
+    perf.hud.add(perf.batch.obj());
+    perf.hud.add(perf.chart.obj());
+    perf.tree.set_root(0, perf.page.obj());
+    perf.ready = true;
+}
+
+export fn render_demo_perf_retained(perf: &PerfRetained, ctx: &RenderCtx, origin_x: i16, origin_y: i16) void {
+    if perf == null {
+        return;
+    }
+    perf_retained_init(perf);
+    perf.page.widget.at(origin_x, origin_y);
+    perf.page.render(ctx);
+}
+
 export fn render_demo_perf(ctx: &RenderCtx, origin_x: i16, origin_y: i16) void {
-    var page: Page = Page.new("Perf");
-    page.widget.at(origin_x, origin_y);
-    page.widget.size(SIM_DEFAULT_RES_WIDTH, SIM_DEFAULT_RES_HEIGHT);
-    page.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 248, g: 250, b: 252, a: 255 });
-
-    var hud: Panel = Panel.new();
-    hud.widget.at(sim_layout_x(32), sim_layout_y(32));
-    hud.widget.size(sim_layout_w(576), sim_layout_h(416));
-    hud.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 15, g: 23, b: 42, a: 255 });
-
-    var fps: Label = Label.new("FPS 60");
-    fps.widget.at(sim_layout_x(40), sim_layout_y(32));
-    fps.widget.size(sim_layout_w(120), sim_layout_h(28));
-    fps.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(20u8) as u32);
-    fps.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 248, g: 250, b: 252, a: 255 });
-
-    var ram: Label = Label.new("RAM 928B");
-    ram.widget.at(sim_layout_x(188), sim_layout_y(32));
-    ram.widget.size(sim_layout_w(140), sim_layout_h(28));
-    ram.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(20u8) as u32);
-    ram.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 248, g: 250, b: 252, a: 255 });
-
-    var batch: Label = Label.new("BATCH 51ms");
-    batch.widget.at(sim_layout_x(372), sim_layout_y(32));
-    batch.widget.size(sim_layout_w(160), sim_layout_h(28));
-    batch.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(20u8) as u32);
-    batch.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 248, g: 250, b: 252, a: 255 });
-
-    var chart: Chart = Chart.new();
-    chart.widget.at(sim_layout_x(40), sim_layout_y(96));
-    chart.widget.size(sim_layout_w(496), sim_layout_h(248));
-    chart.chart_type = ChartType.Line;
-    _ = chart.add_point(48);
-    _ = chart.add_point(52);
-    _ = chart.add_point(49);
-    _ = chart.add_point(51);
-    _ = chart.add_point(50);
-    _ = chart.add_point(47);
-
-    page.add(hud.obj());
-    hud.add(fps.obj());
-    hud.add(ram.obj());
-    hud.add(batch.obj());
-    hud.add(chart.obj());
-    page.render(ctx);
+    var perf: PerfRetained = perf_retained_new();
+    render_demo_perf_retained(&perf, ctx, origin_x, origin_y);
 }
 
 export fn run_demo_perf() i32 {

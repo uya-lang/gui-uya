@@ -7,16 +7,24 @@ use core.event_dispatch.event_dispatcher_new;
 use core.obj.gui_obj_register;
 use core.obj.gui_obj_reset_registry;
 use core.obj_tree.ObjTree;
+use core.obj_tree.ObjTreeDirtyRenderPlan;
+use core.obj_tree.ObjTreeRepaintRequest;
 use core.obj_tree.obj_tree_new;
 use core.color.Color;
 use core.color.BLACK;
-use core.dirty_region.DirtyRegion;
 use core.dirty_region.DirtyRegionView;
-use core.dirty_region.dirty_region_new;
 use core.point.POINT_ZERO;
 use core.point.Point;
 use core.rect.Rect;
+use examples.demo_clock.ClockRetained;
+use examples.demo_clock.clock_retained_new;
+use examples.demo_clock.clock_retained_init;
 use examples.demo_clock.render_demo_clock;
+use examples.demo_clock.render_demo_clock_retained;
+use examples.demo_custom.CustomRetained;
+use examples.demo_custom.custom_retained_new;
+use examples.demo_custom.custom_retained_sync;
+use examples.demo_custom.render_demo_custom_retained_state;
 use examples.demo_custom.render_demo_custom_state;
 use examples.demo_dashboard.DashboardRetained;
 use examples.demo_dashboard.dashboard_retained_init;
@@ -24,23 +32,47 @@ use examples.demo_dashboard.dashboard_retained_new;
 use examples.demo_dashboard.render_dashboard_retained_state;
 use examples.demo_game.Game2048Retained;
 use examples.demo_game.GameMoveDir;
+use examples.demo_game.GamePageRetained;
 use examples.demo_game.game_retained_handle_touch;
 use examples.demo_game.game_retained_move;
 use examples.demo_game.game_retained_new;
 use examples.demo_game.game_retained_reset;
+use examples.demo_game.game_page_retained_new;
+use examples.demo_game.game_page_retained_sync;
+use examples.demo_game.render_demo_game_retained_state;
 use examples.demo_game.render_demo_game_state;
+use examples.demo_music.MusicRetained;
+use examples.demo_music.music_retained_new;
+use examples.demo_music.music_retained_sync;
+use examples.demo_music.render_demo_music_retained_state;
 use examples.demo_music.render_demo_music_state;
 use examples.demo_novel.NovelRetained;
+use examples.demo_novel.NovelPageRetained;
 use examples.demo_novel.novel_retained_handle_touch;
 use examples.demo_novel.novel_retained_new;
 use examples.demo_novel.novel_retained_reset_state;
 use examples.demo_novel.novel_retained_scroll_by;
 use examples.demo_novel.novel_retained_toggle_auto_scroll;
 use examples.demo_novel.novel_retained_update;
+use examples.demo_novel.novel_page_retained_new;
+use examples.demo_novel.novel_page_retained_sync;
+use examples.demo_novel.render_demo_novel_retained_state;
 use examples.demo_novel.render_demo_novel_state;
+use examples.demo_perf.PerfRetained;
+use examples.demo_perf.perf_retained_new;
+use examples.demo_perf.perf_retained_init;
 use examples.demo_perf.render_demo_perf;
+use examples.demo_perf.render_demo_perf_retained;
+use examples.demo_settings.SettingsRetained;
+use examples.demo_settings.settings_retained_new;
+use examples.demo_settings.settings_retained_sync;
+use examples.demo_settings.render_demo_settings_retained_state;
 use examples.demo_settings.render_demo_settings_state;
 use examples.demo_widgets.render_demo_widgets_state;
+use examples.demo_widgets.WidgetsRetained;
+use examples.demo_widgets.widgets_retained_new;
+use examples.demo_widgets.widgets_retained_sync;
+use examples.demo_widgets.render_demo_widgets_retained_state;
 use examples.phase4_smoke.run_phase4_smoke;
 use examples.phase6_smoke.run_phase6_smoke;
 use libc.snprintf;
@@ -177,6 +209,14 @@ export struct SimApp {
     input_label: Label,
     metrics_label: Label,
     help_label: Label,
+    clock_demo: ClockRetained,
+    music_demo: MusicRetained,
+    settings_demo: SettingsRetained,
+    perf_demo: PerfRetained,
+    widgets_demo: WidgetsRetained,
+    custom_demo: CustomRetained,
+    game_page: GamePageRetained,
+    novel_page: NovelPageRetained,
     title_text: [byte: 160],
     phase_text: [byte: 160],
     status_text: [byte: 160],
@@ -205,6 +245,7 @@ export struct SimApp {
     pending_exit: bool,
     pending_screenshot: bool,
     pending_fullscreen_toggle: bool,
+    force_full_redraw: bool,
     music_track_idx: i32,
     music_playing: bool,
     music_progress: i32,
@@ -260,6 +301,13 @@ fn sim_clamp_i32(value: i32, min: i32, max: i32) i32 {
 
 fn sim_phase_bg_color() Color {
     return Color{ r: 241, g: 245, b: 249, a: 255 };
+}
+
+fn sim_standalone_bg_color(demo: SimDemoKind) Color {
+    if demo == SimDemoKind.Dashboard {
+        return Color{ r: 15, g: 23, b: 42, a: 255 };
+    }
+    return Color{ r: 226, g: 232, b: 240, a: 255 };
 }
 
 AppButtonClickAdapter {
@@ -517,8 +565,8 @@ SimApp {
             return "已切到设置 demo";
         }
         if demo == SimDemoKind.Dashboard {
-            return "已切到看板 demo";
-        }
+        return "已切到看板 demo";
+    }
         if demo == SimDemoKind.Game {
             return "已切到 2048 demo";
         }
@@ -774,6 +822,7 @@ SimApp {
 
     fn switch_demo(self: &Self, demo: SimDemoKind, status: &const byte) void {
         self.config.demo = demo;
+        self.force_full_redraw = true;
         self.reset_standalone_demo_state(demo);
         if demo == SimDemoKind.Phase4 {
             self.phase4_result = run_phase4_smoke();
@@ -828,19 +877,108 @@ SimApp {
         button.render(ctx);
     }
 
+    fn current_retained_tree(self: &Self) &ObjTree {
+        if self.config.demo == SimDemoKind.Phase4 || self.config.demo == SimDemoKind.Phase6 {
+            return &self.tree;
+        }
+        if self.config.demo == SimDemoKind.Clock {
+            return &self.clock_demo.tree;
+        }
+        if self.config.demo == SimDemoKind.Music {
+            return &self.music_demo.tree;
+        }
+        if self.config.demo == SimDemoKind.Settings {
+            return &self.settings_demo.tree;
+        }
+        if self.config.demo == SimDemoKind.Dashboard {
+            return &self.dashboard_retained.tree;
+        }
+        if self.config.demo == SimDemoKind.Game {
+            return &self.game_page.tree;
+        }
+        if self.config.demo == SimDemoKind.Novel {
+            return &self.novel_page.tree;
+        }
+        if self.config.demo == SimDemoKind.Perf {
+            return &self.perf_demo.tree;
+        }
+        if self.config.demo == SimDemoKind.Widgets {
+            return &self.widgets_demo.tree;
+        }
+        if self.config.demo == SimDemoKind.Custom {
+            return &self.custom_demo.tree;
+        }
+        return null;
+    }
+
+    fn sync_current_retained_demo(self: &Self) void {
+        if self.config.demo == SimDemoKind.Clock {
+            clock_retained_init(&self.clock_demo);
+            return;
+        }
+        if self.config.demo == SimDemoKind.Perf {
+            perf_retained_init(&self.perf_demo);
+            return;
+        }
+        if self.config.demo == SimDemoKind.Music {
+            music_retained_sync(&self.music_demo, self.music_track_idx, self.music_playing, self.music_progress);
+            return;
+        }
+        if self.config.demo == SimDemoKind.Settings {
+            settings_retained_sync(&self.settings_demo, self.settings_wifi, self.settings_alerts, self.settings_brightness);
+            return;
+        }
+        if self.config.demo == SimDemoKind.Dashboard {
+            dashboard_retained_init(&self.dashboard_retained);
+            return;
+        }
+        if self.config.demo == SimDemoKind.Game {
+            game_page_retained_sync(&self.game_page, &self.game_demo);
+            return;
+        }
+        if self.config.demo == SimDemoKind.Novel {
+            novel_page_retained_sync(&self.novel_page, &self.novel_demo);
+            return;
+        }
+        if self.config.demo == SimDemoKind.Widgets {
+            widgets_retained_sync(
+                &self.widgets_demo,
+                self.widgets_control_idx,
+                self.widgets_volume,
+                self.widgets_auto_refresh,
+                self.widgets_selected_item,
+                self.widgets_action_idx,
+                &self.status_text[0]
+            );
+            return;
+        }
+        if self.config.demo == SimDemoKind.Custom {
+            custom_retained_sync(
+                &self.custom_demo,
+                self.custom_gauge_cpu,
+                self.custom_gauge_mem,
+                self.custom_gauge_net,
+                &self.custom_input_text[0],
+                self.custom_uppercase,
+                &self.status_text[0]
+            );
+            return;
+        }
+    }
+
     fn render_selected_demo(self: &Self, ctx: &RenderCtx) void {
         const origin_x: i16 = self.current_demo_origin_x();
         const origin_y: i16 = self.current_demo_origin_y();
         if self.config.demo == SimDemoKind.Clock {
-            render_demo_clock(ctx, origin_x, origin_y);
+            render_demo_clock_retained(&self.clock_demo, ctx, origin_x, origin_y);
             return;
         }
         if self.config.demo == SimDemoKind.Music {
-            render_demo_music_state(ctx, origin_x, origin_y, self.music_track_idx, self.music_playing, self.music_progress);
+            render_demo_music_retained_state(&self.music_demo, ctx, origin_x, origin_y, self.music_track_idx, self.music_playing, self.music_progress);
             return;
         }
         if self.config.demo == SimDemoKind.Settings {
-            render_demo_settings_state(ctx, origin_x, origin_y, self.settings_wifi, self.settings_alerts, self.settings_brightness);
+            render_demo_settings_retained_state(&self.settings_demo, ctx, origin_x, origin_y, self.settings_wifi, self.settings_alerts, self.settings_brightness);
             return;
         }
         if self.config.demo == SimDemoKind.Dashboard {
@@ -848,19 +986,20 @@ SimApp {
             return;
         }
         if self.config.demo == SimDemoKind.Game {
-            render_demo_game_state(&self.game_demo, ctx, origin_x, origin_y);
+            render_demo_game_retained_state(&self.game_page, &self.game_demo, ctx, origin_x, origin_y);
             return;
         }
         if self.config.demo == SimDemoKind.Perf {
-            render_demo_perf(ctx, origin_x, origin_y);
+            render_demo_perf_retained(&self.perf_demo, ctx, origin_x, origin_y);
             return;
         }
         if self.config.demo == SimDemoKind.Novel {
-            render_demo_novel_state(&self.novel_demo, ctx, origin_x, origin_y);
+            render_demo_novel_retained_state(&self.novel_page, &self.novel_demo, ctx, origin_x, origin_y);
             return;
         }
         if self.config.demo == SimDemoKind.Widgets {
-            render_demo_widgets_state(
+            render_demo_widgets_retained_state(
+                &self.widgets_demo,
                 ctx,
                 origin_x,
                 origin_y,
@@ -874,7 +1013,8 @@ SimApp {
             return;
         }
         if self.config.demo == SimDemoKind.Custom {
-            render_demo_custom_state(
+            render_demo_custom_retained_state(
+                &self.custom_demo,
                 ctx,
                 origin_x,
                 origin_y,
@@ -1480,11 +1620,7 @@ SimApp {
 
     fn render(self: &Self, ctx: &RenderCtx) void {
         if !sim_demo_is_phase(self.config.demo) {
-            if self.config.demo == SimDemoKind.Dashboard {
-                ctx.clear(Color{ r: 15, g: 23, b: 42, a: 255 });
-            } else {
-                ctx.clear(Color{ r: 226, g: 232, b: 240, a: 255 });
-            }
+            ctx.clear(sim_standalone_bg_color(self.config.demo));
             self.render_selected_demo(ctx);
             self.render_standalone_back_button(ctx);
             return;
@@ -1495,7 +1631,18 @@ SimApp {
     }
 
     fn supports_dirty_render(self: &Self) bool {
-        return sim_demo_is_phase(self.config.demo);
+        if sim_demo_is_phase(self.config.demo) {
+            return true;
+        }
+        return self.config.demo == SimDemoKind.Clock
+            || self.config.demo == SimDemoKind.Music
+            || self.config.demo == SimDemoKind.Settings
+            || self.config.demo == SimDemoKind.Dashboard
+            || self.config.demo == SimDemoKind.Game
+            || self.config.demo == SimDemoKind.Novel
+            || self.config.demo == SimDemoKind.Perf
+            || self.config.demo == SimDemoKind.Widgets
+            || self.config.demo == SimDemoKind.Custom;
     }
 
     fn render_retained(self: &Self, ctx: &RenderCtx, force_full: bool) void {
@@ -1503,12 +1650,63 @@ SimApp {
             self.render(ctx);
             return;
         }
+        const requested_full: bool = force_full || self.force_full_redraw;
 
-        if force_full {
+        if !sim_demo_is_phase(self.config.demo) {
+            self.sync_current_retained_demo();
+            const tree: &ObjTree = self.current_retained_tree();
+            if tree == null {
+                self.render(ctx);
+                return;
+            }
+            if requested_full {
+                ctx.clear(sim_standalone_bg_color(self.config.demo));
+                self.render_selected_demo(ctx);
+                self.render_standalone_back_button(ctx);
+                tree.clear_invalid_regions();
+                self.force_full_redraw = false;
+                return;
+            }
+            if !tree.has_invalid() {
+                return;
+            }
+            const screen: Rect = Rect{ x: 0, y: 0, w: ctx.fb.size.w, h: ctx.fb.size.h };
+            const plan: ObjTreeDirtyRenderPlan = tree.prepare_dirty_render(screen, false);
+            if plan.full_refresh {
+                ctx.clear(sim_standalone_bg_color(self.config.demo));
+                self.render_selected_demo(ctx);
+                self.render_standalone_back_button(ctx);
+                tree.clear_invalid_regions();
+                self.force_full_redraw = false;
+                return;
+            }
+            if !plan.has_work() {
+                return;
+            }
+            _ = tree.render_dirty(ctx, &plan);
+            if plan.request_count > 0 {
+                var j: i32 = 0;
+                while j < plan.request_count {
+                    const request: ObjTreeRepaintRequest = plan.requests[j];
+                    if !request.region.is_empty() {
+                        ctx.push_clip(request.region);
+                        self.render_standalone_back_button(ctx);
+                        ctx.pop_clip();
+                    }
+                    j = j + 1;
+                }
+            }
+            tree.clear_invalid_regions();
+            self.force_full_redraw = false;
+            return;
+        }
+
+        if requested_full {
             ctx.clear(sim_phase_bg_color());
             self.page.render(ctx);
             self.render_home_nav(ctx);
             self.tree.clear_invalid_regions();
+            self.force_full_redraw = false;
             return;
         }
 
@@ -1516,11 +1714,9 @@ SimApp {
             return;
         }
 
-        var dirty: DirtyRegion = dirty_region_new();
-        self.tree.collect_invalid_regions(&dirty);
-        dirty.merge();
         const screen: Rect = Rect{ x: 0, y: 0, w: ctx.fb.size.w, h: ctx.fb.size.h };
-        if dirty.should_full_refresh(screen) {
+        const plan: ObjTreeDirtyRenderPlan = self.tree.prepare_dirty_render(screen, false);
+        if plan.full_refresh {
             ctx.clear(sim_phase_bg_color());
             self.page.render(ctx);
             self.render_home_nav(ctx);
@@ -1528,24 +1724,35 @@ SimApp {
             return;
         }
 
-        const view: DirtyRegionView = dirty.get_regions();
-        if view.len <= 0 {
-            ctx.clear(sim_phase_bg_color());
-            self.page.render(ctx);
-            self.render_home_nav(ctx);
-            self.tree.clear_invalid_regions();
+        if !plan.has_work() {
             return;
         }
 
-        var i: i32 = 0;
-        while i < view.len {
-            ctx.push_clip(view.regions[i]);
-            self.page.render(ctx);
-            self.render_home_nav(ctx);
-            ctx.pop_clip();
-            i = i + 1;
+        _ = self.tree.render_dirty(ctx, &plan);
+
+        if plan.request_count > 0 {
+            var i: i32 = 0;
+            while i < plan.request_count {
+                const request: ObjTreeRepaintRequest = plan.requests[i];
+                if !request.region.is_empty() {
+                    ctx.push_clip(request.region);
+                    self.render_home_nav(ctx);
+                    ctx.pop_clip();
+                }
+                i = i + 1;
+            }
+        } else {
+            const view: DirtyRegionView = plan.dirty.get_regions();
+            var i: i32 = 0;
+            while i < view.len {
+                ctx.push_clip(view.regions[i]);
+                self.render_home_nav(ctx);
+                ctx.pop_clip();
+                i = i + 1;
+            }
         }
         self.tree.clear_invalid_regions();
+        self.force_full_redraw = false;
     }
 
     fn record_touch_edge(self: &Self, evt: &Event) void {
@@ -1944,6 +2151,14 @@ export fn sim_app_new() SimApp {
         input_label: Label.new("输入"),
         metrics_label: Label.new("指标"),
         help_label: Label.new("帮助"),
+        clock_demo: clock_retained_new(),
+        music_demo: music_retained_new(),
+        settings_demo: settings_retained_new(),
+        perf_demo: perf_retained_new(),
+        widgets_demo: widgets_retained_new(),
+        custom_demo: custom_retained_new(),
+        game_page: game_page_retained_new(),
+        novel_page: novel_page_retained_new(),
         title_text: [],
         phase_text: [],
         status_text: [],
@@ -1972,6 +2187,7 @@ export fn sim_app_new() SimApp {
         pending_exit: false,
         pending_screenshot: false,
         pending_fullscreen_toggle: false,
+        force_full_redraw: false,
         music_track_idx: 1,
         music_playing: false,
         music_progress: 42,

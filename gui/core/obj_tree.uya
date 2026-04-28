@@ -1,11 +1,15 @@
 use core.obj.GuiObj;
 use core.obj.gui_obj_get;
 use core.dirty_region.DirtyRegion;
+use core.dirty_region.DirtyRegionView;
+use core.dirty_region.dirty_region_new;
 use core.point.Point;
 use core.rect.Rect;
 use layout.auto.AutoLayout;
+use render.ctx.RenderCtx;
 
 export const OBJ_TREE_MAX_PATH: i32 = 64;
+export const OBJ_TREE_MAX_REPAINTS: i32 = 64;
 
 export struct BubblePath {
     nodes: [i32: 64],
@@ -18,6 +22,110 @@ fn bubble_path_append(path: &BubblePath, idx: i32) void {
     }
     path.nodes[path.len as usize] = idx;
     path.len = path.len + 1;
+}
+
+fn obj_tree_rect_contains_rect(outer: Rect, inner: Rect) bool {
+    if outer.is_empty() || inner.is_empty() {
+        return false;
+    }
+    const outer_right: i32 = outer.x as i32 + outer.w as i32;
+    const inner_right: i32 = inner.x as i32 + inner.w as i32;
+    const outer_bottom: i32 = outer.y as i32 + outer.h as i32;
+    const inner_bottom: i32 = inner.y as i32 + inner.h as i32;
+    return inner.x as i32 >= outer.x as i32
+        && inner.y as i32 >= outer.y as i32
+        && inner_right <= outer_right
+        && inner_bottom <= outer_bottom;
+}
+
+fn obj_tree_rect_copy(rect: Rect) Rect {
+    return Rect{
+        x: rect.x,
+        y: rect.y,
+        w: rect.w,
+        h: rect.h,
+    };
+}
+
+fn obj_tree_pick_repaint_root(node: &GuiObj, region: Rect) &GuiObj {
+    if node == null {
+        return null;
+    }
+    if node.parent_ref == null {
+        return node;
+    }
+
+    var root: &GuiObj = node.parent_ref;
+    while root.parent_ref != null && !obj_tree_rect_contains_rect(root.screen_area(), region) {
+        root = root.parent_ref;
+    }
+    return root;
+}
+
+export struct ObjTreeRepaintRequest {
+    root: &GuiObj,
+    region: Rect,
+}
+
+export struct ObjTreeDirtyRenderPlan {
+    dirty: DirtyRegion,
+    requests: [ObjTreeRepaintRequest: 64],
+    request_count: i32,
+    full_refresh: bool,
+
+    fn has_work(self: &Self) bool {
+        if self == null {
+            return false;
+        }
+        if self.full_refresh || self.request_count > 0 {
+            return true;
+        }
+        return self.dirty.get_regions().len > 0;
+    }
+}
+
+fn obj_tree_dirty_render_plan_add(plan: &ObjTreeDirtyRenderPlan, root: &GuiObj, region: Rect) void {
+    if plan == null || root == null || region.is_empty() {
+        return;
+    }
+
+    var i: i32 = 0;
+    while i < plan.request_count {
+        if plan.requests[i].root == root {
+            const current: Rect = obj_tree_rect_copy(plan.requests[i].region);
+            plan.requests[i].region = current.union_rect(obj_tree_rect_copy(region));
+            return;
+        }
+        i = i + 1;
+    }
+
+    if plan.request_count >= OBJ_TREE_MAX_REPAINTS {
+        const current: Rect = obj_tree_rect_copy(plan.requests[0].region);
+        plan.requests[0].region = current.union_rect(obj_tree_rect_copy(region));
+        return;
+    }
+
+    plan.requests[plan.request_count as usize] = ObjTreeRepaintRequest{
+        root: root,
+        region: obj_tree_rect_copy(region),
+    };
+    plan.request_count = plan.request_count + 1;
+}
+
+fn obj_tree_collect_repaint_requests(plan: &ObjTreeDirtyRenderPlan, node: &GuiObj) void {
+    if plan == null || node == null {
+        return;
+    }
+    if node.self_invalid && !node.invalid_area.is_empty() {
+        const root: &GuiObj = obj_tree_pick_repaint_root(node, node.invalid_area);
+        obj_tree_dirty_render_plan_add(plan, root, node.invalid_area);
+    }
+
+    var child: &GuiObj = node.child_head;
+    while child != null {
+        obj_tree_collect_repaint_requests(plan, child);
+        child = child.sibling_next;
+    }
 }
 
 export struct ObjTree {
@@ -215,6 +323,7 @@ export struct ObjTree {
             return;
         }
         node.flags.invalid = false;
+        node.flags.dirty = false;
         node.self_invalid = false;
         node.invalid_area = Rect{ x: 0, y: 0, w: 0, h: 0 };
 
@@ -223,6 +332,79 @@ export struct ObjTree {
             self.clear_invalid_regions_recursive(child);
             child = child.sibling_next;
         }
+    }
+
+    fn prepare_dirty_render(self: &Self, screen: Rect, force_full: bool) ObjTreeDirtyRenderPlan {
+        var plan: ObjTreeDirtyRenderPlan = ObjTreeDirtyRenderPlan{
+            dirty: dirty_region_new(),
+            requests: [],
+            request_count: 0,
+            full_refresh: false,
+        };
+        if self.root == null {
+            return plan;
+        }
+        if force_full {
+            plan.full_refresh = true;
+            return plan;
+        }
+        if !self.has_invalid() {
+            return plan;
+        }
+
+        self.collect_invalid_regions(&plan.dirty);
+        plan.dirty.merge();
+        if plan.dirty.should_full_refresh(screen) {
+            plan.full_refresh = true;
+            return plan;
+        }
+
+        const view: DirtyRegionView = plan.dirty.get_regions();
+        if view.len <= 0 {
+            plan.full_refresh = true;
+            return plan;
+        }
+
+        obj_tree_collect_repaint_requests(&plan, self.root);
+        return plan;
+    }
+
+    fn render_dirty(self: &Self, ctx: &RenderCtx, plan: &ObjTreeDirtyRenderPlan) bool {
+        if self.root == null || ctx == null || plan == null {
+            return false;
+        }
+        if plan.full_refresh {
+            self.root.render(ctx);
+            return true;
+        }
+
+        if plan.request_count > 0 {
+            var i: i32 = 0;
+            while i < plan.request_count {
+                const request: ObjTreeRepaintRequest = plan.requests[i];
+                if request.root != null && !request.region.is_empty() {
+                    ctx.push_clip(request.region);
+                    request.root.render(ctx);
+                    ctx.pop_clip();
+                }
+                i = i + 1;
+            }
+            return true;
+        }
+
+        const view: DirtyRegionView = plan.dirty.get_regions();
+        if view.len <= 0 {
+            return false;
+        }
+
+        var i: i32 = 0;
+        while i < view.len {
+            ctx.push_clip(view.regions[i]);
+            self.root.render(ctx);
+            ctx.pop_clip();
+            i = i + 1;
+        }
+        return true;
     }
 
     fn perform_layout(self: &Self, root_idx: i32, auto: &AutoLayout) void {
@@ -237,9 +419,9 @@ export struct ObjTree {
             return;
         }
 
-        if node.flags.dirty {
+        if node.flags.layout_dirty {
             auto.apply(node);
-            node.flags.dirty = false;
+            node.flags.layout_dirty = false;
         }
 
         var child: &GuiObj = node.child_head;

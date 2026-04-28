@@ -1,4 +1,6 @@
 use core.color.Color;
+use core.obj_tree.ObjTree;
+use core.obj_tree.obj_tree_new;
 use platform.disp.PixelFormat;
 use platform.disp.framebuffer_new;
 use platform.disp.framebuffer_required_bytes;
@@ -22,47 +24,85 @@ use widget.panel.Panel;
 extern fn malloc(size: usize) &void;
 extern fn free(ptr: &void) void;
 
-export fn render_demo_clock(ctx: &RenderCtx, origin_x: i16, origin_y: i16) void {
-    var face_bytes: [byte: 102400] = [];
-    var page: Page = Page.new("Clock");
-    page.widget.at(origin_x, origin_y);
-    page.widget.size(SIM_DEFAULT_RES_WIDTH, SIM_DEFAULT_RES_HEIGHT);
-    page.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 240, g: 246, b: 255, a: 255 });
+export struct ClockRetained {
+    tree: ObjTree,
+    page: Page,
+    panel: Panel,
+    title: Label,
+    subtitle: Label,
+    face: Canvas,
+    face_bytes: [byte: 102400],
+    ready: bool,
+}
 
-    var panel: Panel = Panel.new();
-    panel.widget.at(sim_layout_x(40), sim_layout_y(32));
-    panel.widget.size(sim_layout_w(560), sim_layout_h(416));
-    panel.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 255, g: 255, b: 255, a: 255 });
+export fn clock_retained_new() ClockRetained {
+    return ClockRetained{
+        tree: obj_tree_new(),
+        page: Page.new("Clock"),
+        panel: Panel.new(),
+        title: Label.new("MON 08:45"),
+        subtitle: Label.new("UTC+08"),
+        face: Canvas.new(),
+        face_bytes: [],
+        ready: false,
+    };
+}
 
-    var title: Label = Label.new("MON 08:45");
-    title.widget.at(sim_layout_x(96), sim_layout_y(40));
-    title.widget.size(sim_layout_w(368), sim_layout_h(44));
-    title.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(28u8) as u32);
-    _ = title.set_align(TextAlign.Center);
+export fn clock_retained_init(clock: &ClockRetained) void {
+    if clock == null || clock.ready {
+        return;
+    }
 
-    var subtitle: Label = Label.new("UTC+08");
-    subtitle.widget.at(sim_layout_x(96), sim_layout_y(96));
-    subtitle.widget.size(sim_layout_w(368), sim_layout_h(28));
-    subtitle.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(18u8) as u32);
-    _ = subtitle.set_align(TextAlign.Center);
-    subtitle.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 91, g: 103, b: 122, a: 255 });
+    clock.page.widget.at(0, 0);
+    clock.page.widget.size(SIM_DEFAULT_RES_WIDTH, SIM_DEFAULT_RES_HEIGHT);
+    clock.page.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 240, g: 246, b: 255, a: 255 });
 
-    var face: Canvas = Canvas.with_buffer(&face_bytes[0], 160, 160, 640, PixelFormat.ARGB8888);
+    clock.panel.widget.at(sim_layout_x(40), sim_layout_y(32));
+    clock.panel.widget.size(sim_layout_w(560), sim_layout_h(416));
+    clock.panel.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 255, g: 255, b: 255, a: 255 });
+
+    clock.title.widget.at(sim_layout_x(96), sim_layout_y(40));
+    clock.title.widget.size(sim_layout_w(368), sim_layout_h(44));
+    clock.title.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(28u8) as u32);
+    _ = clock.title.set_align(TextAlign.Center);
+
+    clock.subtitle.widget.at(sim_layout_x(96), sim_layout_y(96));
+    clock.subtitle.widget.size(sim_layout_w(368), sim_layout_h(28));
+    clock.subtitle.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(18u8) as u32);
+    _ = clock.subtitle.set_align(TextAlign.Center);
+    clock.subtitle.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 91, g: 103, b: 122, a: 255 });
+
+    clock.face.attach_buffer(&clock.face_bytes[0], 160, 160, 640, PixelFormat.ARGB8888);
     const face_size: u16 = sim_layout_square(160u16);
-    face.widget.at(sim_layout_x(200), sim_layout_y(160));
-    face.widget.size(face_size, face_size);
-    face.begin_draw().clear(Color{ r: 255, g: 255, b: 255, a: 0 });
-    face.begin_draw().draw_circle(80, 80, 72, Color{ r: 51, g: 65, b: 85, a: 255 });
-    face.begin_draw().draw_line(80, 80, 80, 28, Color{ r: 37, g: 99, b: 235, a: 255 }, 6);
-    face.begin_draw().draw_line(80, 80, 124, 96, Color{ r: 30, g: 41, b: 59, a: 255 }, 6);
-    face.begin_draw().fill_circle(80, 80, 8, Color{ r: 248, g: 113, b: 113, a: 255 });
-    face.end_draw();
+    clock.face.widget.at(sim_layout_x(200), sim_layout_y(160));
+    clock.face.widget.size(face_size, face_size);
+    clock.face.begin_draw().clear(Color{ r: 255, g: 255, b: 255, a: 0 });
+    clock.face.begin_draw().draw_circle(80, 80, 72, Color{ r: 51, g: 65, b: 85, a: 255 });
+    clock.face.begin_draw().draw_line(80, 80, 80, 28, Color{ r: 37, g: 99, b: 235, a: 255 }, 6);
+    clock.face.begin_draw().draw_line(80, 80, 124, 96, Color{ r: 30, g: 41, b: 59, a: 255 }, 6);
+    clock.face.begin_draw().fill_circle(80, 80, 8, Color{ r: 248, g: 113, b: 113, a: 255 });
+    clock.face.end_draw();
 
-    page.add(panel.obj());
-    panel.add(title.obj());
-    panel.add(subtitle.obj());
-    panel.add(face.obj());
-    page.render(ctx);
+    clock.page.add(clock.panel.obj());
+    clock.panel.add(clock.title.obj());
+    clock.panel.add(clock.subtitle.obj());
+    clock.panel.add(clock.face.obj());
+    clock.tree.set_root(0, clock.page.obj());
+    clock.ready = true;
+}
+
+export fn render_demo_clock_retained(clock: &ClockRetained, ctx: &RenderCtx, origin_x: i16, origin_y: i16) void {
+    if clock == null {
+        return;
+    }
+    clock_retained_init(clock);
+    clock.page.widget.at(origin_x, origin_y);
+    clock.page.render(ctx);
+}
+
+export fn render_demo_clock(ctx: &RenderCtx, origin_x: i16, origin_y: i16) void {
+    var clock: ClockRetained = clock_retained_new();
+    render_demo_clock_retained(&clock, ctx, origin_x, origin_y);
 }
 
 export fn run_demo_clock() i32 {

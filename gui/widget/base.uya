@@ -571,6 +571,14 @@ Widget {
     }
 
     fn set_state(self: &Self, state: WidgetState) void {
+        if self.state == state {
+            if state == WidgetState.Disabled && !self.base.flags.enabled {
+                return;
+            }
+            if state != WidgetState.Disabled && self.base.flags.enabled {
+                return;
+            }
+        }
         self.state = state;
         if state == WidgetState.Disabled {
             self.base.flags.enabled = false;
@@ -585,6 +593,10 @@ Widget {
     }
 
     fn set_enabled(self: &Self, enabled: bool) void {
+        if enabled == self.base.flags.enabled
+            && ((enabled && self.state != WidgetState.Disabled) || (!enabled && self.state == WidgetState.Disabled)) {
+            return;
+        }
         if enabled {
             self.base.flags.enabled = true;
             if self.state == WidgetState.Disabled {

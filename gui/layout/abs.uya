@@ -67,7 +67,7 @@ export struct AbsLayout {
                 child.style.set_u32(StyleProp.Overflow, OverflowMode.Clip as u32);
             }
             abs_clamp_child(child, container);
-            child.flags.dirty = false;
+            child.flags.layout_dirty = false;
             child = child.sibling_next;
         }
     }

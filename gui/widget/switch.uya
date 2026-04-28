@@ -79,18 +79,29 @@ Switch {
         return self;
     }
 
-    fn toggle(self: &Self) void {
-        self.checked = !self.checked;
+    fn set_checked(self: &Self, checked: bool) &Switch {
+        if self.checked == checked {
+            return self;
+        }
+        self.checked = checked;
         if self.checked {
             self.anim_progress = 1.0;
             self.widget.set_state(WidgetState.Checked);
-            self.widget.emit_value_change(1);
         } else {
             self.anim_progress = 0.0;
             self.widget.set_state(WidgetState.Normal);
+        }
+        return self;
+    }
+
+    fn toggle(self: &Self) void {
+        const next_checked: bool = !self.checked;
+        self.set_checked(next_checked);
+        if self.checked {
+            self.widget.emit_value_change(1);
+        } else {
             self.widget.emit_value_change(0);
         }
-        self.widget.base.invalidate();
     }
 
     fn handle_event(self: &Self, evt: &Event) bool {

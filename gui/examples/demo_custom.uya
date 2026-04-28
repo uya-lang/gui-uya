@@ -1,6 +1,9 @@
 use core.color.Color;
+use core.obj_tree.ObjTree;
+use core.obj_tree.obj_tree_new;
 use core.rect.Rect;
 use libc.snprintf;
+use libc.strncmp;
 use platform.disp.PixelFormat;
 use platform.disp.framebuffer_new;
 use platform.disp.framebuffer_required_bytes;
@@ -14,6 +17,7 @@ use sim.common.sim_layout_y;
 use sim.common.SIM_DEFAULT_RES_HEIGHT;
 use sim.common.SIM_DEFAULT_RES_WIDTH;
 use style.StyleProp;
+use widget.btn.BtnVariant;
 use widget.btn.Button;
 use widget.canvas.Canvas;
 use widget.grid_view.GridCellContentMode;
@@ -27,6 +31,39 @@ use widget.panel.Panel;
 
 extern fn malloc(size: usize) &void;
 extern fn free(ptr: &void) void;
+
+fn custom_cstr_eq(a: &const byte, b: &const byte) bool {
+    if a == null && b == null {
+        return true;
+    }
+    if a == null || b == null {
+        return false;
+    }
+    var len: usize = 0usize;
+    while a[len] != 0 && b[len] != 0 {
+        len = len + 1usize;
+    }
+    if a[len] != 0 || b[len] != 0 {
+        return false;
+    }
+    return strncmp(a as *const byte, b as *const byte, len) == 0;
+}
+
+fn custom_copy_cstr(dst: &byte, cap: usize, src: &const byte) void {
+    if dst == null || cap == 0usize {
+        return;
+    }
+    if src == null {
+        dst[0] = 0;
+        return;
+    }
+    var i: usize = 0usize;
+    while i + 1usize < cap && src[i] != 0 {
+        dst[i] = src[i];
+        i = i + 1usize;
+    }
+    dst[i] = 0;
+}
 
 fn custom_draw_gauge(canvas: &Canvas, value: i32, arc_color: Color) void {
     if canvas == null {
@@ -63,6 +100,402 @@ fn custom_action_key(text: &const byte) Button {
     return button;
 }
 
+export struct CustomRetained {
+    tree: ObjTree,
+    page: Page,
+    hero: Panel,
+    hero_title: Label,
+    hero_subtitle: Label,
+    gauges_panel: Panel,
+    gauges_title: Label,
+    cpu_label: Label,
+    cpu_gauge: Canvas,
+    mem_label: Label,
+    mem_gauge: Canvas,
+    net_label: Label,
+    net_gauge: Canvas,
+    keyboard_panel: Panel,
+    keyboard_title: Label,
+    keyboard_text_label: Label,
+    row1: GridView,
+    key_q: Button,
+    key_w: Button,
+    key_e: Button,
+    key_r: Button,
+    key_t: Button,
+    key_y: Button,
+    key_u: Button,
+    key_i: Button,
+    key_o: Button,
+    key_p: Button,
+    row2: GridView,
+    key_a: Button,
+    key_s: Button,
+    key_d: Button,
+    key_f: Button,
+    key_g: Button,
+    key_h: Button,
+    key_j: Button,
+    key_k: Button,
+    key_l: Button,
+    row3: GridView,
+    key_z: Button,
+    key_x: Button,
+    key_c: Button,
+    key_v: Button,
+    key_b: Button,
+    key_n: Button,
+    key_m: Button,
+    actions: GridView,
+    shift_btn: Button,
+    space_btn: Button,
+    enter_btn: Button,
+    notes_panel: Panel,
+    notes_title: Label,
+    notes_text: Label,
+    gauge_a_bytes: [byte: 28672],
+    gauge_b_bytes: [byte: 28672],
+    gauge_c_bytes: [byte: 28672],
+    cpu_text: [byte: 24],
+    mem_text: [byte: 24],
+    net_text: [byte: 24],
+    subtitle_text: [byte: 160],
+    keyboard_text_buf: [byte: 64],
+    ready: bool,
+    cpu_value: i32,
+    mem_value: i32,
+    net_value: i32,
+    uppercase_mode: bool,
+}
+
+export fn custom_retained_new() CustomRetained {
+    return CustomRetained{
+        tree: obj_tree_new(),
+        page: Page.new("Custom"),
+        hero: Panel.new(),
+        hero_title: Label.new("Custom Control Lab"),
+        hero_subtitle: Label.new("Click gauges to tune values, or tap keyboard keys to edit the buffer."),
+        gauges_panel: Panel.new(),
+        gauges_title: Label.new("Gauge Cards"),
+        cpu_label: Label.new("CPU 32%"),
+        cpu_gauge: Canvas.new(),
+        mem_label: Label.new("Memory 68%"),
+        mem_gauge: Canvas.new(),
+        net_label: Label.new("Network 91%"),
+        net_gauge: Canvas.new(),
+        keyboard_panel: Panel.new(),
+        keyboard_title: Label.new("Keyboard Prototype"),
+        keyboard_text_label: Label.new("HELLO UYAGUI"),
+        row1: GridView.new(),
+        key_q: custom_small_key("Q"),
+        key_w: custom_small_key("W"),
+        key_e: custom_small_key("E"),
+        key_r: custom_small_key("R"),
+        key_t: custom_small_key("T"),
+        key_y: custom_small_key("Y"),
+        key_u: custom_small_key("U"),
+        key_i: custom_small_key("I"),
+        key_o: custom_small_key("O"),
+        key_p: custom_small_key("P"),
+        row2: GridView.new(),
+        key_a: custom_small_key("A"),
+        key_s: custom_small_key("S"),
+        key_d: custom_small_key("D"),
+        key_f: custom_small_key("F"),
+        key_g: custom_small_key("G"),
+        key_h: custom_small_key("H"),
+        key_j: custom_small_key("J"),
+        key_k: custom_small_key("K"),
+        key_l: custom_small_key("L"),
+        row3: GridView.new(),
+        key_z: custom_small_key("Z"),
+        key_x: custom_small_key("X"),
+        key_c: custom_small_key("C"),
+        key_v: custom_small_key("V"),
+        key_b: custom_small_key("B"),
+        key_n: custom_small_key("N"),
+        key_m: custom_small_key("M"),
+        actions: GridView.new(),
+        shift_btn: Button.outlined("Shift"),
+        space_btn: custom_action_key("Space"),
+        enter_btn: custom_action_key("Enter"),
+        notes_panel: Panel.new(),
+        notes_title: Label.new("Pattern"),
+        notes_text: Label.new("The gauge uses Canvas drawing primitives, while the keyboard composes GridView + Button into a reusable on-screen input surface."),
+        gauge_a_bytes: [],
+        gauge_b_bytes: [],
+        gauge_c_bytes: [],
+        cpu_text: [],
+        mem_text: [],
+        net_text: [],
+        subtitle_text: [],
+        keyboard_text_buf: [],
+        ready: false,
+        cpu_value: -1,
+        mem_value: -1,
+        net_value: -1,
+        uppercase_mode: false,
+    };
+}
+
+export fn custom_retained_init(custom: &CustomRetained) void {
+    if custom == null || custom.ready {
+        return;
+    }
+
+    custom.page.widget.at(0, 0);
+    custom.page.widget.size(SIM_DEFAULT_RES_WIDTH, SIM_DEFAULT_RES_HEIGHT);
+    custom.page.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 248, g: 245, b: 239, a: 255 });
+
+    custom.hero.widget.at(sim_layout_x(20), sim_layout_y(16));
+    custom.hero.widget.size(sim_layout_w(600), sim_layout_h(64));
+    custom.hero.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 255, g: 252, b: 247, a: 255 });
+    custom.hero_title.widget.at(sim_layout_x(20), sim_layout_y(14));
+    custom.hero_title.widget.size(sim_layout_w(560), sim_layout_h(20));
+    custom.hero_title.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(26u8) as u32);
+    _ = custom.hero_title.set_align(TextAlign.Center);
+    custom.hero_subtitle.widget.at(sim_layout_x(20), sim_layout_y(38));
+    custom.hero_subtitle.widget.size(sim_layout_w(560), sim_layout_h(16));
+    custom.hero_subtitle.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(12u8) as u32);
+    custom.hero_subtitle.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 120, g: 113, b: 108, a: 255 });
+    _ = custom.hero_subtitle.set_align(TextAlign.Center);
+
+    custom.gauges_panel.widget.at(sim_layout_x(20), sim_layout_y(96));
+    custom.gauges_panel.widget.size(sim_layout_w(280), sim_layout_h(344));
+    custom.gauges_panel.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 255, g: 252, b: 247, a: 255 });
+    custom.gauges_title.widget.at(sim_layout_x(16), sim_layout_y(14));
+    custom.gauges_title.widget.size(sim_layout_w(180), sim_layout_h(18));
+    custom.gauges_title.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(18u8) as u32);
+
+    custom.cpu_label.widget.at(sim_layout_x(24), sim_layout_y(44));
+    custom.cpu_label.widget.size(sim_layout_w(180), sim_layout_h(16));
+    custom.cpu_label.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(12u8) as u32);
+    custom.cpu_label.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 71, g: 85, b: 105, a: 255 });
+    custom.cpu_gauge.attach_buffer(&custom.gauge_a_bytes[0], 112, 64, 448, PixelFormat.ARGB8888);
+    custom.cpu_gauge.widget.at(sim_layout_x(20), sim_layout_y(62));
+    custom.cpu_gauge.widget.size(sim_layout_w(240u16), sim_layout_h(82u16));
+
+    custom.mem_label.widget.at(sim_layout_x(24), sim_layout_y(156));
+    custom.mem_label.widget.size(sim_layout_w(180), sim_layout_h(16));
+    custom.mem_label.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(12u8) as u32);
+    custom.mem_label.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 71, g: 85, b: 105, a: 255 });
+    custom.mem_gauge.attach_buffer(&custom.gauge_b_bytes[0], 112, 64, 448, PixelFormat.ARGB8888);
+    custom.mem_gauge.widget.at(sim_layout_x(20), sim_layout_y(174));
+    custom.mem_gauge.widget.size(sim_layout_w(240u16), sim_layout_h(82u16));
+
+    custom.net_label.widget.at(sim_layout_x(24), sim_layout_y(268));
+    custom.net_label.widget.size(sim_layout_w(180), sim_layout_h(16));
+    custom.net_label.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(12u8) as u32);
+    custom.net_label.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 71, g: 85, b: 105, a: 255 });
+    custom.net_gauge.attach_buffer(&custom.gauge_c_bytes[0], 112, 64, 448, PixelFormat.ARGB8888);
+    custom.net_gauge.widget.at(sim_layout_x(20), sim_layout_y(286));
+    custom.net_gauge.widget.size(sim_layout_w(240u16), sim_layout_h(82u16));
+
+    custom.keyboard_panel.widget.at(sim_layout_x(316), sim_layout_y(96));
+    custom.keyboard_panel.widget.size(sim_layout_w(304), sim_layout_h(252));
+    custom.keyboard_panel.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 255, g: 252, b: 247, a: 255 });
+    custom.keyboard_title.widget.at(sim_layout_x(16), sim_layout_y(14));
+    custom.keyboard_title.widget.size(sim_layout_w(180), sim_layout_h(18));
+    custom.keyboard_title.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(18u8) as u32);
+    custom.keyboard_text_label.widget.at(sim_layout_x(16), sim_layout_y(40));
+    custom.keyboard_text_label.widget.size(sim_layout_w(272), sim_layout_h(26));
+    custom.keyboard_text_label.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(16u8) as u32);
+    _ = custom.keyboard_text_label.set_align(TextAlign.Center);
+    custom.keyboard_text_label.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 248, g: 250, b: 252, a: 255 });
+    custom.keyboard_text_label.widget.base.style.set_color(StyleProp.BorderColor, Color{ r: 226, g: 232, b: 240, a: 255 });
+    custom.keyboard_text_label.widget.base.style.set_u32(StyleProp.BorderWidth, 1u32);
+    custom.keyboard_text_label.widget.base.style.set_u32(StyleProp.Radius, 8u32);
+
+    custom.row1.widget.at(sim_layout_x(16), sim_layout_y(76));
+    custom.row1.widget.size(sim_layout_w(272u16), sim_layout_h(34u16));
+    custom.row1.columns = 10;
+    custom.row1.item_size.w = sim_layout_w(24u16);
+    custom.row1.item_size.h = sim_layout_h(30u16);
+    custom.row1.col_gap = (sim_layout_w(3u16) as! u8).value;
+    custom.row1.cell_padding = (sim_layout_h(1u16) as! u8).value;
+    custom.row1.cell_content_mode = GridCellContentMode.Fill;
+    custom.row1.content_align_x = GridContentAlign.Center;
+    custom.row1.add_child(custom.key_q.obj());
+    custom.row1.add_child(custom.key_w.obj());
+    custom.row1.add_child(custom.key_e.obj());
+    custom.row1.add_child(custom.key_r.obj());
+    custom.row1.add_child(custom.key_t.obj());
+    custom.row1.add_child(custom.key_y.obj());
+    custom.row1.add_child(custom.key_u.obj());
+    custom.row1.add_child(custom.key_i.obj());
+    custom.row1.add_child(custom.key_o.obj());
+    custom.row1.add_child(custom.key_p.obj());
+
+    custom.row2.widget.at(sim_layout_x(30), sim_layout_y(116));
+    custom.row2.widget.size(sim_layout_w(248u16), sim_layout_h(34u16));
+    custom.row2.columns = 9;
+    custom.row2.item_size.w = sim_layout_w(24u16);
+    custom.row2.item_size.h = sim_layout_h(30u16);
+    custom.row2.col_gap = (sim_layout_w(3u16) as! u8).value;
+    custom.row2.cell_padding = (sim_layout_h(1u16) as! u8).value;
+    custom.row2.cell_content_mode = GridCellContentMode.Fill;
+    custom.row2.content_align_x = GridContentAlign.Center;
+    custom.row2.add_child(custom.key_a.obj());
+    custom.row2.add_child(custom.key_s.obj());
+    custom.row2.add_child(custom.key_d.obj());
+    custom.row2.add_child(custom.key_f.obj());
+    custom.row2.add_child(custom.key_g.obj());
+    custom.row2.add_child(custom.key_h.obj());
+    custom.row2.add_child(custom.key_j.obj());
+    custom.row2.add_child(custom.key_k.obj());
+    custom.row2.add_child(custom.key_l.obj());
+
+    custom.row3.widget.at(sim_layout_x(56), sim_layout_y(156));
+    custom.row3.widget.size(sim_layout_w(214u16), sim_layout_h(34u16));
+    custom.row3.columns = 7;
+    custom.row3.item_size.w = sim_layout_w(26u16);
+    custom.row3.item_size.h = sim_layout_h(30u16);
+    custom.row3.col_gap = (sim_layout_w(4u16) as! u8).value;
+    custom.row3.cell_padding = (sim_layout_h(1u16) as! u8).value;
+    custom.row3.cell_content_mode = GridCellContentMode.Fill;
+    custom.row3.content_align_x = GridContentAlign.Center;
+    custom.row3.add_child(custom.key_z.obj());
+    custom.row3.add_child(custom.key_x.obj());
+    custom.row3.add_child(custom.key_c.obj());
+    custom.row3.add_child(custom.key_v.obj());
+    custom.row3.add_child(custom.key_b.obj());
+    custom.row3.add_child(custom.key_n.obj());
+    custom.row3.add_child(custom.key_m.obj());
+
+    custom.actions.widget.at(sim_layout_x(16), sim_layout_y(198));
+    custom.actions.widget.size(sim_layout_w(272u16), sim_layout_h(38u16));
+    custom.actions.columns = 3;
+    custom.actions.item_size.w = sim_layout_w(86u16);
+    custom.actions.item_size.h = sim_layout_h(34u16);
+    custom.actions.col_gap = (sim_layout_w(7u16) as! u8).value;
+    custom.actions.cell_padding = (sim_layout_h(1u16) as! u8).value;
+    custom.actions.cell_content_mode = GridCellContentMode.Fill;
+    custom.actions.content_align_x = GridContentAlign.Center;
+    custom.actions.add_child(custom.shift_btn.obj());
+    custom.actions.add_child(custom.space_btn.obj());
+    custom.actions.add_child(custom.enter_btn.obj());
+
+    custom.notes_panel.widget.at(sim_layout_x(316), sim_layout_y(360));
+    custom.notes_panel.widget.size(sim_layout_w(304), sim_layout_h(96));
+    custom.notes_panel.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 255, g: 252, b: 247, a: 255 });
+    custom.notes_title.widget.at(sim_layout_x(16), sim_layout_y(14));
+    custom.notes_title.widget.size(sim_layout_w(96), sim_layout_h(16));
+    custom.notes_title.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(16u8) as u32);
+    custom.notes_text.widget.at(sim_layout_x(16), sim_layout_y(38));
+    custom.notes_text.widget.size(sim_layout_w(272), sim_layout_h(42));
+    custom.notes_text.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(11u8) as u32);
+    custom.notes_text.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 120, g: 113, b: 108, a: 255 });
+    custom.notes_text.overflow = TextOverflow.Wrap;
+
+    custom.page.add(custom.hero.obj());
+    custom.page.add(custom.gauges_panel.obj());
+    custom.page.add(custom.keyboard_panel.obj());
+    custom.page.add(custom.notes_panel.obj());
+    custom.hero.add(custom.hero_title.obj());
+    custom.hero.add(custom.hero_subtitle.obj());
+    custom.gauges_panel.add(custom.gauges_title.obj());
+    custom.gauges_panel.add(custom.cpu_label.obj());
+    custom.gauges_panel.add(custom.cpu_gauge.obj());
+    custom.gauges_panel.add(custom.mem_label.obj());
+    custom.gauges_panel.add(custom.mem_gauge.obj());
+    custom.gauges_panel.add(custom.net_label.obj());
+    custom.gauges_panel.add(custom.net_gauge.obj());
+    custom.keyboard_panel.add(custom.keyboard_title.obj());
+    custom.keyboard_panel.add(custom.keyboard_text_label.obj());
+    custom.keyboard_panel.add(custom.row1.obj());
+    custom.keyboard_panel.add(custom.row2.obj());
+    custom.keyboard_panel.add(custom.row3.obj());
+    custom.keyboard_panel.add(custom.actions.obj());
+    custom.notes_panel.add(custom.notes_title.obj());
+    custom.notes_panel.add(custom.notes_text.obj());
+    custom.tree.set_root(0, custom.page.obj());
+    custom.ready = true;
+}
+
+export fn custom_retained_sync(
+    custom: &CustomRetained,
+    cpu_value: i32,
+    mem_value: i32,
+    net_value: i32,
+    keyboard_text_value: &const byte,
+    uppercase_mode: bool,
+    status_text: &const byte
+) void {
+    if custom == null {
+        return;
+    }
+    custom_retained_init(custom);
+
+    const default_subtitle: &const byte = "Click gauges to tune values, or tap keyboard keys to edit the buffer." as &const byte;
+    var subtitle: &const byte = default_subtitle;
+    if status_text != null && status_text[0] != 0 {
+        subtitle = status_text;
+    }
+    if !custom_cstr_eq(&custom.subtitle_text[0], subtitle) {
+        custom_copy_cstr(&custom.subtitle_text[0], 160usize, subtitle);
+        _ = custom.hero_subtitle.set_text(&custom.subtitle_text[0]);
+    }
+
+    var keyboard_text: &const byte = "HELLO UYAGUI" as &const byte;
+    if keyboard_text_value != null && keyboard_text_value[0] != 0 {
+        keyboard_text = keyboard_text_value;
+    }
+    if !custom_cstr_eq(&custom.keyboard_text_buf[0], keyboard_text) {
+        custom_copy_cstr(&custom.keyboard_text_buf[0], 64usize, keyboard_text);
+        _ = custom.keyboard_text_label.set_text(&custom.keyboard_text_buf[0]);
+    }
+
+    if custom.cpu_value != cpu_value {
+        custom.cpu_value = cpu_value;
+        _ = snprintf(&custom.cpu_text[0], 24usize, "CPU %d%%" as &const byte, cpu_value);
+        _ = custom.cpu_label.set_text(&custom.cpu_text[0]);
+        custom_draw_gauge(&custom.cpu_gauge, cpu_value, Color{ r: 16, g: 185, b: 129, a: 255 });
+    }
+    if custom.mem_value != mem_value {
+        custom.mem_value = mem_value;
+        _ = snprintf(&custom.mem_text[0], 24usize, "Memory %d%%" as &const byte, mem_value);
+        _ = custom.mem_label.set_text(&custom.mem_text[0]);
+        custom_draw_gauge(&custom.mem_gauge, mem_value, Color{ r: 249, g: 115, b: 22, a: 255 });
+    }
+    if custom.net_value != net_value {
+        custom.net_value = net_value;
+        _ = snprintf(&custom.net_text[0], 24usize, "Network %d%%" as &const byte, net_value);
+        _ = custom.net_label.set_text(&custom.net_text[0]);
+        custom_draw_gauge(&custom.net_gauge, net_value, Color{ r: 239, g: 68, b: 68, a: 255 });
+    }
+
+    if custom.uppercase_mode != uppercase_mode {
+        custom.uppercase_mode = uppercase_mode;
+        _ = custom.shift_btn.set_label("Shift");
+        if uppercase_mode {
+            _ = custom.shift_btn.set_variant(BtnVariant.Filled, 0u32);
+        } else {
+            _ = custom.shift_btn.set_variant(BtnVariant.Outlined, 0u32);
+        }
+        custom.shift_btn.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(11u8) as u32);
+    }
+}
+
+export fn render_demo_custom_retained_state(
+    custom: &CustomRetained,
+    ctx: &RenderCtx,
+    origin_x: i16,
+    origin_y: i16,
+    cpu_value: i32,
+    mem_value: i32,
+    net_value: i32,
+    keyboard_text_value: &const byte,
+    uppercase_mode: bool,
+    status_text: &const byte
+) void {
+    if custom == null {
+        return;
+    }
+    custom_retained_sync(custom, cpu_value, mem_value, net_value, keyboard_text_value, uppercase_mode, status_text);
+    custom.page.widget.at(origin_x, origin_y);
+    custom.page.render(ctx);
+}
+
 export fn render_demo_custom_state(
     ctx: &RenderCtx,
     origin_x: i16,
@@ -74,260 +507,8 @@ export fn render_demo_custom_state(
     uppercase_mode: bool,
     status_text: &const byte
 ) void {
-    var gauge_a_bytes: [byte: 28672] = [];
-    var gauge_b_bytes: [byte: 28672] = [];
-    var gauge_c_bytes: [byte: 28672] = [];
-    var cpu_text: [byte: 24] = [];
-    var mem_text: [byte: 24] = [];
-    var net_text: [byte: 24] = [];
-    var subtitle_text: &const byte = "Click gauges to tune values, or tap keyboard keys to edit the buffer." as &const byte;
-    if status_text != null && status_text[0] != 0 {
-        subtitle_text = status_text;
-    }
-    var keyboard_text: &const byte = "HELLO UYAGUI" as &const byte;
-    if keyboard_text_value != null && keyboard_text_value[0] != 0 {
-        keyboard_text = keyboard_text_value;
-    }
-    _ = snprintf(&cpu_text[0], 24usize, "CPU %d%%" as &const byte, cpu_value);
-    _ = snprintf(&mem_text[0], 24usize, "Memory %d%%" as &const byte, mem_value);
-    _ = snprintf(&net_text[0], 24usize, "Network %d%%" as &const byte, net_value);
-
-    var page: Page = Page.new("Custom");
-    page.widget.at(origin_x, origin_y);
-    page.widget.size(SIM_DEFAULT_RES_WIDTH, SIM_DEFAULT_RES_HEIGHT);
-    page.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 248, g: 245, b: 239, a: 255 });
-
-    var hero: Panel = Panel.new();
-    hero.widget.at(sim_layout_x(20), sim_layout_y(16));
-    hero.widget.size(sim_layout_w(600), sim_layout_h(64));
-    hero.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 255, g: 252, b: 247, a: 255 });
-
-    var hero_title: Label = Label.new("Custom Control Lab");
-    hero_title.widget.at(sim_layout_x(20), sim_layout_y(14));
-    hero_title.widget.size(sim_layout_w(560), sim_layout_h(20));
-    hero_title.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(26u8) as u32);
-    _ = hero_title.set_align(TextAlign.Center);
-
-    var hero_subtitle: Label = Label.new(subtitle_text);
-    hero_subtitle.widget.at(sim_layout_x(20), sim_layout_y(38));
-    hero_subtitle.widget.size(sim_layout_w(560), sim_layout_h(16));
-    hero_subtitle.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(12u8) as u32);
-    hero_subtitle.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 120, g: 113, b: 108, a: 255 });
-    _ = hero_subtitle.set_align(TextAlign.Center);
-
-    var gauges_panel: Panel = Panel.new();
-    gauges_panel.widget.at(sim_layout_x(20), sim_layout_y(96));
-    gauges_panel.widget.size(sim_layout_w(280), sim_layout_h(344));
-    gauges_panel.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 255, g: 252, b: 247, a: 255 });
-
-    var gauges_title: Label = Label.new("Gauge Cards");
-    gauges_title.widget.at(sim_layout_x(16), sim_layout_y(14));
-    gauges_title.widget.size(sim_layout_w(180), sim_layout_h(18));
-    gauges_title.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(18u8) as u32);
-
-    var cpu_label: Label = Label.new(&cpu_text[0]);
-    cpu_label.widget.at(sim_layout_x(24), sim_layout_y(44));
-    cpu_label.widget.size(sim_layout_w(180), sim_layout_h(16));
-    cpu_label.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(12u8) as u32);
-    cpu_label.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 71, g: 85, b: 105, a: 255 });
-    var cpu_gauge: Canvas = Canvas.with_buffer(&gauge_a_bytes[0], 112, 64, 448, PixelFormat.ARGB8888);
-    cpu_gauge.widget.at(sim_layout_x(20), sim_layout_y(62));
-    cpu_gauge.widget.size(sim_layout_w(240u16), sim_layout_h(82u16));
-    custom_draw_gauge(&cpu_gauge, cpu_value, Color{ r: 16, g: 185, b: 129, a: 255 });
-
-    var mem_label: Label = Label.new(&mem_text[0]);
-    mem_label.widget.at(sim_layout_x(24), sim_layout_y(156));
-    mem_label.widget.size(sim_layout_w(180), sim_layout_h(16));
-    mem_label.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(12u8) as u32);
-    mem_label.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 71, g: 85, b: 105, a: 255 });
-    var mem_gauge: Canvas = Canvas.with_buffer(&gauge_b_bytes[0], 112, 64, 448, PixelFormat.ARGB8888);
-    mem_gauge.widget.at(sim_layout_x(20), sim_layout_y(174));
-    mem_gauge.widget.size(sim_layout_w(240u16), sim_layout_h(82u16));
-    custom_draw_gauge(&mem_gauge, mem_value, Color{ r: 249, g: 115, b: 22, a: 255 });
-
-    var net_label: Label = Label.new(&net_text[0]);
-    net_label.widget.at(sim_layout_x(24), sim_layout_y(268));
-    net_label.widget.size(sim_layout_w(180), sim_layout_h(16));
-    net_label.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(12u8) as u32);
-    net_label.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 71, g: 85, b: 105, a: 255 });
-    var net_gauge: Canvas = Canvas.with_buffer(&gauge_c_bytes[0], 112, 64, 448, PixelFormat.ARGB8888);
-    net_gauge.widget.at(sim_layout_x(20), sim_layout_y(286));
-    net_gauge.widget.size(sim_layout_w(240u16), sim_layout_h(82u16));
-    custom_draw_gauge(&net_gauge, net_value, Color{ r: 239, g: 68, b: 68, a: 255 });
-
-    var keyboard_panel: Panel = Panel.new();
-    keyboard_panel.widget.at(sim_layout_x(316), sim_layout_y(96));
-    keyboard_panel.widget.size(sim_layout_w(304), sim_layout_h(252));
-    keyboard_panel.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 255, g: 252, b: 247, a: 255 });
-
-    var keyboard_title: Label = Label.new("Keyboard Prototype");
-    keyboard_title.widget.at(sim_layout_x(16), sim_layout_y(14));
-    keyboard_title.widget.size(sim_layout_w(180), sim_layout_h(18));
-    keyboard_title.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(18u8) as u32);
-
-    var keyboard_text_label: Label = Label.new(keyboard_text);
-    keyboard_text_label.widget.at(sim_layout_x(16), sim_layout_y(40));
-    keyboard_text_label.widget.size(sim_layout_w(272), sim_layout_h(26));
-    keyboard_text_label.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(16u8) as u32);
-    _ = keyboard_text_label.set_align(TextAlign.Center);
-    keyboard_text_label.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 248, g: 250, b: 252, a: 255 });
-    keyboard_text_label.widget.base.style.set_color(StyleProp.BorderColor, Color{ r: 226, g: 232, b: 240, a: 255 });
-    keyboard_text_label.widget.base.style.set_u32(StyleProp.BorderWidth, 1u32);
-    keyboard_text_label.widget.base.style.set_u32(StyleProp.Radius, 8u32);
-
-    var row1: GridView = GridView.new();
-    row1.widget.at(sim_layout_x(16), sim_layout_y(76));
-    row1.widget.size(sim_layout_w(272u16), sim_layout_h(34u16));
-    row1.columns = 10;
-    row1.item_size.w = sim_layout_w(24u16);
-    row1.item_size.h = sim_layout_h(30u16);
-    row1.col_gap = (sim_layout_w(3u16) as! u8).value;
-    row1.cell_padding = (sim_layout_h(1u16) as! u8).value;
-    row1.cell_content_mode = GridCellContentMode.Fill;
-    row1.content_align_x = GridContentAlign.Center;
-
-    var key_q: Button = custom_small_key("Q");
-    var key_w: Button = custom_small_key("W");
-    var key_e: Button = custom_small_key("E");
-    var key_r: Button = custom_small_key("R");
-    var key_t: Button = custom_small_key("T");
-    var key_y: Button = custom_small_key("Y");
-    var key_u: Button = custom_small_key("U");
-    var key_i: Button = custom_small_key("I");
-    var key_o: Button = custom_small_key("O");
-    var key_p: Button = custom_small_key("P");
-    row1.add_child(key_q.obj());
-    row1.add_child(key_w.obj());
-    row1.add_child(key_e.obj());
-    row1.add_child(key_r.obj());
-    row1.add_child(key_t.obj());
-    row1.add_child(key_y.obj());
-    row1.add_child(key_u.obj());
-    row1.add_child(key_i.obj());
-    row1.add_child(key_o.obj());
-    row1.add_child(key_p.obj());
-
-    var row2: GridView = GridView.new();
-    row2.widget.at(sim_layout_x(30), sim_layout_y(116));
-    row2.widget.size(sim_layout_w(248u16), sim_layout_h(34u16));
-    row2.columns = 9;
-    row2.item_size.w = sim_layout_w(24u16);
-    row2.item_size.h = sim_layout_h(30u16);
-    row2.col_gap = (sim_layout_w(3u16) as! u8).value;
-    row2.cell_padding = (sim_layout_h(1u16) as! u8).value;
-    row2.cell_content_mode = GridCellContentMode.Fill;
-    row2.content_align_x = GridContentAlign.Center;
-
-    var key_a: Button = custom_small_key("A");
-    var key_s: Button = custom_small_key("S");
-    var key_d: Button = custom_small_key("D");
-    var key_f: Button = custom_small_key("F");
-    var key_g: Button = custom_small_key("G");
-    var key_h: Button = custom_small_key("H");
-    var key_j: Button = custom_small_key("J");
-    var key_k: Button = custom_small_key("K");
-    var key_l: Button = custom_small_key("L");
-    row2.add_child(key_a.obj());
-    row2.add_child(key_s.obj());
-    row2.add_child(key_d.obj());
-    row2.add_child(key_f.obj());
-    row2.add_child(key_g.obj());
-    row2.add_child(key_h.obj());
-    row2.add_child(key_j.obj());
-    row2.add_child(key_k.obj());
-    row2.add_child(key_l.obj());
-
-    var row3: GridView = GridView.new();
-    row3.widget.at(sim_layout_x(56), sim_layout_y(156));
-    row3.widget.size(sim_layout_w(214u16), sim_layout_h(34u16));
-    row3.columns = 7;
-    row3.item_size.w = sim_layout_w(26u16);
-    row3.item_size.h = sim_layout_h(30u16);
-    row3.col_gap = (sim_layout_w(4u16) as! u8).value;
-    row3.cell_padding = (sim_layout_h(1u16) as! u8).value;
-    row3.cell_content_mode = GridCellContentMode.Fill;
-    row3.content_align_x = GridContentAlign.Center;
-
-    var key_z: Button = custom_small_key("Z");
-    var key_x: Button = custom_small_key("X");
-    var key_c: Button = custom_small_key("C");
-    var key_v: Button = custom_small_key("V");
-    var key_b: Button = custom_small_key("B");
-    var key_n: Button = custom_small_key("N");
-    var key_m: Button = custom_small_key("M");
-    row3.add_child(key_z.obj());
-    row3.add_child(key_x.obj());
-    row3.add_child(key_c.obj());
-    row3.add_child(key_v.obj());
-    row3.add_child(key_b.obj());
-    row3.add_child(key_n.obj());
-    row3.add_child(key_m.obj());
-
-    var actions: GridView = GridView.new();
-    actions.widget.at(sim_layout_x(16), sim_layout_y(198));
-    actions.widget.size(sim_layout_w(272u16), sim_layout_h(38u16));
-    actions.columns = 3;
-    actions.item_size.w = sim_layout_w(86u16);
-    actions.item_size.h = sim_layout_h(34u16);
-    actions.col_gap = (sim_layout_w(7u16) as! u8).value;
-    actions.cell_padding = (sim_layout_h(1u16) as! u8).value;
-    actions.cell_content_mode = GridCellContentMode.Fill;
-    actions.content_align_x = GridContentAlign.Center;
-
-    var shift_btn: Button = Button.outlined("Shift");
-    if uppercase_mode {
-        shift_btn = custom_action_key("Shift");
-    }
-    var space_btn: Button = custom_action_key("Space");
-    var enter_btn: Button = custom_action_key("Enter");
-    actions.add_child(shift_btn.obj());
-    actions.add_child(space_btn.obj());
-    actions.add_child(enter_btn.obj());
-
-    var notes_panel: Panel = Panel.new();
-    notes_panel.widget.at(sim_layout_x(316), sim_layout_y(360));
-    notes_panel.widget.size(sim_layout_w(304), sim_layout_h(96));
-    notes_panel.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 255, g: 252, b: 247, a: 255 });
-
-    var notes_title: Label = Label.new("Pattern");
-    notes_title.widget.at(sim_layout_x(16), sim_layout_y(14));
-    notes_title.widget.size(sim_layout_w(96), sim_layout_h(16));
-    notes_title.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(16u8) as u32);
-
-    var notes_text: Label = Label.new("The gauge uses Canvas drawing primitives, while the keyboard composes GridView + Button into a reusable on-screen input surface.");
-    notes_text.widget.at(sim_layout_x(16), sim_layout_y(38));
-    notes_text.widget.size(sim_layout_w(272), sim_layout_h(42));
-    notes_text.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(11u8) as u32);
-    notes_text.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 120, g: 113, b: 108, a: 255 });
-    notes_text.overflow = TextOverflow.Wrap;
-
-    page.add(hero.obj());
-    page.add(gauges_panel.obj());
-    page.add(keyboard_panel.obj());
-    page.add(notes_panel.obj());
-
-    hero.add(hero_title.obj());
-    hero.add(hero_subtitle.obj());
-
-    gauges_panel.add(gauges_title.obj());
-    gauges_panel.add(cpu_label.obj());
-    gauges_panel.add(cpu_gauge.obj());
-    gauges_panel.add(mem_label.obj());
-    gauges_panel.add(mem_gauge.obj());
-    gauges_panel.add(net_label.obj());
-    gauges_panel.add(net_gauge.obj());
-
-    keyboard_panel.add(keyboard_title.obj());
-    keyboard_panel.add(keyboard_text_label.obj());
-    keyboard_panel.add(row1.obj());
-    keyboard_panel.add(row2.obj());
-    keyboard_panel.add(row3.obj());
-    keyboard_panel.add(actions.obj());
-
-    notes_panel.add(notes_title.obj());
-    notes_panel.add(notes_text.obj());
-
-    page.render(ctx);
+    var custom: CustomRetained = custom_retained_new();
+    render_demo_custom_retained_state(&custom, ctx, origin_x, origin_y, cpu_value, mem_value, net_value, keyboard_text_value, uppercase_mode, status_text);
 }
 
 export fn render_demo_custom(ctx: &RenderCtx, origin_x: i16, origin_y: i16) void {

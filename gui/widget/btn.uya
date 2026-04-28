@@ -11,6 +11,7 @@ use core.rect.Rect;
 use render.ctx.RenderCtx;
 use render.font.Font;
 use render.font.draw_text;
+use libc.strncmp;
 use style.StyleProp;
 use widget.base.IWidgetEventCallback;
 use widget.base.Widget;
@@ -31,6 +32,38 @@ fn button_default_bg() Color {
 
 fn button_default_border() Color {
     return Color{ r: 25, g: 95, b: 169, a: 255 };
+}
+
+fn button_apply_variant_style(widget: &Widget, variant: BtnVariant) void {
+    widget.base.style.set_color(StyleProp.BgColor, button_default_bg());
+    widget.base.style.set_color(StyleProp.FgColor, WHITE);
+    widget.base.style.set_color(StyleProp.BorderColor, button_default_border());
+    widget.base.style.set_u32(StyleProp.BorderWidth, 1u32);
+    widget.base.style.set_u32(StyleProp.Radius, 10u32);
+    widget.base.style.set_u32(StyleProp.PaddingLeft, 12u32);
+    widget.base.style.set_u32(StyleProp.PaddingRight, 12u32);
+    widget.base.style.set_u32(StyleProp.PaddingTop, 8u32);
+    widget.base.style.set_u32(StyleProp.PaddingBottom, 8u32);
+    widget.base.style.set_u32(StyleProp.FontSize, 14u32);
+
+    if variant == BtnVariant.Outlined {
+        widget.base.style.set_color(StyleProp.BgColor, Color{ r: 0, g: 0, b: 0, a: 0 });
+        widget.base.style.set_color(StyleProp.FgColor, button_default_bg());
+        widget.base.style.set_color(StyleProp.BorderColor, button_default_bg());
+        return;
+    }
+    if variant == BtnVariant.Text {
+        widget.base.style.set_color(StyleProp.BgColor, Color{ r: 0, g: 0, b: 0, a: 0 });
+        widget.base.style.set_color(StyleProp.FgColor, button_default_bg());
+        widget.base.style.set_color(StyleProp.BorderColor, Color{ r: 0, g: 0, b: 0, a: 0 });
+        widget.base.style.set_u32(StyleProp.BorderWidth, 0u32);
+        return;
+    }
+    if variant == BtnVariant.Icon {
+        widget.base.style.set_u32(StyleProp.PaddingLeft, 8u32);
+        widget.base.style.set_u32(StyleProp.PaddingRight, 8u32);
+        widget.base.style.set_u32(StyleProp.Width, 44u32);
+    }
 }
 
 export enum BtnVariant {
@@ -82,30 +115,8 @@ ButtonInputAdapter {
 fn button_make(text: &const byte, variant: BtnVariant, icon: u32) Button {
     var widget: Widget = widget_new("Button", WIDGET_TYPE_BUTTON, true, true);
     widget.size(96, 36);
-    widget.base.style.set_color(StyleProp.BgColor, button_default_bg());
-    widget.base.style.set_color(StyleProp.FgColor, WHITE);
-    widget.base.style.set_color(StyleProp.BorderColor, button_default_border());
-    widget.base.style.set_u32(StyleProp.BorderWidth, 1u32);
-    widget.base.style.set_u32(StyleProp.Radius, 10u32);
-    widget.base.style.set_u32(StyleProp.PaddingLeft, 12u32);
-    widget.base.style.set_u32(StyleProp.PaddingRight, 12u32);
-    widget.base.style.set_u32(StyleProp.PaddingTop, 8u32);
-    widget.base.style.set_u32(StyleProp.PaddingBottom, 8u32);
-    widget.base.style.set_u32(StyleProp.FontSize, 14u32);
-
-    if variant == BtnVariant.Outlined {
-        widget.base.style.set_color(StyleProp.BgColor, Color{ r: 0, g: 0, b: 0, a: 0 });
-        widget.base.style.set_color(StyleProp.FgColor, button_default_bg());
-        widget.base.style.set_color(StyleProp.BorderColor, button_default_bg());
-    } else if variant == BtnVariant.Text {
-        widget.base.style.set_color(StyleProp.BgColor, Color{ r: 0, g: 0, b: 0, a: 0 });
-        widget.base.style.set_color(StyleProp.FgColor, button_default_bg());
-        widget.base.style.set_color(StyleProp.BorderColor, Color{ r: 0, g: 0, b: 0, a: 0 });
-        widget.base.style.set_u32(StyleProp.BorderWidth, 0u32);
-    } else if variant == BtnVariant.Icon {
-        widget.base.style.set_u32(StyleProp.PaddingLeft, 8u32);
-        widget.base.style.set_u32(StyleProp.PaddingRight, 8u32);
-        widget.base.style.set_u32(StyleProp.Width, 44u32);
+    button_apply_variant_style(&widget, variant);
+    if variant == BtnVariant.Icon {
         widget.size(44, 36);
     }
 
@@ -155,6 +166,40 @@ Button {
     fn on_click(self: &Self, callback: &IWidgetEventCallback, user_data: &void) &Button {
         self.widget.on_click(callback, user_data);
         self.click_ctx = user_data;
+        return self;
+    }
+
+    fn set_label(self: &Self, text: &const byte) &Button {
+        const next_len: usize = widget_text_len(text);
+        if self.label == null && text == null {
+            return self;
+        }
+        if self.label != null
+            && text != null
+            && self.label != text
+            && self.label_len == next_len
+            && strncmp(self.label as *const byte, text as *const byte, next_len) == 0 {
+            return self;
+        }
+        self.label = text;
+        self.label_len = next_len;
+        self.widget.base.invalidate();
+        return self;
+    }
+
+    fn set_variant(self: &Self, variant: BtnVariant, icon: u32) &Button {
+        if self.variant == variant && self.icon == icon {
+            return self;
+        }
+        self.variant = variant;
+        self.icon = icon;
+        button_apply_variant_style(&self.widget, variant);
+        if variant == BtnVariant.Icon {
+            if self.widget.base.w == 96u16 {
+                self.widget.size(44, self.widget.base.h);
+            }
+        }
+        self.widget.base.invalidate();
         return self;
     }
 

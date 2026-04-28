@@ -1,9 +1,12 @@
 use core.color.Color;
 use core.event.Event;
 use core.event.EventType;
+use core.obj_tree.ObjTree;
+use core.obj_tree.obj_tree_new;
 use core.point.Point;
 use core.rect.Rect;
 use libc.snprintf;
+use libc.strncmp;
 use platform.disp.PixelFormat;
 use platform.disp.framebuffer_new;
 use platform.disp.framebuffer_required_bytes;
@@ -20,6 +23,14 @@ use sim.common.sim_layout_x;
 use sim.common.sim_layout_y;
 use sim.common.SIM_DEFAULT_RES_HEIGHT;
 use sim.common.SIM_DEFAULT_RES_WIDTH;
+use style.StyleProp;
+use widget.btn.BtnVariant;
+use widget.btn.Button;
+use widget.canvas.Canvas;
+use widget.lbl.Label;
+use widget.lbl.TextAlign;
+use widget.page.Page;
+use widget.panel.Panel;
 
 extern fn malloc(size: usize) &void;
 extern fn free(ptr: &void) void;
@@ -249,6 +260,85 @@ export struct NovelRetained {
     last_auto_tick_ms: u32,
 }
 
+export struct NovelPageRetained {
+    tree: ObjTree,
+    page: Page,
+    rail: Panel,
+    rail_title: Label,
+    rail_sub1: Label,
+    rail_sub2: Label,
+    rail_meta1: Label,
+    rail_meta2: Label,
+    rail_meta3: Label,
+    metric1: Label,
+    metric2: Label,
+    metric3: Label,
+    auto_btn: Button,
+    top_btn: Button,
+    end_btn: Button,
+    card: Panel,
+    title: Label,
+    chapter: Label,
+    progress_label: Label,
+    view_canvas: Canvas,
+    progress_canvas: Canvas,
+    footer: Label,
+    view_pixels: &byte,
+    progress_pixels: &byte,
+    metric1_buf: [byte: 32],
+    metric2_buf: [byte: 32],
+    metric3_buf: [byte: 32],
+    progress_buf: [byte: 48],
+    footer_buf: [byte: 80],
+    ready: bool,
+    shown_scroll_y: i32,
+    shown_progress: i32,
+    shown_chapter: i32,
+    shown_auto_scroll: bool,
+}
+
+fn novel_cstr_eq(a: &const byte, b: &const byte) bool {
+    if a == null && b == null {
+        return true;
+    }
+    if a == null || b == null {
+        return false;
+    }
+    var len: usize = 0usize;
+    while a[len] != 0 && b[len] != 0 {
+        len = len + 1usize;
+    }
+    if a[len] != 0 || b[len] != 0 {
+        return false;
+    }
+    return strncmp(a as *const byte, b as *const byte, len) == 0;
+}
+
+fn novel_copy_cstr(dst: &byte, cap: usize, src: &const byte) void {
+    if dst == null || cap == 0usize {
+        return;
+    }
+    if src == null {
+        dst[0] = 0;
+        return;
+    }
+    var i: usize = 0usize;
+    while i + 1usize < cap && src[i] != 0 {
+        dst[i] = src[i];
+        i = i + 1usize;
+    }
+    dst[i] = 0;
+}
+
+fn novel_sync_button(button: &Button, label: &const byte, variant: BtnVariant) void {
+    if button == null {
+        return;
+    }
+    _ = button.set_label(label);
+    _ = button.set_variant(variant, 0u32);
+    button.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(12u8) as u32);
+}
+
 fn novel_title_font() &Font {
     const font: &Font = font_ui_default_ref(NOVEL_TITLE_FONT_SIZE);
     if font != null {
@@ -356,6 +446,24 @@ fn novel_end_button_rect(origin_x: i16, origin_y: i16) Rect {
         y: origin_y + sim_layout_y(NOVEL_END_BUTTON_Y),
         w: sim_layout_w(NOVEL_END_BUTTON_W),
         h: sim_layout_h(NOVEL_END_BUTTON_H),
+    };
+}
+
+fn novel_header_rect(origin_x: i16, origin_y: i16) Rect {
+    return Rect{
+        x: origin_x + sim_layout_x(208),
+        y: origin_y + sim_layout_y(36),
+        w: sim_layout_w(396u16),
+        h: sim_layout_h(54u16),
+    };
+}
+
+fn novel_footer_rect(origin_x: i16, origin_y: i16) Rect {
+    return Rect{
+        x: origin_x + sim_layout_x(208),
+        y: origin_y + sim_layout_y(NOVEL_FOOTER_Y),
+        w: sim_layout_w(388u16),
+        h: sim_layout_h(18u16),
     };
 }
 
@@ -969,6 +1077,335 @@ fn novel_line_is_chapter_title(novel: &NovelRetained, start: usize) bool {
         i = i + 1;
     }
     return false;
+}
+
+fn novel_draw_view_canvas(canvas: &Canvas, novel: &NovelRetained) void {
+    if canvas == null || novel == null {
+        return;
+    }
+    const body_font: &Font = novel_body_font();
+    const line_step: i16 = novel_body_line_step(body_font);
+    const view_w: u16 = sim_layout_w(NOVEL_VIEW_W);
+    const view_h: u16 = sim_layout_h(NOVEL_VIEW_H);
+    canvas.begin_draw().clear(Color{ r: 251, g: 247, b: 239, a: 255 });
+    canvas.begin_draw().push_clip(Rect{ x: 0, y: 0, w: view_w, h: view_h });
+
+    var first_line: i32 = 0;
+    if line_step > 0 {
+        first_line = novel.scroll_y / line_step as i32;
+    }
+    var y: i16 = 0i16 - (novel.scroll_y % line_step as i32) as i16;
+    var line_idx: i32 = first_line;
+    while line_idx < novel.line_count && y < view_h as i16 {
+        if y + line_step > 0 {
+            const line: NovelLine = novel.lines[line_idx as usize];
+            if line.len > 0usize {
+                if novel_line_is_chapter_title(novel, line.start) {
+                    draw_text(
+                        canvas.begin_draw(),
+                        0,
+                        y,
+                        @ptr_from_usize(@usize_from_ptr((&novel.text[0]) as &void) + line.start) as &const byte,
+                        line.len,
+                        body_font,
+                        Color{ r: 146, g: 109, b: 72, a: 255 }
+                    );
+                } else {
+                    draw_text(
+                        canvas.begin_draw(),
+                        0,
+                        y,
+                        @ptr_from_usize(@usize_from_ptr((&novel.text[0]) as &void) + line.start) as &const byte,
+                        line.len,
+                        body_font,
+                        Color{ r: 77, g: 59, b: 43, a: 255 }
+                    );
+                }
+            }
+        }
+        y = y + line_step;
+        line_idx = line_idx + 1;
+    }
+    canvas.begin_draw().pop_clip();
+    canvas.begin_draw().fill_linear_gradient(
+        Rect{ x: 0, y: 0, w: view_w, h: sim_layout_h(22u16) },
+        Color{ r: 246, g: 239, b: 226, a: 255 },
+        Color{ r: 246, g: 239, b: 226, a: 0 },
+        false
+    );
+    canvas.begin_draw().fill_linear_gradient(
+        Rect{ x: 0, y: view_h as i16 - sim_layout_y(22), w: view_w, h: sim_layout_h(22u16) },
+        Color{ r: 246, g: 239, b: 226, a: 0 },
+        Color{ r: 246, g: 239, b: 226, a: 255 },
+        false
+    );
+    canvas.end_draw();
+}
+
+fn novel_draw_progress_canvas(canvas: &Canvas, progress_percent: i32) void {
+    if canvas == null {
+        return;
+    }
+    const progress_w: u16 = sim_layout_w(NOVEL_PROGRESS_W);
+    const progress_h: u16 = sim_layout_h(NOVEL_PROGRESS_H);
+    var fill_h: i32 = (progress_h as i32 * progress_percent) / 100;
+    if fill_h < 10 {
+        fill_h = 10;
+    }
+    if progress_percent >= 100 {
+        fill_h = progress_h as i32;
+    }
+    canvas.begin_draw().clear(Color{ r: 0, g: 0, b: 0, a: 0 });
+    canvas.begin_draw().fill_round_rect(Rect{ x: 0, y: 0, w: progress_w, h: progress_h }, sim_layout_font(3u8), Color{ r: 227, g: 216, b: 194, a: 255 });
+    canvas.begin_draw().fill_round_rect(
+        Rect{
+            x: 0,
+            y: progress_h as i16 - fill_h as i16,
+            w: progress_w,
+            h: (fill_h as! u16).value,
+        },
+        sim_layout_font(3u8),
+        Color{ r: 207, g: 143, b: 74, a: 255 }
+    );
+    canvas.end_draw();
+}
+
+export fn novel_page_retained_new() NovelPageRetained {
+    return NovelPageRetained{
+        tree: obj_tree_new(),
+        page: Page.new("NovelPage"),
+        rail: Panel.new(),
+        rail_title: Label.new(NOVEL_TITLE),
+        rail_sub1: Label.new("原创长篇阅读"),
+        rail_sub2: Label.new("滚动演示"),
+        rail_meta1: Label.new("主角 沈砚 / 线索 阿迟"),
+        rail_meta2: Label.new("滚轮 / 拖拽 / 上下键"),
+        rail_meta3: Label.new("空格切换自动滚屏"),
+        metric1: Label.new(""),
+        metric2: Label.new(""),
+        metric3: Label.new(""),
+        auto_btn: Button.outlined("自动滚屏"),
+        top_btn: Button.outlined("回到开头"),
+        end_btn: Button.outlined("跳到末章"),
+        card: Panel.new(),
+        title: Label.new(NOVEL_TITLE),
+        chapter: Label.new(NOVEL_CHAPTER_TITLES[0]),
+        progress_label: Label.new("进度 0%"),
+        view_canvas: Canvas.new(),
+        progress_canvas: Canvas.new(),
+        footer: Label.new(""),
+        view_pixels: null,
+        progress_pixels: null,
+        metric1_buf: [],
+        metric2_buf: [],
+        metric3_buf: [],
+        progress_buf: [],
+        footer_buf: [],
+        ready: false,
+        shown_scroll_y: -1,
+        shown_progress: -1,
+        shown_chapter: -1,
+        shown_auto_scroll: false,
+    };
+}
+
+export fn novel_page_retained_init(page_state: &NovelPageRetained, novel: &NovelRetained) void {
+    if page_state == null || page_state.ready {
+        return;
+    }
+    novel_retained_init(novel);
+
+    page_state.page.widget.at(0, 0);
+    page_state.page.widget.size(NOVEL_DEMO_W, NOVEL_DEMO_H);
+    page_state.page.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 16, g: 44, b: 52, a: 255 });
+
+    page_state.rail.widget.at(sim_layout_x(NOVEL_RAIL_X), sim_layout_y(NOVEL_RAIL_Y));
+    page_state.rail.widget.size(sim_layout_w(NOVEL_RAIL_W), sim_layout_h(NOVEL_RAIL_H));
+    page_state.rail.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 18, g: 47, b: 58, a: 255 });
+    page_state.rail.widget.base.style.set_color(StyleProp.BorderColor, Color{ r: 74, g: 117, b: 132, a: 255 });
+    page_state.rail.widget.base.style.set_u32(StyleProp.Radius, sim_layout_font(20u8) as u32);
+
+    page_state.rail_title.widget.at(sim_layout_x(10), sim_layout_y(12));
+    page_state.rail_title.widget.size(sim_layout_w(120), sim_layout_h(20));
+    page_state.rail_title.widget.base.style.set_u32(StyleProp.FontSize, NOVEL_RAIL_TITLE_FONT_SIZE as u32);
+    page_state.rail_title.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 242, g: 226, b: 194, a: 255 });
+    page_state.rail_sub1.widget.at(sim_layout_x(10), sim_layout_y(44));
+    page_state.rail_sub1.widget.size(sim_layout_w(120), sim_layout_h(14));
+    page_state.rail_sub1.widget.base.style.set_u32(StyleProp.FontSize, NOVEL_RAIL_META_FONT_SIZE as u32);
+    page_state.rail_sub1.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 178, g: 203, b: 210, a: 255 });
+    page_state.rail_sub2.widget.at(sim_layout_x(10), sim_layout_y(60));
+    page_state.rail_sub2.widget.size(sim_layout_w(120), sim_layout_h(14));
+    page_state.rail_sub2.widget.base.style.set_u32(StyleProp.FontSize, NOVEL_RAIL_META_FONT_SIZE as u32);
+    page_state.rail_sub2.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 178, g: 203, b: 210, a: 255 });
+    page_state.rail_meta1.widget.at(sim_layout_x(10), sim_layout_y(94));
+    page_state.rail_meta1.widget.size(sim_layout_w(130), sim_layout_h(14));
+    page_state.rail_meta1.widget.base.style.set_u32(StyleProp.FontSize, NOVEL_RAIL_META_FONT_SIZE as u32);
+    page_state.rail_meta1.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 226, g: 236, b: 236, a: 255 });
+    page_state.rail_meta2.widget.at(sim_layout_x(10), sim_layout_y(112));
+    page_state.rail_meta2.widget.size(sim_layout_w(130), sim_layout_h(14));
+    page_state.rail_meta2.widget.base.style.set_u32(StyleProp.FontSize, NOVEL_RAIL_META_FONT_SIZE as u32);
+    page_state.rail_meta2.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 175, g: 199, b: 205, a: 255 });
+    page_state.rail_meta3.widget.at(sim_layout_x(10), sim_layout_y(130));
+    page_state.rail_meta3.widget.size(sim_layout_w(130), sim_layout_h(14));
+    page_state.rail_meta3.widget.base.style.set_u32(StyleProp.FontSize, NOVEL_RAIL_META_FONT_SIZE as u32);
+    page_state.rail_meta3.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 175, g: 199, b: 205, a: 255 });
+
+    novel_metric_text(&page_state.metric1_buf[0], 32usize, "字数" as &const byte, novel.char_count);
+    novel_metric_text(&page_state.metric2_buf[0], 32usize, "章节" as &const byte, NOVEL_CHAPTER_COUNT);
+    novel_metric_text(&page_state.metric3_buf[0], 32usize, "行数" as &const byte, novel.line_count);
+    _ = page_state.metric1.set_text(&page_state.metric1_buf[0]);
+    _ = page_state.metric2.set_text(&page_state.metric2_buf[0]);
+    _ = page_state.metric3.set_text(&page_state.metric3_buf[0]);
+    page_state.metric1.widget.at(sim_layout_x(10), sim_layout_y(182));
+    page_state.metric1.widget.size(sim_layout_w(120), sim_layout_h(16));
+    page_state.metric2.widget.at(sim_layout_x(10), sim_layout_y(206));
+    page_state.metric2.widget.size(sim_layout_w(120), sim_layout_h(16));
+    page_state.metric3.widget.at(sim_layout_x(10), sim_layout_y(230));
+    page_state.metric3.widget.size(sim_layout_w(120), sim_layout_h(16));
+    page_state.metric1.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 242, g: 226, b: 194, a: 255 });
+    page_state.metric2.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 242, g: 226, b: 194, a: 255 });
+    page_state.metric3.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 242, g: 226, b: 194, a: 255 });
+    page_state.metric1.widget.base.style.set_u32(StyleProp.FontSize, NOVEL_META_FONT_SIZE as u32);
+    page_state.metric2.widget.base.style.set_u32(StyleProp.FontSize, NOVEL_META_FONT_SIZE as u32);
+    page_state.metric3.widget.base.style.set_u32(StyleProp.FontSize, NOVEL_META_FONT_SIZE as u32);
+
+    page_state.auto_btn.widget.at(sim_layout_x(10), sim_layout_y(308));
+    page_state.auto_btn.widget.size(sim_layout_w(NOVEL_AUTO_BUTTON_W), sim_layout_h(NOVEL_AUTO_BUTTON_H));
+    page_state.top_btn.widget.at(sim_layout_x(10), sim_layout_y(352));
+    page_state.top_btn.widget.size(sim_layout_w(NOVEL_TOP_BUTTON_W), sim_layout_h(NOVEL_TOP_BUTTON_H));
+    page_state.end_btn.widget.at(sim_layout_x(10), sim_layout_y(396));
+    page_state.end_btn.widget.size(sim_layout_w(NOVEL_END_BUTTON_W), sim_layout_h(NOVEL_END_BUTTON_H));
+    novel_sync_button(&page_state.auto_btn, "自动滚屏", BtnVariant.Outlined);
+    novel_sync_button(&page_state.top_btn, "回到开头", BtnVariant.Outlined);
+    novel_sync_button(&page_state.end_btn, "跳到末章", BtnVariant.Outlined);
+
+    page_state.card.widget.at(sim_layout_x(NOVEL_CARD_X), sim_layout_y(NOVEL_CARD_Y));
+    page_state.card.widget.size(sim_layout_w(NOVEL_CARD_W), sim_layout_h(NOVEL_CARD_H));
+    page_state.card.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 246, g: 239, b: 226, a: 255 });
+    page_state.card.widget.base.style.set_color(StyleProp.BorderColor, Color{ r: 209, g: 186, b: 149, a: 255 });
+    page_state.card.widget.base.style.set_u32(StyleProp.Radius, sim_layout_font(24u8) as u32);
+
+    page_state.title.widget.at(sim_layout_x(26), sim_layout_y(18));
+    page_state.title.widget.size(sim_layout_w(220), sim_layout_h(24));
+    page_state.title.widget.base.style.set_u32(StyleProp.FontSize, NOVEL_TITLE_FONT_SIZE as u32);
+    page_state.title.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 58, g: 44, b: 31, a: 255 });
+
+    page_state.chapter.widget.at(sim_layout_x(26), sim_layout_y(50));
+    page_state.chapter.widget.size(sim_layout_w(220), sim_layout_h(16));
+    page_state.chapter.widget.base.style.set_u32(StyleProp.FontSize, NOVEL_META_FONT_SIZE as u32);
+    page_state.chapter.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 146, g: 109, b: 72, a: 255 });
+
+    page_state.progress_label.widget.at(sim_layout_x(260), sim_layout_y(50));
+    page_state.progress_label.widget.size(sim_layout_w(144), sim_layout_h(16));
+    page_state.progress_label.widget.base.style.set_u32(StyleProp.FontSize, NOVEL_META_FONT_SIZE as u32);
+    page_state.progress_label.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 146, g: 109, b: 72, a: 255 });
+    _ = page_state.progress_label.set_align(TextAlign.Right);
+
+    if page_state.view_pixels == null {
+        const bytes_len: usize = framebuffer_required_bytes(sim_layout_w(NOVEL_VIEW_W), sim_layout_h(NOVEL_VIEW_H), PixelFormat.ARGB8888);
+        page_state.view_pixels = malloc(bytes_len) as &byte;
+    }
+    if page_state.progress_pixels == null {
+        const bytes_len: usize = framebuffer_required_bytes(sim_layout_w(NOVEL_PROGRESS_W), sim_layout_h(NOVEL_PROGRESS_H), PixelFormat.ARGB8888);
+        page_state.progress_pixels = malloc(bytes_len) as &byte;
+    }
+    if page_state.view_pixels != null {
+        page_state.view_canvas.attach_buffer(page_state.view_pixels, sim_layout_w(NOVEL_VIEW_W), sim_layout_h(NOVEL_VIEW_H), sim_layout_w(NOVEL_VIEW_W) * 4u16, PixelFormat.ARGB8888);
+    }
+    if page_state.progress_pixels != null {
+        page_state.progress_canvas.attach_buffer(page_state.progress_pixels, sim_layout_w(NOVEL_PROGRESS_W), sim_layout_h(NOVEL_PROGRESS_H), sim_layout_w(NOVEL_PROGRESS_W) * 4u16, PixelFormat.ARGB8888);
+    }
+    page_state.view_canvas.widget.at(sim_layout_x(NOVEL_VIEW_X - NOVEL_CARD_X), sim_layout_y(NOVEL_VIEW_Y - NOVEL_CARD_Y));
+    page_state.view_canvas.widget.size(sim_layout_w(NOVEL_VIEW_W), sim_layout_h(NOVEL_VIEW_H));
+    page_state.view_canvas.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 0, g: 0, b: 0, a: 0 });
+    page_state.view_canvas.widget.base.style.set_color(StyleProp.BorderColor, Color{ r: 0, g: 0, b: 0, a: 0 });
+    page_state.view_canvas.widget.base.style.set_u32(StyleProp.BorderWidth, 0u32);
+    page_state.progress_canvas.widget.at(sim_layout_x(NOVEL_PROGRESS_X - NOVEL_CARD_X), sim_layout_y(NOVEL_PROGRESS_Y - NOVEL_CARD_Y));
+    page_state.progress_canvas.widget.size(sim_layout_w(NOVEL_PROGRESS_W), sim_layout_h(NOVEL_PROGRESS_H));
+    page_state.progress_canvas.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 0, g: 0, b: 0, a: 0 });
+    page_state.progress_canvas.widget.base.style.set_color(StyleProp.BorderColor, Color{ r: 0, g: 0, b: 0, a: 0 });
+    page_state.progress_canvas.widget.base.style.set_u32(StyleProp.BorderWidth, 0u32);
+
+    page_state.footer.widget.at(sim_layout_x(26), sim_layout_y(NOVEL_FOOTER_Y - NOVEL_CARD_Y));
+    page_state.footer.widget.size(sim_layout_w(388), sim_layout_h(18));
+    page_state.footer.widget.base.style.set_u32(StyleProp.FontSize, NOVEL_META_FONT_SIZE as u32);
+    page_state.footer.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 112, g: 90, b: 68, a: 255 });
+
+    page_state.page.add(page_state.rail.obj());
+    page_state.page.add(page_state.card.obj());
+    page_state.rail.add(page_state.rail_title.obj());
+    page_state.rail.add(page_state.rail_sub1.obj());
+    page_state.rail.add(page_state.rail_sub2.obj());
+    page_state.rail.add(page_state.rail_meta1.obj());
+    page_state.rail.add(page_state.rail_meta2.obj());
+    page_state.rail.add(page_state.rail_meta3.obj());
+    page_state.rail.add(page_state.metric1.obj());
+    page_state.rail.add(page_state.metric2.obj());
+    page_state.rail.add(page_state.metric3.obj());
+    page_state.rail.add(page_state.auto_btn.obj());
+    page_state.rail.add(page_state.top_btn.obj());
+    page_state.rail.add(page_state.end_btn.obj());
+    page_state.card.add(page_state.title.obj());
+    page_state.card.add(page_state.chapter.obj());
+    page_state.card.add(page_state.progress_label.obj());
+    page_state.card.add(page_state.view_canvas.obj());
+    page_state.card.add(page_state.progress_canvas.obj());
+    page_state.card.add(page_state.footer.obj());
+    page_state.tree.set_root(0, page_state.page.obj());
+    page_state.ready = true;
+}
+
+export fn novel_page_retained_sync(page_state: &NovelPageRetained, novel: &NovelRetained) void {
+    if page_state == null || novel == null {
+        return;
+    }
+    novel_page_retained_init(page_state, novel);
+
+    const current_chapter: i32 = novel_current_chapter_idx(novel);
+    const progress_percent: i32 = novel_retained_progress_percent(novel);
+    var chapter_idx_usize: usize = 0usize;
+    if current_chapter >= 0 && current_chapter < NOVEL_CHAPTER_COUNT {
+        chapter_idx_usize = (current_chapter as! usize).value;
+    }
+
+    _ = page_state.chapter.set_text(NOVEL_CHAPTER_TITLES[chapter_idx_usize]);
+    _ = snprintf(&page_state.progress_buf[0], 48usize, "进度 %d%%" as &const byte, progress_percent);
+    _ = page_state.progress_label.set_text(&page_state.progress_buf[0]);
+    _ = snprintf(
+        &page_state.footer_buf[0],
+        80usize,
+        "第 %d / %d 章  ·  顶部可见 %d%%" as &const byte,
+        current_chapter + 1,
+        NOVEL_CHAPTER_COUNT,
+        progress_percent
+    );
+    _ = page_state.footer.set_text(&page_state.footer_buf[0]);
+
+    if page_state.shown_scroll_y != novel.scroll_y {
+        page_state.shown_scroll_y = novel.scroll_y;
+        novel_draw_view_canvas(&page_state.view_canvas, novel);
+    }
+    if page_state.shown_progress != progress_percent {
+        page_state.shown_progress = progress_percent;
+        novel_draw_progress_canvas(&page_state.progress_canvas, progress_percent);
+    }
+    if page_state.shown_auto_scroll != novel.auto_scroll {
+        page_state.shown_auto_scroll = novel.auto_scroll;
+        var auto_variant: BtnVariant = BtnVariant.Outlined;
+        if novel.auto_scroll {
+            auto_variant = BtnVariant.Filled;
+        }
+        novel_sync_button(&page_state.auto_btn, "自动滚屏", auto_variant);
+    }
+}
+
+export fn render_demo_novel_retained_state(page_state: &NovelPageRetained, novel: &NovelRetained, ctx: &RenderCtx, origin_x: i16, origin_y: i16) void {
+    if page_state == null || novel == null || ctx == null {
+        return;
+    }
+    novel_page_retained_sync(page_state, novel);
+    page_state.page.widget.at(origin_x, origin_y);
+    page_state.page.render(ctx);
 }
 
 export fn novel_retained_init(novel: &NovelRetained) void {

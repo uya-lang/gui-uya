@@ -442,7 +442,7 @@ export struct FlexLayout {
                     node.h = main_size as u16;
                 }
                 flex_clamp_child_size(node);
-                node.flags.dirty = false;
+                node.flags.layout_dirty = false;
                 main_cursor = main_cursor + main_size + dynamic_gap;
                 j = j + 1;
             }

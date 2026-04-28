@@ -126,6 +126,7 @@ dashboard 的成本，可运行 `make dashboard-compare LVGL_DASHBOARD_REBUILD=1
 - `--max-frames N`
 - `--profile-every N`
 - `--hud | --no-hud`
+- `--show-dirty | --hide-dirty`
 
 当前 SDL2 模拟器常用快捷键：
 

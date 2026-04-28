@@ -7,6 +7,7 @@ use core.point.Point;
 use core.rect.Rect;
 use platform.disp.FrameBuffer;
 use platform.disp.PixelFormat;
+use platform.disp.framebuffer_copy;
 use platform.disp.framebuffer_new;
 use platform.disp.framebuffer_required_bytes;
 use render.ctx.RenderCtx;
@@ -37,11 +38,20 @@ extern fn free(ptr: &void) void;
 
 export const TEST_SIM_APP_MODULE: i32 = 1;
 
+fn sim_expect_frame_equal(lhs: &byte, rhs: &byte, len: usize) !void {
+    var i: usize = 0usize;
+    while i < len {
+        try assert_eq_i32(lhs[i] as i32, rhs[i] as i32);
+        i = i + 1usize;
+    }
+}
+
 test "sim config defaults to auto gpu and exposes names" {
     const cfg: SimConfig = sim_config_default();
     try assert_eq_i32(cfg.gpu as i32, SimGpuKind.Auto as i32);
     try assert_eq_i32(cfg.width as i32, SIM_DEFAULT_RES_WIDTH as i32);
     try assert_eq_i32(cfg.height as i32, SIM_DEFAULT_RES_HEIGHT as i32);
+    try assert_eq_bool(cfg.show_dirty_regions, false);
     try assert_eq_bool(sim_cstr_eq(sim_gpu_name(SimGpuKind.Auto), "auto"), true);
     try assert_eq_bool(sim_cstr_eq(sim_gpu_name(SimGpuKind.Software), "software"), true);
     try assert_eq_bool(sim_cstr_eq(sim_gpu_name(SimGpuKind.Gles2), "gles2"), true);
@@ -106,6 +116,45 @@ test "sim app renders and reacts to playback-style input" {
     app.render(&ctx);
     try assert_eq_bool(ctx.stats.text_ops > 0u32, true);
     try assert_eq_bool(ctx.stats.image_ops > 0u32, true);
+}
+
+test "sim app retained render repaints only affected phase widgets" {
+    var app: SimApp = sim_app_new();
+    var cfg: SimConfig = sim_config_default();
+    cfg.demo = SimDemoKind.Phase4;
+    cfg.width = 320;
+    cfg.height = 240;
+    try assert_eq_bool(app.init(cfg), true);
+    try assert_eq_bool(app.supports_dirty_render(), true);
+
+    const pixels_len: usize = framebuffer_required_bytes(cfg.width, cfg.height, PixelFormat.ARGB8888);
+    var partial_bytes: [byte: 307200] = [];
+    var expected_bytes: [byte: 307200] = [];
+    var frame_a_bytes: [byte: 307200] = [];
+
+    app.refresh_status_label("状态 A");
+    var frame_a_ctx: RenderCtx = render_ctx_new(framebuffer_new(&frame_a_bytes[0], cfg.width, cfg.height, cfg.width * 4u16, PixelFormat.ARGB8888));
+    app.render_retained(&frame_a_ctx, true);
+
+    var partial_fb: FrameBuffer = framebuffer_new(&partial_bytes[0], cfg.width, cfg.height, cfg.width * 4u16, PixelFormat.ARGB8888);
+    try assert_eq_bool(framebuffer_copy(&partial_fb, &frame_a_ctx.fb), true);
+    app.refresh_status_label("状态 B");
+    var partial_ctx: RenderCtx = render_ctx_new(partial_fb);
+    app.render_retained(&partial_ctx, false);
+
+    var expected_app: SimApp = sim_app_new();
+    try assert_eq_bool(expected_app.init(cfg), true);
+    expected_app.refresh_status_label("状态 A");
+    var warm_expected_ctx: RenderCtx = render_ctx_new(framebuffer_new(&frame_a_bytes[0], cfg.width, cfg.height, cfg.width * 4u16, PixelFormat.ARGB8888));
+    expected_app.render_retained(&warm_expected_ctx, true);
+    expected_app.refresh_status_label("状态 B");
+    var expected_ctx: RenderCtx = render_ctx_new(framebuffer_new(&expected_bytes[0], cfg.width, cfg.height, cfg.width * 4u16, PixelFormat.ARGB8888));
+    expected_app.render_retained(&expected_ctx, true);
+
+    try sim_expect_frame_equal(&partial_bytes[0], &expected_bytes[0], pixels_len);
+    try assert_eq_bool(partial_ctx.stats.image_ops == 0u32, true);
+    try assert_eq_bool(expected_ctx.stats.image_ops > 0u32, true);
+    try assert_eq_bool(partial_ctx.stats.text_ops < expected_ctx.stats.text_ops, true);
 }
 
 test "sim app can render standalone dashboard demo mode" {

@@ -48,6 +48,7 @@ export struct SimConfig {
     scale: u8,
     fullscreen: bool,
     hud_enabled: bool,
+    show_dirty_regions: bool,
     show_help: bool,
     profiler_report_every: u32,
     max_frames: u32,
@@ -136,6 +137,7 @@ export fn sim_config_default() SimConfig {
         scale: 1,
         fullscreen: false,
         hud_enabled: true,
+        show_dirty_regions: false,
         show_help: false,
         profiler_report_every: 120u32,
         max_frames: 0u32,
@@ -175,6 +177,10 @@ export fn sim_config_from_runtime() SimConfig {
             cfg.hud_enabled = true;
         } else if sim_cstr_eq(arg as &const byte, "--no-hud") {
             cfg.hud_enabled = false;
+        } else if sim_cstr_eq(arg as &const byte, "--show-dirty") {
+            cfg.show_dirty_regions = true;
+        } else if sim_cstr_eq(arg as &const byte, "--hide-dirty") {
+            cfg.show_dirty_regions = false;
         } else if i + 1 < get_argc() {
             const next: &byte = get_argv(i + 1);
             if sim_cstr_eq(arg as &const byte, "--demo") && next != null {

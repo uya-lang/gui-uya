@@ -136,6 +136,7 @@ ListView {
 
     fn scroll_to(self: &Self, x: i16, y: i16) void {
         _ = x;
+        const prev_y: i16 = self.scroll_y;
         const view_h: i32 = self.widget.base.h as i32;
         var max_y: i32 = self.content_h as i32 - view_h;
         if max_y < 0 {
@@ -146,6 +147,9 @@ ListView {
             self.scroll_y = 0;
         } else if self.scroll_y as i32 > max_y {
             self.scroll_y = max_y as i16;
+        }
+        if self.scroll_y == prev_y {
+            return;
         }
         self.widget.base.invalidate();
     }
@@ -166,6 +170,9 @@ ListView {
 
     fn select(self: &Self, index: i32) void {
         if index < 0 || index >= self.item_count as i32 {
+            return;
+        }
+        if self.selected_idx == index {
             return;
         }
         self.selected_idx = index;

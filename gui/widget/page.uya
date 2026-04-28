@@ -210,6 +210,8 @@ Page {
             self.scroll_y = 0;
             return;
         }
+        const prev_x: i16 = self.scroll_x;
+        const prev_y: i16 = self.scroll_y;
         const inner: Rect = widget_inner_rect(&self.widget);
         var max_x: i32 = self.content_size.w as i32 - inner.w as i32;
         var max_y: i32 = self.content_size.h as i32 - inner.h as i32;
@@ -230,6 +232,9 @@ Page {
             self.scroll_y = 0;
         } else if self.scroll_y as i32 > max_y {
             self.scroll_y = max_y as i16;
+        }
+        if self.scroll_x == prev_x && self.scroll_y == prev_y {
+            return;
         }
         self.widget.base.invalidate();
     }

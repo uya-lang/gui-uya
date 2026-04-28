@@ -55,6 +55,8 @@ enum {
     UYA_GUI_SIM_PRESENT_GLES2 = 2,
 };
 
+#define UYA_GUI_SIM_DIRTY_OVERLAY_MAX_RECTS 32
+
 typedef struct UyaGuiSimDisplay {
     SDL_Window *window;
     SDL_Renderer *renderer;
@@ -80,6 +82,13 @@ typedef struct UyaGuiSimDisplay {
     int pending_height;
     int pending_format_tag;
     int pending_present;
+    int dirty_overlay_enabled;
+    int dirty_overlay_full;
+    SDL_Rect dirty_overlay_rects[UYA_GUI_SIM_DIRTY_OVERLAY_MAX_RECTS];
+    int dirty_overlay_rect_count;
+    uint8_t *overlay_pixels;
+    size_t overlay_bytes;
+    int needs_refresh;
 } UyaGuiSimDisplay;
 
 typedef struct SdlHostEvent {
@@ -192,6 +201,19 @@ static void uya_gui_sim_destroy_renderer_resources(UyaGuiSimDisplay *display) {
     }
 }
 
+static void uya_gui_sim_destroy_overlay_resources(UyaGuiSimDisplay *display) {
+    if (display == NULL) {
+        return;
+    }
+    if (display->overlay_pixels != NULL) {
+        uya_gui_sim_host_free(display->overlay_pixels);
+        display->overlay_pixels = NULL;
+    }
+    display->overlay_bytes = 0u;
+    display->dirty_overlay_rect_count = 0;
+    display->dirty_overlay_full = 0;
+}
+
 static void uya_gui_sim_destroy_gles2_resources(UyaGuiSimDisplay *display) {
     if (display == NULL) {
         return;
@@ -230,6 +252,7 @@ static void uya_gui_sim_destroy_display_resources(UyaGuiSimDisplay *display) {
     if (display == NULL) {
         return;
     }
+    uya_gui_sim_destroy_overlay_resources(display);
     uya_gui_sim_destroy_renderer_resources(display);
     uya_gui_sim_destroy_gles2_resources(display);
     if (display->window != NULL) {
@@ -237,6 +260,134 @@ static void uya_gui_sim_destroy_display_resources(UyaGuiSimDisplay *display) {
         display->window = NULL;
     }
     display->present_kind = UYA_GUI_SIM_PRESENT_SOFTWARE;
+}
+
+static int uya_gui_sim_overlay_ensure_capacity(UyaGuiSimDisplay *display, int32_t width, int32_t height) {
+    const size_t needed = (size_t)width * (size_t)height * 4u;
+    if (display->overlay_bytes >= needed && display->overlay_pixels != NULL) {
+        return 1;
+    }
+    uint8_t *resized = (uint8_t *)uya_gui_sim_host_realloc(display->overlay_pixels, needed);
+    if (resized == NULL) {
+        uya_gui_sim_set_error("overlay realloc failed");
+        return 0;
+    }
+    display->overlay_pixels = resized;
+    display->overlay_bytes = needed;
+    return 1;
+}
+
+static void uya_gui_sim_overlay_copy_argb8888(UyaGuiSimDisplay *display, const uint8_t *pixels, int32_t pitch, int32_t width, int32_t height) {
+    int32_t y = 0;
+    while (y < height) {
+        const uint8_t *src_row = pixels + (size_t)y * (size_t)pitch;
+        uint8_t *dst_row = display->overlay_pixels + (size_t)y * (size_t)width * 4u;
+        (void)memcpy(dst_row, src_row, (size_t)width * 4u);
+        y += 1;
+    }
+}
+
+static void uya_gui_sim_overlay_draw_pixel_argb8888(uint8_t *pixels, int32_t width, int32_t height, int32_t x, int32_t y) {
+    if (pixels == NULL || x < 0 || y < 0 || x >= width || y >= height) {
+        return;
+    }
+    uint8_t *dst = pixels + ((size_t)y * (size_t)width + (size_t)x) * 4u;
+    dst[0] = 255u;
+    dst[1] = 255u;
+    dst[2] = 0u;
+    dst[3] = 0u;
+}
+
+static void uya_gui_sim_overlay_draw_rect_argb8888(uint8_t *pixels, int32_t width, int32_t height, SDL_Rect rect) {
+    int32_t x0 = rect.x;
+    int32_t y0 = rect.y;
+    int32_t x1 = rect.x + rect.w - 1;
+    int32_t y1 = rect.y + rect.h - 1;
+    int32_t x = 0;
+    int32_t y = 0;
+
+    if (rect.w <= 0 || rect.h <= 0) {
+        return;
+    }
+
+    if (x0 < 0) {
+        x0 = 0;
+    }
+    if (y0 < 0) {
+        y0 = 0;
+    }
+    if (x1 >= width) {
+        x1 = width - 1;
+    }
+    if (y1 >= height) {
+        y1 = height - 1;
+    }
+    if (x0 > x1 || y0 > y1) {
+        return;
+    }
+
+    x = x0;
+    while (x <= x1) {
+        uya_gui_sim_overlay_draw_pixel_argb8888(pixels, width, height, x, y0);
+        uya_gui_sim_overlay_draw_pixel_argb8888(pixels, width, height, x, y1);
+        x += 1;
+    }
+
+    y = y0;
+    while (y <= y1) {
+        uya_gui_sim_overlay_draw_pixel_argb8888(pixels, width, height, x0, y);
+        uya_gui_sim_overlay_draw_pixel_argb8888(pixels, width, height, x1, y);
+        y += 1;
+    }
+}
+
+static const uint8_t *uya_gui_sim_overlay_prepare(UyaGuiSimDisplay *display, const uint8_t *pixels, int32_t pitch, int32_t width, int32_t height,
+                                                  int32_t *out_pitch) {
+    int32_t i = 0;
+    if (out_pitch != NULL) {
+        *out_pitch = pitch;
+    }
+    if (display == NULL || pixels == NULL || !display->dirty_overlay_enabled) {
+        return pixels;
+    }
+    if (!uya_gui_sim_overlay_ensure_capacity(display, width, height)) {
+        return pixels;
+    }
+
+    uya_gui_sim_overlay_copy_argb8888(display, pixels, pitch, width, height);
+    if (display->dirty_overlay_full || display->dirty_overlay_rect_count <= 0) {
+        SDL_Rect full = { 0, 0, width, height };
+        uya_gui_sim_overlay_draw_rect_argb8888(display->overlay_pixels, width, height, full);
+    } else {
+        i = 0;
+        while (i < display->dirty_overlay_rect_count) {
+            uya_gui_sim_overlay_draw_rect_argb8888(display->overlay_pixels, width, height, display->dirty_overlay_rects[i]);
+            i += 1;
+        }
+    }
+
+    if (out_pitch != NULL) {
+        *out_pitch = width * 4;
+    }
+    return display->overlay_pixels;
+}
+
+static int32_t uya_gui_sim_present_software(UyaGuiSimDisplay *display, const uint8_t *pixels, int32_t pitch) {
+    if (SDL_UpdateTexture(display->texture, NULL, pixels, pitch) != 0) {
+        uya_gui_sim_set_error(SDL_GetError());
+        return 0;
+    }
+    if (SDL_RenderClear(display->renderer) != 0) {
+        uya_gui_sim_set_error(SDL_GetError());
+        return 0;
+    }
+    if (SDL_RenderCopy(display->renderer, display->texture, NULL, NULL) != 0) {
+        uya_gui_sim_set_error(SDL_GetError());
+        return 0;
+    }
+    SDL_RenderPresent(display->renderer);
+    display->needs_refresh = 0;
+    return 1;
 }
 
 static void uya_gui_sim_convert_argb_to_rgba(uint8_t *dst, const uint8_t *src, int pitch, int width, int height) {
@@ -502,6 +653,7 @@ static int uya_gui_sim_present_gles2(UyaGuiSimDisplay *display, const uint8_t *p
     display->gl.DisableVertexAttribArray((GLuint)display->gl_attr_uv);
     display->gl.BindBuffer(GL_ARRAY_BUFFER, 0u);
     SDL_GL_SwapWindow(display->window);
+    display->needs_refresh = 0;
     return 1;
 }
 
@@ -521,6 +673,8 @@ int32_t uya_gui_sim_sdl_display_present_begin(void *handle, int32_t width, int32
     display->pending_height = height;
     display->pending_format_tag = format_tag;
     display->pending_present = 0;
+    display->dirty_overlay_full = 0;
+    display->dirty_overlay_rect_count = 0;
     return 1;
 }
 
@@ -545,13 +699,21 @@ int32_t uya_gui_sim_sdl_display_present_region(void *handle, const uint8_t *pixe
         return 0;
     }
 
+    display->pending_pixels = pixels;
+    display->pending_pitch = pitch;
+    display->pending_width = width;
+    display->pending_height = height;
+    display->pending_format_tag = format_tag;
+
     if (display->present_kind == UYA_GUI_SIM_PRESENT_GLES2) {
-        display->pending_pixels = pixels;
-        display->pending_pitch = pitch;
-        display->pending_width = width;
-        display->pending_height = height;
-        display->pending_format_tag = format_tag;
         display->pending_present = 1;
+        if (display->dirty_overlay_enabled) {
+            if (display->dirty_overlay_rect_count < UYA_GUI_SIM_DIRTY_OVERLAY_MAX_RECTS) {
+                display->dirty_overlay_rects[display->dirty_overlay_rect_count++] = (SDL_Rect){ x, y, w, h };
+            } else {
+                display->dirty_overlay_full = 1;
+            }
+        }
         return 1;
     }
 
@@ -565,11 +727,20 @@ int32_t uya_gui_sim_sdl_display_present_region(void *handle, const uint8_t *pixe
         return 0;
     }
     display->pending_present = 1;
+    if (display->dirty_overlay_enabled) {
+        if (display->dirty_overlay_rect_count < UYA_GUI_SIM_DIRTY_OVERLAY_MAX_RECTS) {
+            display->dirty_overlay_rects[display->dirty_overlay_rect_count++] = rect;
+        } else {
+            display->dirty_overlay_full = 1;
+        }
+    }
     return 1;
 }
 
 int32_t uya_gui_sim_sdl_display_present_end(void *handle) {
     UyaGuiSimDisplay *display = (UyaGuiSimDisplay *)handle;
+    const uint8_t *pixels = NULL;
+    int32_t pitch = 0;
     if (display == NULL) {
         uya_gui_sim_set_error("display null");
         return 0;
@@ -578,24 +749,43 @@ int32_t uya_gui_sim_sdl_display_present_end(void *handle) {
         return 1;
     }
     if (display->present_kind == UYA_GUI_SIM_PRESENT_GLES2) {
-        return uya_gui_sim_present_gles2(
+        pixels = uya_gui_sim_overlay_prepare(
             display,
             display->pending_pixels,
             display->pending_pitch,
             display->pending_width,
+            display->pending_height,
+            &pitch
+        );
+        return uya_gui_sim_present_gles2(
+            display,
+            pixels,
+            pitch,
+            display->pending_width,
             display->pending_height
         );
     }
-    if (SDL_RenderClear(display->renderer) != 0) {
-        uya_gui_sim_set_error(SDL_GetError());
-        return 0;
+    if (!display->dirty_overlay_enabled) {
+        if (SDL_RenderClear(display->renderer) != 0) {
+            uya_gui_sim_set_error(SDL_GetError());
+            return 0;
+        }
+        if (SDL_RenderCopy(display->renderer, display->texture, NULL, NULL) != 0) {
+            uya_gui_sim_set_error(SDL_GetError());
+            return 0;
+        }
+        SDL_RenderPresent(display->renderer);
+        return 1;
     }
-    if (SDL_RenderCopy(display->renderer, display->texture, NULL, NULL) != 0) {
-        uya_gui_sim_set_error(SDL_GetError());
-        return 0;
-    }
-    SDL_RenderPresent(display->renderer);
-    return 1;
+    pixels = uya_gui_sim_overlay_prepare(
+        display,
+        display->pending_pixels,
+        display->pending_pitch,
+        display->pending_width,
+        display->pending_height,
+        &pitch
+    );
+    return uya_gui_sim_present_software(display, pixels, pitch);
 }
 
 static int uya_gui_sim_keycode(SDL_Keycode sym) {
@@ -688,6 +878,9 @@ void *uya_gui_sim_sdl_display_open(int32_t width, int32_t height, int32_t scale,
     display->gl_attr_uv = -1;
     display->gl_uniform_tex = -1;
     display->present_kind = UYA_GUI_SIM_PRESENT_SOFTWARE;
+    display->dirty_overlay_enabled = 0;
+    display->dirty_overlay_full = 0;
+    display->dirty_overlay_rect_count = 0;
 
     if (gpu_mode != UYA_GUI_SIM_GPU_SOFTWARE) {
         SDL_GL_ResetAttributes();
@@ -762,6 +955,8 @@ void uya_gui_sim_sdl_display_close(void *handle) {
 
 int32_t uya_gui_sim_sdl_display_present(void *handle, const uint8_t *pixels, int32_t pitch, int32_t width, int32_t height, int32_t format_tag) {
     UyaGuiSimDisplay *display = (UyaGuiSimDisplay *)handle;
+    const uint8_t *present_pixels = pixels;
+    int32_t present_pitch = pitch;
     if (display == NULL || pixels == NULL) {
         uya_gui_sim_set_error("display/pixels null");
         return 0;
@@ -770,22 +965,37 @@ int32_t uya_gui_sim_sdl_display_present(void *handle, const uint8_t *pixels, int
         uya_gui_sim_set_error("unsupported framebuffer format (expected ARGB8888/BGRA texture)");
         return 0;
     }
+    display->dirty_overlay_full = display->dirty_overlay_enabled ? 1 : 0;
+    display->dirty_overlay_rect_count = 0;
+    present_pixels = uya_gui_sim_overlay_prepare(display, pixels, pitch, width, height, &present_pitch);
     if (display->present_kind == UYA_GUI_SIM_PRESENT_GLES2) {
-        return uya_gui_sim_present_gles2(display, pixels, pitch, width, height);
+        return uya_gui_sim_present_gles2(display, present_pixels, present_pitch, width, height);
     }
-    if (SDL_UpdateTexture(display->texture, NULL, pixels, pitch) != 0) {
-        uya_gui_sim_set_error(SDL_GetError());
+    return uya_gui_sim_present_software(display, present_pixels, present_pitch);
+}
+
+int32_t uya_gui_sim_sdl_display_set_dirty_overlay(void *handle, int32_t enabled) {
+    UyaGuiSimDisplay *display = (UyaGuiSimDisplay *)handle;
+    if (display == NULL) {
+        uya_gui_sim_set_error("display null");
         return 0;
     }
-    if (SDL_RenderClear(display->renderer) != 0) {
-        uya_gui_sim_set_error(SDL_GetError());
+    display->dirty_overlay_enabled = enabled != 0;
+    display->dirty_overlay_full = 0;
+    display->dirty_overlay_rect_count = 0;
+    return 1;
+}
+
+int32_t uya_gui_sim_sdl_display_consume_refresh_request(void *handle) {
+    UyaGuiSimDisplay *display = (UyaGuiSimDisplay *)handle;
+    if (display == NULL) {
+        uya_gui_sim_set_error("display null");
         return 0;
     }
-    if (SDL_RenderCopy(display->renderer, display->texture, NULL, NULL) != 0) {
-        uya_gui_sim_set_error(SDL_GetError());
+    if (!display->needs_refresh) {
         return 0;
     }
-    SDL_RenderPresent(display->renderer);
+    display->needs_refresh = 0;
     return 1;
 }
 
@@ -839,6 +1049,15 @@ int32_t uya_gui_sim_sdl_poll_event(SdlHostEvent *out_evt) {
         return 1;
     }
     if (g_active_display == NULL) {
+        return 0;
+    }
+    if (evt.type == SDL_WINDOWEVENT) {
+        if (evt.window.event == SDL_WINDOWEVENT_EXPOSED
+            || evt.window.event == SDL_WINDOWEVENT_RESTORED
+            || evt.window.event == SDL_WINDOWEVENT_SHOWN
+            || evt.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
+            g_active_display->needs_refresh = 1;
+        }
         return 0;
     }
 

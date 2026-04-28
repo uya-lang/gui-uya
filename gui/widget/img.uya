@@ -118,6 +118,9 @@ Image {
     }
 
     fn set_source(self: &Self, src: &ImageData) &Image {
+        if self.src == src && !self.async_pending {
+            return self;
+        }
         self.src = src;
         self.async_pending = false;
         self.widget.base.invalidate();
