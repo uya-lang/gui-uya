@@ -848,13 +848,19 @@ SimApp {
         self.config.demo = demo;
         self.force_full_redraw = true;
         self.reset_standalone_demo_state(demo);
+        var rebuild_phase_tree: bool = false;
         if demo == SimDemoKind.Phase4 {
             self.phase4_result = run_phase4_smoke();
+            rebuild_phase_tree = true;
         } else if demo == SimDemoKind.Phase6 {
             if self.phase4_result == -2 {
                 self.phase4_result = run_phase4_smoke();
             }
             self.phase6_result = run_phase6_smoke();
+            rebuild_phase_tree = true;
+        }
+        if rebuild_phase_tree {
+            self.build_tree();
         }
         self.refresh_title_label();
         self.refresh_phase_label();

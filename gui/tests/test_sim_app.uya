@@ -325,6 +325,65 @@ test "standalone widgets and custom demos render showcase content" {
     try assert_eq_bool(ctx.stats.image_ops > 0u32, true);
 }
 
+test "widgets demo back to home keeps phase controls clickable" {
+    var app: SimApp = sim_app_new();
+    var cfg: SimConfig = sim_config_default();
+    cfg.demo = SimDemoKind.Widgets;
+    cfg.width = SIM_DEFAULT_RES_WIDTH;
+    cfg.height = SIM_DEFAULT_RES_HEIGHT;
+    try assert_eq_bool(app.init(cfg), true);
+
+    const back: Rect = app.standalone_back_button_rect();
+    var back_click: Event = event_point(
+        EventType.Click,
+        InputDev.Touch,
+        -1,
+        40u32,
+        Point{
+            x: back.x + back.w as i16 / 2,
+            y: back.y + back.h as i16 / 2,
+        }
+    );
+    app.handle_translated_event(&back_click);
+    try assert_eq_i32(app.config.demo as i32, SimDemoKind.Phase4 as i32);
+
+    const action: Rect = app.action_button.widget.base.screen_area();
+    var press_evt: Event = event_point(
+        EventType.Press,
+        InputDev.Touch,
+        -1,
+        60u32,
+        Point{
+            x: action.x + action.w as i16 / 2,
+            y: action.y + action.h as i16 / 2,
+        }
+    );
+    var release_evt: Event = event_point(
+        EventType.Release,
+        InputDev.Touch,
+        -1,
+        72u32,
+        Point{
+            x: action.x + action.w as i16 / 2,
+            y: action.y + action.h as i16 / 2,
+        }
+    );
+    var click_evt: Event = event_point(
+        EventType.Click,
+        InputDev.Touch,
+        -1,
+        73u32,
+        Point{
+            x: action.x + action.w as i16 / 2,
+            y: action.y + action.h as i16 / 2,
+        }
+    );
+    app.handle_translated_event(&press_evt);
+    app.handle_translated_event(&release_evt);
+    app.handle_translated_event(&click_evt);
+    try assert_eq_i32(app.tap_count, 1);
+}
+
 test "widgets retained click matches full redraw for outlined selection" {
     var app: SimApp = sim_app_new();
     var cfg: SimConfig = sim_config_default();
