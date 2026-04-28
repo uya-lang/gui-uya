@@ -14,6 +14,10 @@ use render.font.draw_text;
 use render.font.font_system_ui_ref;
 use render.font.font_ui_default_ref;
 use render.font.text_width;
+use sim.common.sim_layout_h;
+use sim.common.sim_layout_w;
+use sim.common.sim_layout_x;
+use sim.common.sim_layout_y;
 use sim.common.SIM_DEFAULT_RES_HEIGHT;
 use sim.common.SIM_DEFAULT_RES_WIDTH;
 
@@ -290,6 +294,69 @@ fn novel_body_line_step(font: &Font) i16 {
         return 28;
     }
     return font.line_height as i16 + 8;
+}
+
+fn novel_rail_rect(origin_x: i16, origin_y: i16) Rect {
+    return Rect{
+        x: origin_x + sim_layout_x(NOVEL_RAIL_X),
+        y: origin_y + sim_layout_y(NOVEL_RAIL_Y),
+        w: sim_layout_w(NOVEL_RAIL_W),
+        h: sim_layout_h(NOVEL_RAIL_H),
+    };
+}
+
+fn novel_card_rect(origin_x: i16, origin_y: i16) Rect {
+    return Rect{
+        x: origin_x + sim_layout_x(NOVEL_CARD_X),
+        y: origin_y + sim_layout_y(NOVEL_CARD_Y),
+        w: sim_layout_w(NOVEL_CARD_W),
+        h: sim_layout_h(NOVEL_CARD_H),
+    };
+}
+
+fn novel_view_rect(origin_x: i16, origin_y: i16) Rect {
+    return Rect{
+        x: origin_x + sim_layout_x(NOVEL_VIEW_X),
+        y: origin_y + sim_layout_y(NOVEL_VIEW_Y),
+        w: sim_layout_w(NOVEL_VIEW_W),
+        h: sim_layout_h(NOVEL_VIEW_H),
+    };
+}
+
+fn novel_progress_rect(origin_x: i16, origin_y: i16) Rect {
+    return Rect{
+        x: origin_x + sim_layout_x(NOVEL_PROGRESS_X),
+        y: origin_y + sim_layout_y(NOVEL_PROGRESS_Y),
+        w: sim_layout_w(NOVEL_PROGRESS_W),
+        h: sim_layout_h(NOVEL_PROGRESS_H),
+    };
+}
+
+fn novel_auto_button_rect(origin_x: i16, origin_y: i16) Rect {
+    return Rect{
+        x: origin_x + sim_layout_x(NOVEL_AUTO_BUTTON_X),
+        y: origin_y + sim_layout_y(NOVEL_AUTO_BUTTON_Y),
+        w: sim_layout_w(NOVEL_AUTO_BUTTON_W),
+        h: sim_layout_h(NOVEL_AUTO_BUTTON_H),
+    };
+}
+
+fn novel_top_button_rect(origin_x: i16, origin_y: i16) Rect {
+    return Rect{
+        x: origin_x + sim_layout_x(NOVEL_TOP_BUTTON_X),
+        y: origin_y + sim_layout_y(NOVEL_TOP_BUTTON_Y),
+        w: sim_layout_w(NOVEL_TOP_BUTTON_W),
+        h: sim_layout_h(NOVEL_TOP_BUTTON_H),
+    };
+}
+
+fn novel_end_button_rect(origin_x: i16, origin_y: i16) Rect {
+    return Rect{
+        x: origin_x + sim_layout_x(NOVEL_END_BUTTON_X),
+        y: origin_y + sim_layout_y(NOVEL_END_BUTTON_Y),
+        w: sim_layout_w(NOVEL_END_BUTTON_W),
+        h: sim_layout_h(NOVEL_END_BUTTON_H),
+    };
 }
 
 fn novel_cstr_len(text: &const byte) usize {
@@ -671,7 +738,7 @@ fn novel_layout_lines(novel: &NovelRetained) void {
                 span = 1usize;
             }
             const glyph_width: i32 = text_width(@ptr_from_usize(@usize_from_ptr((&novel.text[0]) as &void) + i) as &const byte, span, font) as i32;
-            if line_width > 0 && line_width + glyph_width > NOVEL_VIEW_W as i32 {
+            if line_width > 0 && line_width + glyph_width > sim_layout_w(NOVEL_VIEW_W) as i32 {
                 break;
             }
             line_width = line_width + glyph_width;
@@ -726,7 +793,7 @@ fn novel_scroll_max(novel: &NovelRetained) i32 {
         return 0;
     }
     const font: &Font = novel_body_font();
-    var max_scroll: i32 = novel.line_count * novel_body_line_step(font) as i32 - NOVEL_VIEW_H as i32;
+    var max_scroll: i32 = novel.line_count * novel_body_line_step(font) as i32 - sim_layout_h(NOVEL_VIEW_H) as i32;
     if max_scroll < 0 {
         max_scroll = 0;
     }
@@ -803,7 +870,8 @@ export fn novel_retained_handle_touch(novel: &NovelRetained, evt: &Event, local:
     novel_retained_init(novel);
 
     if evt.event_type == EventType.Press {
-        if novel_point_in_rect(&local, NOVEL_VIEW_X, NOVEL_VIEW_Y, NOVEL_VIEW_W, NOVEL_VIEW_H) {
+        const view: Rect = novel_view_rect(0, 0);
+        if novel_point_in_rect(&local, view.x, view.y, view.w, view.h) {
             novel.drag_active = true;
             novel.drag_last_y = local.y;
             novel.auto_scroll = false;
@@ -828,15 +896,18 @@ export fn novel_retained_handle_touch(novel: &NovelRetained, evt: &Event, local:
         return;
     }
 
-    if novel_point_in_rect(&local, NOVEL_AUTO_BUTTON_X, NOVEL_AUTO_BUTTON_Y, NOVEL_AUTO_BUTTON_W, NOVEL_AUTO_BUTTON_H) {
+    const auto_button: Rect = novel_auto_button_rect(0, 0);
+    const top_button: Rect = novel_top_button_rect(0, 0);
+    const end_button: Rect = novel_end_button_rect(0, 0);
+    if novel_point_in_rect(&local, auto_button.x, auto_button.y, auto_button.w, auto_button.h) {
         novel_retained_toggle_auto_scroll(novel);
         return;
     }
-    if novel_point_in_rect(&local, NOVEL_TOP_BUTTON_X, NOVEL_TOP_BUTTON_Y, NOVEL_TOP_BUTTON_W, NOVEL_TOP_BUTTON_H) {
+    if novel_point_in_rect(&local, top_button.x, top_button.y, top_button.w, top_button.h) {
         novel_retained_scroll_to_top(novel);
         return;
     }
-    if novel_point_in_rect(&local, NOVEL_END_BUTTON_X, NOVEL_END_BUTTON_Y, NOVEL_END_BUTTON_W, NOVEL_END_BUTTON_H) {
+    if novel_point_in_rect(&local, end_button.x, end_button.y, end_button.w, end_button.h) {
         novel_retained_scroll_to_end(novel);
         return;
     }
@@ -925,33 +996,48 @@ export fn render_demo_novel_state(novel: &NovelRetained, ctx: &RenderCtx, origin
     const current_chapter: i32 = novel_current_chapter_idx(novel);
     const progress_percent: i32 = novel_retained_progress_percent(novel);
 
-    const rail_x: i16 = origin_x + NOVEL_RAIL_X;
-    const rail_y: i16 = origin_y + NOVEL_RAIL_Y;
-    const card_x: i16 = origin_x + NOVEL_CARD_X;
-    const card_y: i16 = origin_y + NOVEL_CARD_Y;
-    const view_x: i16 = origin_x + NOVEL_VIEW_X;
-    const view_y: i16 = origin_y + NOVEL_VIEW_Y;
-    const progress_x: i16 = origin_x + NOVEL_PROGRESS_X;
-    const progress_y: i16 = origin_y + NOVEL_PROGRESS_Y;
+    const rail_rect: Rect = novel_rail_rect(origin_x, origin_y);
+    const card_rect: Rect = novel_card_rect(origin_x, origin_y);
+    const view_rect: Rect = novel_view_rect(origin_x, origin_y);
+    const progress_rect: Rect = novel_progress_rect(origin_x, origin_y);
+    const auto_button_rect: Rect = novel_auto_button_rect(origin_x, origin_y);
+    const top_button_rect: Rect = novel_top_button_rect(origin_x, origin_y);
+    const end_button_rect: Rect = novel_end_button_rect(origin_x, origin_y);
+    const rail_x: i16 = rail_rect.x;
+    const rail_y: i16 = rail_rect.y;
+    const rail_w: u16 = rail_rect.w;
+    const rail_h: u16 = rail_rect.h;
+    const card_x: i16 = card_rect.x;
+    const card_y: i16 = card_rect.y;
+    const card_w: u16 = card_rect.w;
+    const card_h: u16 = card_rect.h;
+    const view_x: i16 = view_rect.x;
+    const view_y: i16 = view_rect.y;
+    const view_w: u16 = view_rect.w;
+    const view_h: u16 = view_rect.h;
+    const progress_x: i16 = progress_rect.x;
+    const progress_y: i16 = progress_rect.y;
+    const progress_w_rect: u16 = progress_rect.w;
+    const progress_h_rect: u16 = progress_rect.h;
 
     ctx.fill_linear_gradient(Rect{ x: origin_x, y: origin_y, w: NOVEL_DEMO_W, h: NOVEL_DEMO_H }, Color{ r: 16, g: 44, b: 52, a: 255 }, Color{ r: 7, g: 23, b: 32, a: 255 }, false);
-    ctx.fill_radial_gradient(Rect{ x: origin_x + 380, y: origin_y + 22, w: 210u16, h: 210u16 }, Color{ r: 221, g: 154, b: 79, a: 60 }, Color{ r: 16, g: 44, b: 52, a: 0 });
-    ctx.fill_radial_gradient(Rect{ x: origin_x + 24, y: origin_y + 272, w: 180u16, h: 180u16 }, Color{ r: 220, g: 196, b: 143, a: 28 }, Color{ r: 16, g: 44, b: 52, a: 0 });
+    ctx.fill_radial_gradient(Rect{ x: origin_x + sim_layout_x(380), y: origin_y + sim_layout_y(22), w: sim_layout_w(210u16), h: sim_layout_h(210u16) }, Color{ r: 221, g: 154, b: 79, a: 60 }, Color{ r: 16, g: 44, b: 52, a: 0 });
+    ctx.fill_radial_gradient(Rect{ x: origin_x + sim_layout_x(24), y: origin_y + sim_layout_y(272), w: sim_layout_w(180u16), h: sim_layout_h(180u16) }, Color{ r: 220, g: 196, b: 143, a: 28 }, Color{ r: 16, g: 44, b: 52, a: 0 });
 
-    ctx.fill_round_shadow(Rect{ x: rail_x, y: rail_y, w: NOVEL_RAIL_W, h: NOVEL_RAIL_H }, 20u8, 14u8, Color{ r: 0, g: 0, b: 0, a: 80 });
-    ctx.fill_round_rect(Rect{ x: rail_x, y: rail_y, w: NOVEL_RAIL_W, h: NOVEL_RAIL_H }, 20u8, Color{ r: 18, g: 47, b: 58, a: 255 });
-    ctx.draw_round_rect(Rect{ x: rail_x, y: rail_y, w: NOVEL_RAIL_W, h: NOVEL_RAIL_H }, 20u8, Color{ r: 74, g: 117, b: 132, a: 255 }, 1u8);
+    ctx.fill_round_shadow(Rect{ x: rail_x, y: rail_y, w: rail_w, h: rail_h }, sim_layout_font(20u8), sim_layout_font(14u8), Color{ r: 0, g: 0, b: 0, a: 80 });
+    ctx.fill_round_rect(Rect{ x: rail_x, y: rail_y, w: rail_w, h: rail_h }, sim_layout_font(20u8), Color{ r: 18, g: 47, b: 58, a: 255 });
+    ctx.draw_round_rect(Rect{ x: rail_x, y: rail_y, w: rail_w, h: rail_h }, sim_layout_font(20u8), Color{ r: 74, g: 117, b: 132, a: 255 }, 1u8);
 
-    ctx.fill_round_shadow(Rect{ x: card_x, y: card_y, w: NOVEL_CARD_W, h: NOVEL_CARD_H }, 24u8, 18u8, Color{ r: 0, g: 0, b: 0, a: 88 });
-    ctx.fill_round_rect(Rect{ x: card_x, y: card_y, w: NOVEL_CARD_W, h: NOVEL_CARD_H }, 24u8, Color{ r: 246, g: 239, b: 226, a: 255 });
-    ctx.draw_round_rect(Rect{ x: card_x, y: card_y, w: NOVEL_CARD_W, h: NOVEL_CARD_H }, 24u8, Color{ r: 209, g: 186, b: 149, a: 255 }, 1u8);
+    ctx.fill_round_shadow(Rect{ x: card_x, y: card_y, w: card_w, h: card_h }, sim_layout_font(24u8), sim_layout_font(18u8), Color{ r: 0, g: 0, b: 0, a: 88 });
+    ctx.fill_round_rect(Rect{ x: card_x, y: card_y, w: card_w, h: card_h }, sim_layout_font(24u8), Color{ r: 246, g: 239, b: 226, a: 255 });
+    ctx.draw_round_rect(Rect{ x: card_x, y: card_y, w: card_w, h: card_h }, sim_layout_font(24u8), Color{ r: 209, g: 186, b: 149, a: 255 }, 1u8);
 
-    novel_draw_cstr(ctx, origin_x + 34, origin_y + 36, NOVEL_TITLE, rail_title_font, Color{ r: 242, g: 226, b: 194, a: 255 });
-    novel_draw_cstr(ctx, origin_x + 34, origin_y + 68, "原创长篇阅读" as &const byte, rail_meta_font, Color{ r: 178, g: 203, b: 210, a: 255 });
-    novel_draw_cstr(ctx, origin_x + 34, origin_y + 84, "滚动演示" as &const byte, rail_meta_font, Color{ r: 178, g: 203, b: 210, a: 255 });
-    novel_draw_cstr(ctx, origin_x + 34, origin_y + 118, "主角 沈砚 / 线索 阿迟" as &const byte, rail_meta_font, Color{ r: 226, g: 236, b: 236, a: 255 });
-    novel_draw_cstr(ctx, origin_x + 34, origin_y + 136, "滚轮 / 拖拽 / 上下键" as &const byte, rail_meta_font, Color{ r: 175, g: 199, b: 205, a: 255 });
-    novel_draw_cstr(ctx, origin_x + 34, origin_y + 154, "空格切换自动滚屏" as &const byte, rail_meta_font, Color{ r: 175, g: 199, b: 205, a: 255 });
+    novel_draw_cstr(ctx, origin_x + sim_layout_x(34), origin_y + sim_layout_y(36), NOVEL_TITLE, rail_title_font, Color{ r: 242, g: 226, b: 194, a: 255 });
+    novel_draw_cstr(ctx, origin_x + sim_layout_x(34), origin_y + sim_layout_y(68), "原创长篇阅读" as &const byte, rail_meta_font, Color{ r: 178, g: 203, b: 210, a: 255 });
+    novel_draw_cstr(ctx, origin_x + sim_layout_x(34), origin_y + sim_layout_y(84), "滚动演示" as &const byte, rail_meta_font, Color{ r: 178, g: 203, b: 210, a: 255 });
+    novel_draw_cstr(ctx, origin_x + sim_layout_x(34), origin_y + sim_layout_y(118), "主角 沈砚 / 线索 阿迟" as &const byte, rail_meta_font, Color{ r: 226, g: 236, b: 236, a: 255 });
+    novel_draw_cstr(ctx, origin_x + sim_layout_x(34), origin_y + sim_layout_y(136), "滚轮 / 拖拽 / 上下键" as &const byte, rail_meta_font, Color{ r: 175, g: 199, b: 205, a: 255 });
+    novel_draw_cstr(ctx, origin_x + sim_layout_x(34), origin_y + sim_layout_y(154), "空格切换自动滚屏" as &const byte, rail_meta_font, Color{ r: 175, g: 199, b: 205, a: 255 });
 
     var metric_buf1: [byte: 32] = [];
     var metric_buf2: [byte: 32] = [];
@@ -959,47 +1045,23 @@ export fn render_demo_novel_state(novel: &NovelRetained, ctx: &RenderCtx, origin
     novel_metric_text(&metric_buf1[0], 32usize, "字数" as &const byte, novel.char_count);
     novel_metric_text(&metric_buf2[0], 32usize, "章节" as &const byte, NOVEL_CHAPTER_COUNT);
     novel_metric_text(&metric_buf3[0], 32usize, "行数" as &const byte, novel.line_count);
-    novel_draw_cstr(ctx, origin_x + 34, origin_y + 206, &metric_buf1[0], meta_font, Color{ r: 242, g: 226, b: 194, a: 255 });
-    novel_draw_cstr(ctx, origin_x + 34, origin_y + 230, &metric_buf2[0], meta_font, Color{ r: 242, g: 226, b: 194, a: 255 });
-    novel_draw_cstr(ctx, origin_x + 34, origin_y + 254, &metric_buf3[0], meta_font, Color{ r: 242, g: 226, b: 194, a: 255 });
+    novel_draw_cstr(ctx, origin_x + sim_layout_x(34), origin_y + sim_layout_y(206), &metric_buf1[0], meta_font, Color{ r: 242, g: 226, b: 194, a: 255 });
+    novel_draw_cstr(ctx, origin_x + sim_layout_x(34), origin_y + sim_layout_y(230), &metric_buf2[0], meta_font, Color{ r: 242, g: 226, b: 194, a: 255 });
+    novel_draw_cstr(ctx, origin_x + sim_layout_x(34), origin_y + sim_layout_y(254), &metric_buf3[0], meta_font, Color{ r: 242, g: 226, b: 194, a: 255 });
 
-    novel_render_button(
-        ctx,
-        origin_x + NOVEL_AUTO_BUTTON_X,
-        origin_y + NOVEL_AUTO_BUTTON_Y,
-        NOVEL_AUTO_BUTTON_W,
-        NOVEL_AUTO_BUTTON_H,
-        "自动滚屏" as &const byte,
-        novel.auto_scroll
-    );
-    novel_render_button(
-        ctx,
-        origin_x + NOVEL_TOP_BUTTON_X,
-        origin_y + NOVEL_TOP_BUTTON_Y,
-        NOVEL_TOP_BUTTON_W,
-        NOVEL_TOP_BUTTON_H,
-        "回到开头" as &const byte,
-        false
-    );
-    novel_render_button(
-        ctx,
-        origin_x + NOVEL_END_BUTTON_X,
-        origin_y + NOVEL_END_BUTTON_Y,
-        NOVEL_END_BUTTON_W,
-        NOVEL_END_BUTTON_H,
-        "跳到末章" as &const byte,
-        false
-    );
+    novel_render_button(ctx, auto_button_rect.x, auto_button_rect.y, auto_button_rect.w, auto_button_rect.h, "自动滚屏" as &const byte, novel.auto_scroll);
+    novel_render_button(ctx, top_button_rect.x, top_button_rect.y, top_button_rect.w, top_button_rect.h, "回到开头" as &const byte, false);
+    novel_render_button(ctx, end_button_rect.x, end_button_rect.y, end_button_rect.w, end_button_rect.h, "跳到末章" as &const byte, false);
 
-    novel_draw_cstr(ctx, origin_x + 212, origin_y + 42, NOVEL_TITLE, title_font, Color{ r: 58, g: 44, b: 31, a: 255 });
+    novel_draw_cstr(ctx, origin_x + sim_layout_x(212), origin_y + sim_layout_y(42), NOVEL_TITLE, title_font, Color{ r: 58, g: 44, b: 31, a: 255 });
     var chapter_idx_usize: usize = 0usize;
     if current_chapter >= 0 && current_chapter < NOVEL_CHAPTER_COUNT {
         chapter_idx_usize = (current_chapter as! usize).value;
     }
     draw_text(
         ctx,
-        origin_x + 212,
-        origin_y + 72,
+        origin_x + sim_layout_x(212),
+        origin_y + sim_layout_y(72),
         NOVEL_CHAPTER_TITLES[chapter_idx_usize],
         novel_cstr_len(NOVEL_CHAPTER_TITLES[chapter_idx_usize]),
         meta_font,
@@ -1012,25 +1074,25 @@ export fn render_demo_novel_state(novel: &NovelRetained, ctx: &RenderCtx, origin
     const progress_w: i16 = text_width(&progress_buf[0], progress_len, meta_font);
     draw_text(
         ctx,
-        card_x + NOVEL_CARD_W as i16 - 24 - progress_w,
-        origin_y + 72,
+        card_x + card_w as i16 - sim_layout_x(24) - progress_w,
+        origin_y + sim_layout_y(72),
         &progress_buf[0],
         progress_len,
         meta_font,
         Color{ r: 146, g: 109, b: 72, a: 255 }
     );
 
-    ctx.fill_rect(Rect{ x: view_x, y: view_y, w: NOVEL_VIEW_W, h: NOVEL_VIEW_H }, Color{ r: 251, g: 247, b: 239, a: 255 });
-    ctx.draw_round_rect(Rect{ x: view_x - 8, y: view_y - 8, w: NOVEL_VIEW_W + 16u16, h: NOVEL_VIEW_H + 16u16 }, 18u8, Color{ r: 232, g: 219, b: 192, a: 255 }, 1u8);
+    ctx.fill_rect(Rect{ x: view_x, y: view_y, w: view_w, h: view_h }, Color{ r: 251, g: 247, b: 239, a: 255 });
+    ctx.draw_round_rect(Rect{ x: view_x - sim_layout_x(8), y: view_y - sim_layout_y(8), w: view_w + sim_layout_w(16u16), h: view_h + sim_layout_h(16u16) }, sim_layout_font(18u8), Color{ r: 232, g: 219, b: 192, a: 255 }, 1u8);
 
-    ctx.push_clip(Rect{ x: view_x, y: view_y, w: NOVEL_VIEW_W, h: NOVEL_VIEW_H });
+    ctx.push_clip(Rect{ x: view_x, y: view_y, w: view_w, h: view_h });
     var first_line: i32 = 0;
     if line_step > 0 {
         first_line = novel.scroll_y / line_step as i32;
     }
     var y: i16 = view_y - (novel.scroll_y % line_step as i32) as i16;
     var line_idx: i32 = first_line;
-    while line_idx < novel.line_count && y < view_y + NOVEL_VIEW_H as i16 {
+    while line_idx < novel.line_count && y < view_y + view_h as i16 {
         if y + line_step > view_y {
             const line: NovelLine = novel.lines[line_idx as usize];
             if line.len > 0usize {
@@ -1063,34 +1125,34 @@ export fn render_demo_novel_state(novel: &NovelRetained, ctx: &RenderCtx, origin
     ctx.pop_clip();
 
     ctx.fill_linear_gradient(
-        Rect{ x: view_x, y: view_y, w: NOVEL_VIEW_W, h: 22u16 },
+        Rect{ x: view_x, y: view_y, w: view_w, h: sim_layout_h(22u16) },
         Color{ r: 246, g: 239, b: 226, a: 255 },
         Color{ r: 246, g: 239, b: 226, a: 0 },
         false
     );
     ctx.fill_linear_gradient(
-        Rect{ x: view_x, y: view_y + NOVEL_VIEW_H as i16 - 22, w: NOVEL_VIEW_W, h: 22u16 },
+        Rect{ x: view_x, y: view_y + view_h as i16 - sim_layout_y(22), w: view_w, h: sim_layout_h(22u16) },
         Color{ r: 246, g: 239, b: 226, a: 0 },
         Color{ r: 246, g: 239, b: 226, a: 255 },
         false
     );
 
-    ctx.fill_round_rect(Rect{ x: progress_x, y: progress_y, w: NOVEL_PROGRESS_W, h: NOVEL_PROGRESS_H }, 3u8, Color{ r: 227, g: 216, b: 194, a: 255 });
-    var fill_h: i32 = (NOVEL_PROGRESS_H as i32 * progress_percent) / 100;
+    ctx.fill_round_rect(Rect{ x: progress_x, y: progress_y, w: progress_w_rect, h: progress_h_rect }, sim_layout_font(3u8), Color{ r: 227, g: 216, b: 194, a: 255 });
+    var fill_h: i32 = (progress_h_rect as i32 * progress_percent) / 100;
     if fill_h < 10 {
         fill_h = 10;
     }
     if progress_percent >= 100 {
-        fill_h = NOVEL_PROGRESS_H as i32;
+        fill_h = progress_h_rect as i32;
     }
     ctx.fill_round_rect(
         Rect{
             x: progress_x,
-            y: progress_y + NOVEL_PROGRESS_H as i16 - fill_h as i16,
-            w: NOVEL_PROGRESS_W,
+            y: progress_y + progress_h_rect as i16 - fill_h as i16,
+            w: progress_w_rect,
             h: (fill_h as! u16).value,
         },
-        3u8,
+        sim_layout_font(3u8),
         Color{ r: 207, g: 143, b: 74, a: 255 }
     );
 
@@ -1103,7 +1165,7 @@ export fn render_demo_novel_state(novel: &NovelRetained, ctx: &RenderCtx, origin
         NOVEL_CHAPTER_COUNT,
         progress_percent
     );
-    novel_draw_cstr(ctx, origin_x + 212, origin_y + NOVEL_FOOTER_Y, &footer_buf[0], meta_font, Color{ r: 112, g: 90, b: 68, a: 255 });
+    novel_draw_cstr(ctx, origin_x + sim_layout_x(212), origin_y + sim_layout_y(NOVEL_FOOTER_Y), &footer_buf[0], meta_font, Color{ r: 112, g: 90, b: 68, a: 255 });
 }
 
 export fn render_demo_novel(ctx: &RenderCtx, origin_x: i16, origin_y: i16) void {

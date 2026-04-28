@@ -4,6 +4,11 @@ use platform.disp.framebuffer_new;
 use platform.disp.framebuffer_required_bytes;
 use render.ctx.RenderCtx;
 use render.ctx.render_ctx_new;
+use sim.common.sim_layout_font;
+use sim.common.sim_layout_h;
+use sim.common.sim_layout_w;
+use sim.common.sim_layout_x;
+use sim.common.sim_layout_y;
 use sim.common.SIM_DEFAULT_RES_HEIGHT;
 use sim.common.SIM_DEFAULT_RES_WIDTH;
 use style.StyleProp;
@@ -23,31 +28,31 @@ export fn render_demo_perf(ctx: &RenderCtx, origin_x: i16, origin_y: i16) void {
     page.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 248, g: 250, b: 252, a: 255 });
 
     var hud: Panel = Panel.new();
-    hud.widget.at(32, 32);
-    hud.widget.size(576, 416);
+    hud.widget.at(sim_layout_x(32), sim_layout_y(32));
+    hud.widget.size(sim_layout_w(576), sim_layout_h(416));
     hud.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 15, g: 23, b: 42, a: 255 });
 
     var fps: Label = Label.new("FPS 60");
-    fps.widget.at(40, 32);
-    fps.widget.size(120, 28);
-    fps.widget.base.style.set_u32(StyleProp.FontSize, 20u32);
+    fps.widget.at(sim_layout_x(40), sim_layout_y(32));
+    fps.widget.size(sim_layout_w(120), sim_layout_h(28));
+    fps.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(20u8) as u32);
     fps.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 248, g: 250, b: 252, a: 255 });
 
     var ram: Label = Label.new("RAM 928B");
-    ram.widget.at(188, 32);
-    ram.widget.size(140, 28);
-    ram.widget.base.style.set_u32(StyleProp.FontSize, 20u32);
+    ram.widget.at(sim_layout_x(188), sim_layout_y(32));
+    ram.widget.size(sim_layout_w(140), sim_layout_h(28));
+    ram.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(20u8) as u32);
     ram.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 248, g: 250, b: 252, a: 255 });
 
     var batch: Label = Label.new("BATCH 51ms");
-    batch.widget.at(372, 32);
-    batch.widget.size(160, 28);
-    batch.widget.base.style.set_u32(StyleProp.FontSize, 20u32);
+    batch.widget.at(sim_layout_x(372), sim_layout_y(32));
+    batch.widget.size(sim_layout_w(160), sim_layout_h(28));
+    batch.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(20u8) as u32);
     batch.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 248, g: 250, b: 252, a: 255 });
 
     var chart: Chart = Chart.new();
-    chart.widget.at(40, 96);
-    chart.widget.size(496, 248);
+    chart.widget.at(sim_layout_x(40), sim_layout_y(96));
+    chart.widget.size(sim_layout_w(496), sim_layout_h(248));
     chart.chart_type = ChartType.Line;
     _ = chart.add_point(48);
     _ = chart.add_point(52);

@@ -6,6 +6,7 @@ use core.point.Point;
 use platform.disp.FrameBuffer;
 use platform.disp.PixelFormat;
 use platform.disp.framebuffer_new;
+use platform.disp.framebuffer_required_bytes;
 use render.ctx.RenderCtx;
 use render.ctx.render_ctx_new;
 use examples.demo_game.game_retained_new;
@@ -13,6 +14,8 @@ use sim.app.SimApp;
 use sim.app.sim_app_new;
 use sim.common.SIM_DEFAULT_RES_HEIGHT;
 use sim.common.SIM_DEFAULT_RES_WIDTH;
+use sim.common.sim_layout_x;
+use sim.common.sim_layout_y;
 use sim.common.sim_cstr_eq;
 use sim.common.SIM_KEY_F11;
 use sim.common.SIM_KEY_LEFT;
@@ -26,6 +29,9 @@ use sim.recorder.RecordedEvent;
 use sim.recorder.RecorderEventKind;
 use std.testing.assert_eq_bool;
 use std.testing.assert_eq_i32;
+
+extern fn malloc(size: usize) &void;
+extern fn free(ptr: &void) void;
 
 export const TEST_SIM_APP_MODULE: i32 = 1;
 
@@ -103,15 +109,23 @@ test "sim app renders and reacts to playback-style input" {
 test "sim app can render standalone dashboard demo mode" {
     var app: SimApp = sim_app_new();
     var cfg: SimConfig = sim_config_default();
-    const width: u16 = 640;
-    const height: u16 = 480;
+    const width: u16 = SIM_DEFAULT_RES_WIDTH;
+    const height: u16 = SIM_DEFAULT_RES_HEIGHT;
     cfg.demo = SimDemoKind.Dashboard;
     cfg.width = width;
     cfg.height = height;
     try assert_eq_bool(app.init(cfg), true);
 
-    var pixels: [byte: 1228800] = [];
-    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&pixels[0], width, height, width * 4u16, PixelFormat.ARGB8888));
+    const pixels_len: usize = framebuffer_required_bytes(width, height, PixelFormat.ARGB8888);
+    const pixels: &byte = malloc(pixels_len) as &byte;
+    if pixels == null {
+        try assert_eq_bool(false, true);
+        return;
+    }
+    defer {
+        free(pixels as &void);
+    }
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(pixels, width, height, width * 4u16, PixelFormat.ARGB8888));
     app.render(&ctx);
     try assert_eq_bool(ctx.stats.text_ops > 0u32, true);
     try assert_eq_bool(ctx.stats.line_ops > 0u32, true);
@@ -121,12 +135,12 @@ test "standalone music demo reacts to touch click" {
     var app: SimApp = sim_app_new();
     var cfg: SimConfig = sim_config_default();
     cfg.demo = SimDemoKind.Music;
-    cfg.width = 640;
-    cfg.height = 480;
+    cfg.width = SIM_DEFAULT_RES_WIDTH;
+    cfg.height = SIM_DEFAULT_RES_HEIGHT;
     try assert_eq_bool(app.init(cfg), true);
     try assert_eq_bool(app.music_playing, false);
 
-    var click_evt: Event = event_point(EventType.Click, InputDev.Touch, -1, 40u32, Point{ x: 64, y: 260 });
+    var click_evt: Event = event_point(EventType.Click, InputDev.Touch, -1, 40u32, Point{ x: sim_layout_x(64), y: sim_layout_y(260) });
     app.handle_translated_event(&click_evt);
     try assert_eq_bool(app.music_playing, true);
 }
@@ -135,11 +149,11 @@ test "standalone dashboard and 2048 demos react to touch and playback taps" {
     var app: SimApp = sim_app_new();
     var cfg: SimConfig = sim_config_default();
     cfg.demo = SimDemoKind.Dashboard;
-    cfg.width = 640;
-    cfg.height = 480;
+    cfg.width = SIM_DEFAULT_RES_WIDTH;
+    cfg.height = SIM_DEFAULT_RES_HEIGHT;
     try assert_eq_bool(app.init(cfg), true);
 
-    var dashboard_click: Event = event_point(EventType.Click, InputDev.Touch, -1, 40u32, Point{ x: 440, y: 200 });
+    var dashboard_click: Event = event_point(EventType.Click, InputDev.Touch, -1, 40u32, Point{ x: sim_layout_x(504), y: sim_layout_y(228) });
     app.handle_translated_event(&dashboard_click);
     try assert_eq_i32(app.dashboard_metric, 1);
 
@@ -199,12 +213,20 @@ test "standalone novel demo exposes 10k+ chinese text and supports scrolling" {
     var app: SimApp = sim_app_new();
     var cfg: SimConfig = sim_config_default();
     cfg.demo = SimDemoKind.Novel;
-    cfg.width = 640;
-    cfg.height = 480;
+    cfg.width = SIM_DEFAULT_RES_WIDTH;
+    cfg.height = SIM_DEFAULT_RES_HEIGHT;
     try assert_eq_bool(app.init(cfg), true);
 
-    var pixels: [byte: 1228800] = [];
-    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&pixels[0], cfg.width, cfg.height, cfg.width * 4u16, PixelFormat.ARGB8888));
+    const pixels_len: usize = framebuffer_required_bytes(cfg.width, cfg.height, PixelFormat.ARGB8888);
+    const pixels: &byte = malloc(pixels_len) as &byte;
+    if pixels == null {
+        try assert_eq_bool(false, true);
+        return;
+    }
+    defer {
+        free(pixels as &void);
+    }
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(pixels, cfg.width, cfg.height, cfg.width * 4u16, PixelFormat.ARGB8888));
     app.render(&ctx);
     try assert_eq_bool(ctx.stats.text_ops > 0u32, true);
     try assert_eq_bool(app.novel_demo.char_count > 10000, true);

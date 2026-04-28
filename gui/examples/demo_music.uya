@@ -4,6 +4,11 @@ use platform.disp.framebuffer_new;
 use platform.disp.framebuffer_required_bytes;
 use render.ctx.RenderCtx;
 use render.ctx.render_ctx_new;
+use sim.common.sim_layout_font;
+use sim.common.sim_layout_h;
+use sim.common.sim_layout_w;
+use sim.common.sim_layout_x;
+use sim.common.sim_layout_y;
 use sim.common.SIM_DEFAULT_RES_HEIGHT;
 use sim.common.SIM_DEFAULT_RES_WIDTH;
 use style.StyleProp;
@@ -34,42 +39,42 @@ export fn render_demo_music_state(ctx: &RenderCtx, origin_x: i16, origin_y: i16,
     page.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 247, g: 244, b: 255, a: 255 });
 
     var hero: Panel = Panel.new();
-    hero.widget.at(32, 32);
-    hero.widget.size(576, 168);
+    hero.widget.at(sim_layout_x(32), sim_layout_y(32));
+    hero.widget.size(sim_layout_w(576), sim_layout_h(168));
 
     var title: Label = Label.new("Now Playing");
-    title.widget.at(28, 24);
-    title.widget.size(240, 28);
-    title.widget.base.style.set_u32(StyleProp.FontSize, 18u32);
+    title.widget.at(sim_layout_x(28), sim_layout_y(24));
+    title.widget.size(sim_layout_w(240), sim_layout_h(28));
+    title.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(18u8) as u32);
     title.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 76, g: 29, b: 149, a: 255 });
 
     var track: Label = Label.new(music_track_name(track_idx));
-    track.widget.at(28, 66);
-    track.widget.size(320, 42);
-    track.widget.base.style.set_u32(StyleProp.FontSize, 30u32);
+    track.widget.at(sim_layout_x(28), sim_layout_y(66));
+    track.widget.size(sim_layout_w(320), sim_layout_h(42));
+    track.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(30u8) as u32);
 
     var play: Button = Button.filled("Play");
     if playing {
         play = Button.filled("Pause");
     }
-    play.widget.at(40, 232);
-    play.widget.size(132, 56);
-    play.widget.base.style.set_u32(StyleProp.FontSize, 20u32);
+    play.widget.at(sim_layout_x(40), sim_layout_y(232));
+    play.widget.size(sim_layout_w(132), sim_layout_h(56));
+    play.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(20u8) as u32);
 
     var next: Button = Button.outlined("Next");
-    next.widget.at(188, 232);
-    next.widget.size(132, 56);
-    next.widget.base.style.set_u32(StyleProp.FontSize, 20u32);
+    next.widget.at(sim_layout_x(188), sim_layout_y(232));
+    next.widget.size(sim_layout_w(132), sim_layout_h(56));
+    next.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(20u8) as u32);
 
     var progress: Slider = Slider.new(0, 100, progress_value);
-    progress.widget.at(352, 246);
-    progress.widget.size(216, 28);
+    progress.widget.at(sim_layout_x(352), sim_layout_y(246));
+    progress.widget.size(sim_layout_w(216), sim_layout_h(28));
 
     var queue: ListView = ListView.new();
-    queue.widget.at(32, 320);
-    queue.widget.size(576, 128);
-    queue.widget.base.style.set_u32(StyleProp.FontSize, 18u32);
-    queue.item_height = 36;
+    queue.widget.at(sim_layout_x(32), sim_layout_y(320));
+    queue.widget.size(sim_layout_w(576), sim_layout_h(128));
+    queue.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(18u8) as u32);
+    queue.item_height = (sim_layout_h(36u16) as! u8).value;
     queue.add_item("01 Night Transit");
     queue.add_item("02 Soft Voltage");
     queue.add_item("03 Dawn Drive");

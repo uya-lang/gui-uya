@@ -62,6 +62,10 @@ use res.cache.image_cache_put_async;
 use res.fs.FatFileSystem;
 use res.fs.fat_fs_new;
 use sim.common.SIM_TEXT_CAPACITY;
+use sim.common.sim_layout_h;
+use sim.common.sim_layout_w;
+use sim.common.sim_layout_x;
+use sim.common.sim_layout_y;
 use sim.common.sim_copy_cstr;
 use sim.common.sim_cstr_empty;
 use sim.common.sim_cstr_eq;
@@ -700,16 +704,33 @@ SimApp {
     }
 
     fn handle_music_demo_touch(self: &Self, evt: &Event, local: Point) void {
+        const progress_x: i16 = sim_layout_x(352);
+        const progress_y: i16 = sim_layout_y(246);
+        const progress_w: u16 = sim_layout_w(216u16);
+        const progress_h: u16 = sim_layout_h(28u16);
+        const play_x: i16 = sim_layout_x(40);
+        const play_y: i16 = sim_layout_y(232);
+        const play_w: u16 = sim_layout_w(132u16);
+        const play_h: u16 = sim_layout_h(56u16);
+        const next_x: i16 = sim_layout_x(188);
+        const next_y: i16 = sim_layout_y(232);
+        const next_w: u16 = sim_layout_w(132u16);
+        const next_h: u16 = sim_layout_h(56u16);
+        const queue_x: i16 = sim_layout_x(32);
+        const queue_y: i16 = sim_layout_y(320);
+        const queue_w: u16 = sim_layout_w(576u16);
+        const queue_h: u16 = sim_layout_h(128u16);
+        const queue_row_h: i32 = sim_layout_h(36u16) as i32;
         if evt.event_type == EventType.Press {
-            if self.standalone_rect_contains(local, 352, 246, 216, 28) {
+            if self.standalone_rect_contains(local, progress_x, progress_y, progress_w, progress_h) {
                 self.standalone_drag_target = STANDALONE_DRAG_MUSIC_PROGRESS;
-                self.music_progress = self.standalone_slider_percent(local.x, 352, 216);
+                self.music_progress = self.standalone_slider_percent(local.x, progress_x, progress_w);
             }
             return;
         }
         if evt.event_type == EventType.Drag {
             if self.standalone_drag_target == STANDALONE_DRAG_MUSIC_PROGRESS {
-                self.music_progress = self.standalone_slider_percent(local.x, 352, 216);
+                self.music_progress = self.standalone_slider_percent(local.x, progress_x, progress_w);
             }
             return;
         }
@@ -721,22 +742,22 @@ SimApp {
             return;
         }
 
-        if self.standalone_rect_contains(local, 40, 232, 132, 56) {
+        if self.standalone_rect_contains(local, play_x, play_y, play_w, play_h) {
             self.music_playing = !self.music_playing;
             self.standalone_anim_tick_ms = 0u32;
             return;
         }
-        if self.standalone_rect_contains(local, 188, 232, 132, 56) {
+        if self.standalone_rect_contains(local, next_x, next_y, next_w, next_h) {
             self.select_music_track((self.music_track_idx + 1) % MUSIC_TRACK_COUNT);
             self.music_progress = 0;
             return;
         }
-        if self.standalone_rect_contains(local, 352, 246, 216, 28) {
-            self.music_progress = self.standalone_slider_percent(local.x, 352, 216);
+        if self.standalone_rect_contains(local, progress_x, progress_y, progress_w, progress_h) {
+            self.music_progress = self.standalone_slider_percent(local.x, progress_x, progress_w);
             return;
         }
-        if self.standalone_rect_contains(local, 32, 320, 576, 128) {
-            const row: i32 = (local.y as i32 - 320) / 36;
+        if self.standalone_rect_contains(local, queue_x, queue_y, queue_w, queue_h) {
+            const row: i32 = (local.y as i32 - queue_y as i32) / queue_row_h;
             if row >= 0 && row < MUSIC_TRACK_COUNT {
                 self.select_music_track(row);
                 self.music_progress = 0;
@@ -745,16 +766,28 @@ SimApp {
     }
 
     fn handle_settings_demo_touch(self: &Self, evt: &Event, local: Point) void {
+        const panel_x: i16 = sim_layout_x(SETTINGS_PANEL_X);
+        const panel_y: i16 = sim_layout_y(SETTINGS_PANEL_Y);
+        const brightness_x: i16 = panel_x + sim_layout_x(40);
+        const brightness_y: i16 = panel_y + sim_layout_y(312);
+        const brightness_w: u16 = sim_layout_w(480u16);
+        const brightness_h: u16 = sim_layout_h(20u16);
+        const wifi_x: i16 = panel_x + sim_layout_x(416);
+        const wifi_y: i16 = panel_y + sim_layout_y(92);
+        const switch_w: u16 = sim_layout_w(52u16);
+        const switch_h: u16 = sim_layout_h(30u16);
+        const notif_x: i16 = panel_x + sim_layout_x(416);
+        const notif_y: i16 = panel_y + sim_layout_y(164);
         if evt.event_type == EventType.Press {
-            if self.standalone_rect_contains(local, SETTINGS_PANEL_X + 40, SETTINGS_PANEL_Y + 312, 480, 20) {
+            if self.standalone_rect_contains(local, brightness_x, brightness_y, brightness_w, brightness_h) {
                 self.standalone_drag_target = STANDALONE_DRAG_SETTINGS_BRIGHTNESS;
-                self.settings_brightness = self.standalone_slider_percent(local.x, SETTINGS_PANEL_X + 40, 480);
+                self.settings_brightness = self.standalone_slider_percent(local.x, brightness_x, brightness_w);
             }
             return;
         }
         if evt.event_type == EventType.Drag {
             if self.standalone_drag_target == STANDALONE_DRAG_SETTINGS_BRIGHTNESS {
-                self.settings_brightness = self.standalone_slider_percent(local.x, SETTINGS_PANEL_X + 40, 480);
+                self.settings_brightness = self.standalone_slider_percent(local.x, brightness_x, brightness_w);
             }
             return;
         }
@@ -766,16 +799,16 @@ SimApp {
             return;
         }
 
-        if self.standalone_rect_contains(local, SETTINGS_PANEL_X + 416, SETTINGS_PANEL_Y + 92, 52, 30) {
+        if self.standalone_rect_contains(local, wifi_x, wifi_y, switch_w, switch_h) {
             self.settings_wifi = !self.settings_wifi;
             return;
         }
-        if self.standalone_rect_contains(local, SETTINGS_PANEL_X + 416, SETTINGS_PANEL_Y + 164, 52, 30) {
+        if self.standalone_rect_contains(local, notif_x, notif_y, switch_w, switch_h) {
             self.settings_alerts = !self.settings_alerts;
             return;
         }
-        if self.standalone_rect_contains(local, SETTINGS_PANEL_X + 40, SETTINGS_PANEL_Y + 312, 480, 20) {
-            self.settings_brightness = self.standalone_slider_percent(local.x, SETTINGS_PANEL_X + 40, 480);
+        if self.standalone_rect_contains(local, brightness_x, brightness_y, brightness_w, brightness_h) {
+            self.settings_brightness = self.standalone_slider_percent(local.x, brightness_x, brightness_w);
         }
     }
 
@@ -784,11 +817,18 @@ SimApp {
         if evt.event_type != EventType.Click {
             return;
         }
-        if self.standalone_rect_contains(local, DASHBOARD_SHELL_X + DASHBOARD_BUTTON_X, DASHBOARD_SHELL_Y + DASHBOARD_BUTTON_Y, DASHBOARD_BUTTON_W, DASHBOARD_BUTTON_H) {
+        const shell_x: i16 = sim_layout_x(DASHBOARD_SHELL_X);
+        const shell_y: i16 = sim_layout_y(DASHBOARD_SHELL_Y);
+        const button_x: i16 = shell_x + sim_layout_x(DASHBOARD_BUTTON_X);
+        const button_y: i16 = shell_y + sim_layout_y(DASHBOARD_BUTTON_Y);
+        const button_w: u16 = sim_layout_w(DASHBOARD_BUTTON_W as u16);
+        const button_h: u16 = sim_layout_h(DASHBOARD_BUTTON_H as u16);
+        const button_step_y: i16 = sim_layout_y(DASHBOARD_BUTTON_STEP_Y);
+        if self.standalone_rect_contains(local, button_x, button_y, button_w, button_h) {
             self.dashboard_metric = 0;
-        } else if self.standalone_rect_contains(local, DASHBOARD_SHELL_X + DASHBOARD_BUTTON_X, DASHBOARD_SHELL_Y + DASHBOARD_BUTTON_Y + DASHBOARD_BUTTON_STEP_Y, DASHBOARD_BUTTON_W, DASHBOARD_BUTTON_H) {
+        } else if self.standalone_rect_contains(local, button_x, button_y + button_step_y, button_w, button_h) {
             self.dashboard_metric = 1;
-        } else if self.standalone_rect_contains(local, DASHBOARD_SHELL_X + DASHBOARD_BUTTON_X, DASHBOARD_SHELL_Y + DASHBOARD_BUTTON_Y + DASHBOARD_BUTTON_STEP_Y * 2, DASHBOARD_BUTTON_W, DASHBOARD_BUTTON_H) {
+        } else if self.standalone_rect_contains(local, button_x, button_y + button_step_y * 2, button_w, button_h) {
             self.dashboard_metric = 2;
         }
     }
@@ -1089,9 +1129,9 @@ SimApp {
                 novel_retained_scroll_by(&self.novel_demo, 0 - delta as i32 * 36);
             } else {
                 const local: Point = self.standalone_local_point(self.last_pointer);
-                if self.config.demo == SimDemoKind.Music && self.standalone_rect_contains(local, 352, 246, 216, 28) {
+                if self.config.demo == SimDemoKind.Music && self.standalone_rect_contains(local, sim_layout_x(352), sim_layout_y(246), sim_layout_w(216u16), sim_layout_h(28u16)) {
                     self.music_progress = sim_clamp_i32(self.music_progress + delta as i32 * 4, 0, 100);
-                } else if self.config.demo == SimDemoKind.Settings && self.standalone_rect_contains(local, 40, 312, 480, 20) {
+                } else if self.config.demo == SimDemoKind.Settings && self.standalone_rect_contains(local, sim_layout_x(80), sim_layout_y(344), sim_layout_w(480u16), sim_layout_h(20u16)) {
                     self.settings_brightness = sim_clamp_i32(self.settings_brightness + delta as i32 * 4, 0, 100);
                 }
             }

@@ -15,6 +15,12 @@ use render.font.Font;
 use render.font.draw_text;
 use render.font.font_system_ui_ref;
 use render.font.text_width;
+use sim.common.sim_layout_font;
+use sim.common.sim_layout_h;
+use sim.common.sim_layout_square;
+use sim.common.sim_layout_w;
+use sim.common.sim_layout_x;
+use sim.common.sim_layout_y;
 use sim.common.SIM_DEFAULT_RES_HEIGHT;
 use sim.common.SIM_DEFAULT_RES_WIDTH;
 
@@ -90,37 +96,73 @@ fn game_cstr_len(text: &const byte) usize {
 }
 
 fn game_font_title() &Font {
-    return font_system_ui_ref(30u8);
+    return font_system_ui_ref(sim_layout_font(30u8));
 }
 
 fn game_font_subtitle() &Font {
-    return font_system_ui_ref(14u8);
+    return font_system_ui_ref(sim_layout_font(14u8));
 }
 
 fn game_font_stat_label() &Font {
-    return font_system_ui_ref(13u8);
+    return font_system_ui_ref(sim_layout_font(13u8));
 }
 
 fn game_font_stat_value() &Font {
-    return font_system_ui_ref(24u8);
+    return font_system_ui_ref(sim_layout_font(24u8));
 }
 
 fn game_font_body() &Font {
-    return font_system_ui_ref(16u8);
+    return font_system_ui_ref(sim_layout_font(16u8));
 }
 
 fn game_font_overlay() &Font {
-    return font_system_ui_ref(22u8);
+    return font_system_ui_ref(sim_layout_font(22u8));
 }
 
 fn game_font_tile(value: i32) &Font {
     if value >= 1024 {
-        return font_system_ui_ref(18u8);
+        return font_system_ui_ref(sim_layout_font(18u8));
     }
     if value >= 128 {
-        return font_system_ui_ref(21u8);
+        return font_system_ui_ref(sim_layout_font(21u8));
     }
-    return font_system_ui_ref(24u8);
+    return font_system_ui_ref(sim_layout_font(24u8));
+}
+
+struct GameDemoLayout {
+    board_x: i16,
+    board_y: i16,
+    board_w: u16,
+    board_h: u16,
+    cell_gap: i16,
+    cell_size: u16,
+    panel_x: i16,
+    panel_y: i16,
+    panel_w: u16,
+    panel_h: u16,
+    restart_x: i16,
+    restart_y: i16,
+    restart_w: u16,
+    restart_h: u16,
+}
+
+fn game_layout(origin_x: i16, origin_y: i16) GameDemoLayout {
+    return GameDemoLayout{
+        board_x: origin_x + sim_layout_x(GAME_BOARD_X),
+        board_y: origin_y + sim_layout_y(GAME_BOARD_Y),
+        board_w: sim_layout_square(GAME_BOARD_W),
+        board_h: sim_layout_square(GAME_BOARD_H),
+        cell_gap: (sim_layout_square(GAME_CELL_GAP as u16) as! i16).value,
+        cell_size: sim_layout_square(GAME_CELL_SIZE),
+        panel_x: origin_x + sim_layout_x(GAME_PANEL_X),
+        panel_y: origin_y + sim_layout_y(GAME_PANEL_Y),
+        panel_w: sim_layout_w(GAME_PANEL_W),
+        panel_h: sim_layout_h(GAME_PANEL_H),
+        restart_x: origin_x + sim_layout_x(GAME_RESTART_X),
+        restart_y: origin_y + sim_layout_y(GAME_RESTART_Y),
+        restart_w: sim_layout_w(GAME_RESTART_W),
+        restart_h: sim_layout_h(GAME_RESTART_H),
+    };
 }
 
 fn game_seed_from_tick() u32 {
@@ -295,7 +337,8 @@ fn game_try_move_from_delta(game: &Game2048Retained, dx: i32, dy: i32) bool {
     if game == null {
         return false;
     }
-    if game_abs_i32(dx) < GAME_DRAG_THRESHOLD && game_abs_i32(dy) < GAME_DRAG_THRESHOLD {
+    const drag_threshold: i32 = sim_layout_square(GAME_DRAG_THRESHOLD as u16) as i32;
+    if game_abs_i32(dx) < drag_threshold && game_abs_i32(dy) < drag_threshold {
         return false;
     }
     if game_abs_i32(dx) >= game_abs_i32(dy) {
@@ -375,7 +418,8 @@ export fn game_retained_handle_touch(game: &Game2048Retained, evt: &Event, local
         game.suppress_tap = false;
         return;
     }
-    if game_point_in_rect(local, GAME_RESTART_X, GAME_RESTART_Y, GAME_RESTART_W, GAME_RESTART_H) {
+    const layout: GameDemoLayout = game_layout(0, 0);
+    if game_point_in_rect(local, layout.restart_x, layout.restart_y, layout.restart_w, layout.restart_h) {
         game_retained_reset(game);
     }
 }
@@ -513,10 +557,10 @@ fn game_draw_centered_text(ctx: &RenderCtx, rect: Rect, text: &const byte, font:
 fn game_draw_stat_card(ctx: &RenderCtx, x: i16, y: i16, w: u16, h: u16, label: &const byte, value: i32, accent: Color) void {
     var value_buf: [byte: 24] = [];
     _ = snprintf(&value_buf[0], 24usize, "%d" as &const byte, value);
-    ctx.fill_round_rect(Rect{ x: x, y: y, w: w, h: h }, 18u8, Color{ r: 251, g: 244, b: 233, a: 255 });
-    ctx.draw_round_rect(Rect{ x: x, y: y, w: w, h: h }, 18u8, Color{ r: accent.r, g: accent.g, b: accent.b, a: 120 }, 1u8);
-    game_draw_cstr(ctx, x + 14, y + 12, label, game_font_stat_label(), Color{ r: 128, g: 101, b: 74, a: 255 });
-    game_draw_cstr(ctx, x + 14, y + 34, &value_buf[0], game_font_stat_value(), Color{ r: 72, g: 49, b: 35, a: 255 });
+    ctx.fill_round_rect(Rect{ x: x, y: y, w: w, h: h }, sim_layout_font(18u8), Color{ r: 251, g: 244, b: 233, a: 255 });
+    ctx.draw_round_rect(Rect{ x: x, y: y, w: w, h: h }, sim_layout_font(18u8), Color{ r: accent.r, g: accent.g, b: accent.b, a: 120 }, 1u8);
+    game_draw_cstr(ctx, x + sim_layout_x(14), y + sim_layout_y(12), label, game_font_stat_label(), Color{ r: 128, g: 101, b: 74, a: 255 });
+    game_draw_cstr(ctx, x + sim_layout_x(14), y + sim_layout_y(34), &value_buf[0], game_font_stat_value(), Color{ r: 72, g: 49, b: 35, a: 255 });
 }
 
 fn game_draw_button(ctx: &RenderCtx, x: i16, y: i16, w: u16, h: u16, text: &const byte) void {
@@ -526,7 +570,7 @@ fn game_draw_button(ctx: &RenderCtx, x: i16, y: i16, w: u16, h: u16, text: &cons
         Color{ r: 158, g: 93, b: 42, a: 255 },
         false
     );
-    ctx.draw_round_rect(Rect{ x: x, y: y, w: w, h: h }, 16u8, Color{ r: 243, g: 212, b: 164, a: 200 }, 1u8);
+    ctx.draw_round_rect(Rect{ x: x, y: y, w: w, h: h }, sim_layout_font(16u8), Color{ r: 243, g: 212, b: 164, a: 200 }, 1u8);
     game_draw_centered_text(ctx, Rect{ x: x, y: y, w: w, h: h }, text, game_font_body(), Color{ r: 255, g: 247, b: 239, a: 255 });
 }
 
@@ -555,10 +599,11 @@ fn game_overlay_subtitle(game: &Game2048Retained) &const byte {
 }
 
 fn game_draw_tile(ctx: &RenderCtx, x: i16, y: i16, value: i32) void {
+    const tile_size: u16 = sim_layout_square(GAME_CELL_SIZE);
     const rect_x: i16 = x;
     const rect_y: i16 = y;
-    ctx.fill_round_rect(Rect{ x: rect_x, y: rect_y, w: GAME_CELL_SIZE, h: GAME_CELL_SIZE }, 16u8, game_color_tile_fill(value));
-    ctx.draw_round_rect(Rect{ x: rect_x, y: rect_y, w: GAME_CELL_SIZE, h: GAME_CELL_SIZE }, 16u8, game_color_tile_border(value), 1u8);
+    ctx.fill_round_rect(Rect{ x: rect_x, y: rect_y, w: tile_size, h: tile_size }, sim_layout_font(16u8), game_color_tile_fill(value));
+    ctx.draw_round_rect(Rect{ x: rect_x, y: rect_y, w: tile_size, h: tile_size }, sim_layout_font(16u8), game_color_tile_border(value), 1u8);
     if value == 0 {
         return;
     }
@@ -566,7 +611,7 @@ fn game_draw_tile(ctx: &RenderCtx, x: i16, y: i16, value: i32) void {
     var value_buf: [byte: 16] = [];
     _ = snprintf(&value_buf[0], 16usize, "%d" as &const byte, value);
     const font: &Font = game_font_tile(value);
-    game_draw_centered_text(ctx, Rect{ x: rect_x, y: rect_y, w: GAME_CELL_SIZE, h: GAME_CELL_SIZE }, &value_buf[0], font, game_color_tile_text(value));
+    game_draw_centered_text(ctx, Rect{ x: rect_x, y: rect_y, w: tile_size, h: tile_size }, &value_buf[0], font, game_color_tile_text(value));
 }
 
 export fn render_demo_game_state(game: &Game2048Retained, ctx: &RenderCtx, origin_x: i16, origin_y: i16) void {
@@ -574,62 +619,63 @@ export fn render_demo_game_state(game: &Game2048Retained, ctx: &RenderCtx, origi
         return;
     }
     game_retained_init(game);
+    const layout: GameDemoLayout = game_layout(origin_x, origin_y);
 
     const full_rect: Rect = Rect{ x: origin_x, y: origin_y, w: GAME_DEMO_W, h: GAME_DEMO_H };
     ctx.fill_linear_gradient(full_rect, Color{ r: 243, g: 233, b: 217, a: 255 }, Color{ r: 232, g: 202, b: 160, a: 255 }, false);
     ctx.fill_radial_gradient(
-        Rect{ x: origin_x + 398, y: origin_y + 24, w: 200u16, h: 200u16 },
+        Rect{ x: origin_x + sim_layout_x(398), y: origin_y + sim_layout_y(24), w: sim_layout_square(200u16), h: sim_layout_square(200u16) },
         Color{ r: 255, g: 232, b: 182, a: 96 },
         Color{ r: 243, g: 233, b: 217, a: 0 }
     );
     ctx.fill_radial_gradient(
-        Rect{ x: origin_x + 24, y: origin_y + 276, w: 220u16, h: 180u16 },
+        Rect{ x: origin_x + sim_layout_x(24), y: origin_y + sim_layout_y(276), w: sim_layout_w(220u16), h: sim_layout_h(180u16) },
         Color{ r: 193, g: 121, b: 54, a: 44 },
         Color{ r: 243, g: 233, b: 217, a: 0 }
     );
 
     ctx.fill_round_rect(
-        Rect{ x: origin_x + GAME_BOARD_X - 8, y: origin_y + GAME_BOARD_Y - 8, w: GAME_BOARD_W + 16u16, h: GAME_BOARD_H + 16u16 },
+        Rect{ x: layout.board_x - sim_layout_x(8), y: layout.board_y - sim_layout_y(8), w: layout.board_w + sim_layout_square(16u16), h: layout.board_h + sim_layout_square(16u16) },
         28u8,
         Color{ r: 126, g: 83, b: 46, a: 26 }
     );
     ctx.fill_round_rect(
-        Rect{ x: origin_x + GAME_PANEL_X, y: origin_y + GAME_PANEL_Y, w: GAME_PANEL_W, h: GAME_PANEL_H },
+        Rect{ x: layout.panel_x, y: layout.panel_y, w: layout.panel_w, h: layout.panel_h },
         26u8,
         Color{ r: 248, g: 240, b: 228, a: 255 }
     );
     ctx.draw_round_rect(
-        Rect{ x: origin_x + GAME_PANEL_X, y: origin_y + GAME_PANEL_Y, w: GAME_PANEL_W, h: GAME_PANEL_H },
+        Rect{ x: layout.panel_x, y: layout.panel_y, w: layout.panel_w, h: layout.panel_h },
         26u8,
         Color{ r: 207, g: 175, b: 133, a: 255 },
         1u8
     );
 
-    game_draw_cstr(ctx, origin_x + 40, origin_y + 30, "2048", game_font_title(), Color{ r: 88, g: 58, b: 36, a: 255 });
-    game_draw_cstr(ctx, origin_x + 40, origin_y + 66, "把暖色卡片一路合成到 2048", game_font_subtitle(), Color{ r: 132, g: 102, b: 76, a: 255 });
+    game_draw_cstr(ctx, origin_x + sim_layout_x(40), origin_y + sim_layout_y(30), "2048", game_font_title(), Color{ r: 88, g: 58, b: 36, a: 255 });
+    game_draw_cstr(ctx, origin_x + sim_layout_x(40), origin_y + sim_layout_y(66), "把暖色卡片一路合成到 2048", game_font_subtitle(), Color{ r: 132, g: 102, b: 76, a: 255 });
 
-    game_draw_stat_card(ctx, origin_x + 414, origin_y + 114, 84u16, 74u16, "SCORE", game.score, Color{ r: 193, g: 121, b: 54, a: 255 });
-    game_draw_stat_card(ctx, origin_x + 506, origin_y + 114, 84u16, 74u16, "BEST", game.best_tile, Color{ r: 150, g: 97, b: 39, a: 255 });
-    game_draw_stat_card(ctx, origin_x + 414, origin_y + 198, 176u16, 72u16, "MOVES", game.move_count, Color{ r: 197, g: 150, b: 74, a: 255 });
+    game_draw_stat_card(ctx, origin_x + sim_layout_x(414), origin_y + sim_layout_y(114), sim_layout_w(84u16), sim_layout_h(74u16), "SCORE", game.score, Color{ r: 193, g: 121, b: 54, a: 255 });
+    game_draw_stat_card(ctx, origin_x + sim_layout_x(506), origin_y + sim_layout_y(114), sim_layout_w(84u16), sim_layout_h(74u16), "BEST", game.best_tile, Color{ r: 150, g: 97, b: 39, a: 255 });
+    game_draw_stat_card(ctx, origin_x + sim_layout_x(414), origin_y + sim_layout_y(198), sim_layout_w(176u16), sim_layout_h(72u16), "MOVES", game.move_count, Color{ r: 197, g: 150, b: 74, a: 255 });
 
-    game_draw_cstr(ctx, origin_x + 414, origin_y + 286, "状态", game_font_stat_label(), Color{ r: 118, g: 93, b: 69, a: 255 });
-    game_draw_cstr(ctx, origin_x + 414, origin_y + 326, game_status_text(game), game_font_body(), Color{ r: 90, g: 64, b: 44, a: 255 });
-    game_draw_button(ctx, origin_x + GAME_RESTART_X, origin_y + GAME_RESTART_Y, GAME_RESTART_W, GAME_RESTART_H, "新游戏");
-    game_draw_cstr(ctx, origin_x + 414, origin_y + 386, "提示", game_font_stat_label(), Color{ r: 118, g: 93, b: 69, a: 255 });
-    game_draw_cstr(ctx, origin_x + 414, origin_y + 408, "键盘: ↑↓←→", game_font_body(), Color{ r: 90, g: 64, b: 44, a: 255 });
-    game_draw_cstr(ctx, origin_x + 414, origin_y + 430, "触摸: 按住后拖动", game_font_body(), Color{ r: 90, g: 64, b: 44, a: 255 });
+    game_draw_cstr(ctx, origin_x + sim_layout_x(414), origin_y + sim_layout_y(286), "状态", game_font_stat_label(), Color{ r: 118, g: 93, b: 69, a: 255 });
+    game_draw_cstr(ctx, origin_x + sim_layout_x(414), origin_y + sim_layout_y(326), game_status_text(game), game_font_body(), Color{ r: 90, g: 64, b: 44, a: 255 });
+    game_draw_button(ctx, layout.restart_x, layout.restart_y, layout.restart_w, layout.restart_h, "新游戏");
+    game_draw_cstr(ctx, origin_x + sim_layout_x(414), origin_y + sim_layout_y(386), "提示", game_font_stat_label(), Color{ r: 118, g: 93, b: 69, a: 255 });
+    game_draw_cstr(ctx, origin_x + sim_layout_x(414), origin_y + sim_layout_y(408), "键盘: ↑↓←→", game_font_body(), Color{ r: 90, g: 64, b: 44, a: 255 });
+    game_draw_cstr(ctx, origin_x + sim_layout_x(414), origin_y + sim_layout_y(430), "触摸: 按住后拖动", game_font_body(), Color{ r: 90, g: 64, b: 44, a: 255 });
 
-    const board_x: i16 = origin_x + GAME_BOARD_X;
-    const board_y: i16 = origin_y + GAME_BOARD_Y;
-    ctx.fill_round_rect(Rect{ x: board_x, y: board_y, w: GAME_BOARD_W, h: GAME_BOARD_H }, 30u8, Color{ r: 181, g: 156, b: 126, a: 255 });
-    ctx.draw_round_rect(Rect{ x: board_x, y: board_y, w: GAME_BOARD_W, h: GAME_BOARD_H }, 30u8, Color{ r: 151, g: 122, b: 91, a: 255 }, 1u8);
+    const board_x: i16 = layout.board_x;
+    const board_y: i16 = layout.board_y;
+    ctx.fill_round_rect(Rect{ x: board_x, y: board_y, w: layout.board_w, h: layout.board_h }, sim_layout_font(30u8), Color{ r: 181, g: 156, b: 126, a: 255 });
+    ctx.draw_round_rect(Rect{ x: board_x, y: board_y, w: layout.board_w, h: layout.board_h }, sim_layout_font(30u8), Color{ r: 151, g: 122, b: 91, a: 255 }, 1u8);
 
     var row: i32 = 0;
     while row < GAME_GRID_SIZE {
         var col: i32 = 0;
         while col < GAME_GRID_SIZE {
-            const x: i16 = origin_x + GAME_BOARD_X + GAME_CELL_GAP + col as i16 * (GAME_CELL_SIZE as i16 + GAME_CELL_GAP);
-            const y: i16 = origin_y + GAME_BOARD_Y + GAME_CELL_GAP + row as i16 * (GAME_CELL_SIZE as i16 + GAME_CELL_GAP);
+            const x: i16 = board_x + layout.cell_gap + col as i16 * (layout.cell_size as i16 + layout.cell_gap);
+            const y: i16 = board_y + layout.cell_gap + row as i16 * (layout.cell_size as i16 + layout.cell_gap);
             game_draw_tile(ctx, x, y, game.board[game_board_index(row, col)]);
             col = col + 1;
         }
@@ -637,17 +683,17 @@ export fn render_demo_game_state(game: &Game2048Retained, ctx: &RenderCtx, origi
     }
 
     if game.won || game.game_over {
-        ctx.fill_round_rect(Rect{ x: board_x, y: board_y, w: GAME_BOARD_W, h: GAME_BOARD_H }, 30u8, Color{ r: 39, g: 23, b: 14, a: 138 });
+        ctx.fill_round_rect(Rect{ x: board_x, y: board_y, w: layout.board_w, h: layout.board_h }, 30u8, Color{ r: 39, g: 23, b: 14, a: 138 });
         game_draw_centered_text(
             ctx,
-            Rect{ x: board_x, y: board_y + 106, w: GAME_BOARD_W, h: 40u16 },
+            Rect{ x: board_x, y: board_y + sim_layout_y(106), w: layout.board_w, h: sim_layout_h(40u16) },
             game_overlay_title(game),
             game_font_overlay(),
             Color{ r: 252, g: 245, b: 235, a: 255 }
         );
         game_draw_centered_text(
             ctx,
-            Rect{ x: board_x + 20, y: board_y + 150, w: GAME_BOARD_W - 40u16, h: 28u16 },
+            Rect{ x: board_x + sim_layout_x(20), y: board_y + sim_layout_y(150), w: layout.board_w - sim_layout_w(40u16), h: sim_layout_h(28u16) },
             game_overlay_subtitle(game),
             game_font_body(),
             Color{ r: 241, g: 221, b: 194, a: 255 }

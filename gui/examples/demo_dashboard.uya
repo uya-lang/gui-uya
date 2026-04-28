@@ -4,6 +4,11 @@ use platform.disp.framebuffer_new;
 use platform.disp.framebuffer_required_bytes;
 use render.ctx.RenderCtx;
 use render.ctx.render_ctx_new;
+use sim.common.sim_layout_font;
+use sim.common.sim_layout_h;
+use sim.common.sim_layout_w;
+use sim.common.sim_layout_x;
+use sim.common.sim_layout_y;
 use sim.common.SIM_DEFAULT_RES_HEIGHT;
 use sim.common.SIM_DEFAULT_RES_WIDTH;
 use style.StyleProp;
@@ -96,31 +101,31 @@ export fn dashboard_retained_init(dashboard: &DashboardRetained) void {
     dashboard.page.widget.size(SIM_DEFAULT_RES_WIDTH, SIM_DEFAULT_RES_HEIGHT);
     dashboard.page.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 15, g: 23, b: 42, a: 255 });
 
-    dashboard.shell.widget.at(24, 24);
-    dashboard.shell.widget.size(592, 432);
+    dashboard.shell.widget.at(sim_layout_x(24), sim_layout_y(24));
+    dashboard.shell.widget.size(sim_layout_w(592), sim_layout_h(432));
 
-    dashboard.title.widget.at(28, 24);
-    dashboard.title.widget.size(240, 32);
-    dashboard.title.widget.base.style.set_u32(StyleProp.FontSize, 28u32);
+    dashboard.title.widget.at(sim_layout_x(28), sim_layout_y(24));
+    dashboard.title.widget.size(sim_layout_w(240), sim_layout_h(32));
+    dashboard.title.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(28u8) as u32);
 
-    dashboard.chart.widget.at(28, 88);
-    dashboard.chart.widget.size(336, 248);
+    dashboard.chart.widget.at(sim_layout_x(28), sim_layout_y(88));
+    dashboard.chart.widget.size(sim_layout_w(336), sim_layout_h(248));
     dashboard.chart.chart_type = ChartType.Area;
 
-    dashboard.grid.widget.at(392, 88);
-    dashboard.grid.widget.size(176, 232);
+    dashboard.grid.widget.at(sim_layout_x(392), sim_layout_y(88));
+    dashboard.grid.widget.size(sim_layout_w(176), sim_layout_h(232));
     dashboard.grid.columns = 1;
-    dashboard.grid.item_size.w = 128;
-    dashboard.grid.item_size.h = 60;
-    dashboard.grid.row_gap = 6u8;
-    dashboard.grid.cell_padding = 2u8;
+    dashboard.grid.item_size.w = sim_layout_w(128u16);
+    dashboard.grid.item_size.h = sim_layout_h(60u16);
+    dashboard.grid.row_gap = (sim_layout_h(6u16) as! u8).value;
+    dashboard.grid.cell_padding = (sim_layout_h(2u16) as! u8).value;
     dashboard.grid.cell_content_mode = GridCellContentMode.Center;
     dashboard.grid.content_align_x = GridContentAlign.Center;
     dashboard.grid.content_align_y = GridContentAlign.Center;
 
-    dashboard.cpu.widget.base.style.set_u32(StyleProp.FontSize, 18u32);
-    dashboard.net.widget.base.style.set_u32(StyleProp.FontSize, 18u32);
-    dashboard.mem.widget.base.style.set_u32(StyleProp.FontSize, 18u32);
+    dashboard.cpu.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(18u8) as u32);
+    dashboard.net.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(18u8) as u32);
+    dashboard.mem.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(18u8) as u32);
     dashboard.grid.add_child(dashboard.cpu.obj());
     dashboard.grid.add_child(dashboard.net.obj());
     dashboard.grid.add_child(dashboard.mem.obj());
@@ -164,28 +169,28 @@ export fn render_demo_dashboard_state(ctx: &RenderCtx, origin_x: i16, origin_y: 
     page.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 15, g: 23, b: 42, a: 255 });
 
     var shell: Panel = Panel.new();
-    shell.widget.at(24, 24);
-    shell.widget.size(592, 432);
+    shell.widget.at(sim_layout_x(24), sim_layout_y(24));
+    shell.widget.size(sim_layout_w(592), sim_layout_h(432));
 
     var title: Label = Label.new(dashboard_metric_title(metric));
-    title.widget.at(28, 24);
-    title.widget.size(240, 32);
-    title.widget.base.style.set_u32(StyleProp.FontSize, 28u32);
+    title.widget.at(sim_layout_x(28), sim_layout_y(24));
+    title.widget.size(sim_layout_w(240), sim_layout_h(32));
+    title.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(28u8) as u32);
 
     var chart: Chart = Chart.new();
-    chart.widget.at(28, 88);
-    chart.widget.size(336, 248);
+    chart.widget.at(sim_layout_x(28), sim_layout_y(88));
+    chart.widget.size(sim_layout_w(336), sim_layout_h(248));
     chart.chart_type = ChartType.Area;
     dashboard_fill_chart(&chart, metric);
 
     var grid: GridView = GridView.new();
-    grid.widget.at(392, 88);
-    grid.widget.size(176, 232);
+    grid.widget.at(sim_layout_x(392), sim_layout_y(88));
+    grid.widget.size(sim_layout_w(176), sim_layout_h(232));
     grid.columns = 1;
-    grid.item_size.w = 128;
-    grid.item_size.h = 60;
-    grid.row_gap = 6u8;
-    grid.cell_padding = 2u8;
+    grid.item_size.w = sim_layout_w(128u16);
+    grid.item_size.h = sim_layout_h(60u16);
+    grid.row_gap = (sim_layout_h(6u16) as! u8).value;
+    grid.cell_padding = (sim_layout_h(2u16) as! u8).value;
     grid.cell_content_mode = GridCellContentMode.Center;
     grid.content_align_x = GridContentAlign.Center;
     grid.content_align_y = GridContentAlign.Center;
@@ -199,9 +204,9 @@ export fn render_demo_dashboard_state(ctx: &RenderCtx, origin_x: i16, origin_y: 
     } else {
         mem = Button.filled("MEM");
     }
-    cpu.widget.base.style.set_u32(StyleProp.FontSize, 18u32);
-    net.widget.base.style.set_u32(StyleProp.FontSize, 18u32);
-    mem.widget.base.style.set_u32(StyleProp.FontSize, 18u32);
+    cpu.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(18u8) as u32);
+    net.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(18u8) as u32);
+    mem.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(18u8) as u32);
     grid.add_child(cpu.obj());
     grid.add_child(net.obj());
     grid.add_child(mem.obj());

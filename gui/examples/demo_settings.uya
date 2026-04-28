@@ -4,6 +4,11 @@ use platform.disp.framebuffer_new;
 use platform.disp.framebuffer_required_bytes;
 use render.ctx.RenderCtx;
 use render.ctx.render_ctx_new;
+use sim.common.sim_layout_font;
+use sim.common.sim_layout_h;
+use sim.common.sim_layout_w;
+use sim.common.sim_layout_x;
+use sim.common.sim_layout_y;
 use sim.common.SIM_DEFAULT_RES_HEIGHT;
 use sim.common.SIM_DEFAULT_RES_WIDTH;
 use style.StyleProp;
@@ -23,36 +28,38 @@ export fn render_demo_settings_state(ctx: &RenderCtx, origin_x: i16, origin_y: i
     page.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 245, g: 248, b: 252, a: 255 });
 
     var panel: Panel = Panel.new();
-    panel.widget.at(40, 32);
-    panel.widget.size(560, 416);
+    panel.widget.at(sim_layout_x(40), sim_layout_y(32));
+    panel.widget.size(sim_layout_w(560), sim_layout_h(416));
 
     var title: Label = Label.new("Settings");
-    title.widget.at(40, 32);
-    title.widget.size(220, 36);
-    title.widget.base.style.set_u32(StyleProp.FontSize, 28u32);
+    title.widget.at(sim_layout_x(40), sim_layout_y(32));
+    title.widget.size(sim_layout_w(220), sim_layout_h(36));
+    title.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(28u8) as u32);
     title.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 15, g: 23, b: 42, a: 255 });
 
     var wifi_label: Label = Label.new("Wi-Fi");
-    wifi_label.widget.at(40, 104);
-    wifi_label.widget.size(160, 24);
-    wifi_label.widget.base.style.set_u32(StyleProp.FontSize, 18u32);
+    wifi_label.widget.at(sim_layout_x(40), sim_layout_y(104));
+    wifi_label.widget.size(sim_layout_w(160), sim_layout_h(24));
+    wifi_label.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(18u8) as u32);
     var wifi: Switch = Switch.new(wifi_enabled);
-    wifi.widget.at(416, 92);
+    wifi.widget.at(sim_layout_x(416), sim_layout_y(92));
+    wifi.widget.size(sim_layout_w(52u16), sim_layout_h(30u16));
 
     var notif_label: Label = Label.new("Alerts");
-    notif_label.widget.at(40, 176);
-    notif_label.widget.size(160, 24);
-    notif_label.widget.base.style.set_u32(StyleProp.FontSize, 18u32);
+    notif_label.widget.at(sim_layout_x(40), sim_layout_y(176));
+    notif_label.widget.size(sim_layout_w(160), sim_layout_h(24));
+    notif_label.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(18u8) as u32);
     var notif: Switch = Switch.new(alerts_enabled);
-    notif.widget.at(416, 164);
+    notif.widget.at(sim_layout_x(416), sim_layout_y(164));
+    notif.widget.size(sim_layout_w(52u16), sim_layout_h(30u16));
 
     var bright_label: Label = Label.new("Brightness");
-    bright_label.widget.at(40, 264);
-    bright_label.widget.size(200, 24);
-    bright_label.widget.base.style.set_u32(StyleProp.FontSize, 18u32);
+    bright_label.widget.at(sim_layout_x(40), sim_layout_y(264));
+    bright_label.widget.size(sim_layout_w(200), sim_layout_h(24));
+    bright_label.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(18u8) as u32);
     var brightness: Slider = Slider.new(0, 100, brightness_value);
-    brightness.widget.at(40, 312);
-    brightness.widget.size(480, 20);
+    brightness.widget.at(sim_layout_x(40), sim_layout_y(312));
+    brightness.widget.size(sim_layout_w(480), sim_layout_h(20));
 
     page.add(panel.obj());
     panel.add(title.obj());

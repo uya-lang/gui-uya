@@ -4,6 +4,12 @@ use platform.disp.framebuffer_new;
 use platform.disp.framebuffer_required_bytes;
 use render.ctx.RenderCtx;
 use render.ctx.render_ctx_new;
+use sim.common.sim_layout_font;
+use sim.common.sim_layout_h;
+use sim.common.sim_layout_square;
+use sim.common.sim_layout_w;
+use sim.common.sim_layout_x;
+use sim.common.sim_layout_y;
 use sim.common.SIM_DEFAULT_RES_HEIGHT;
 use sim.common.SIM_DEFAULT_RES_WIDTH;
 use style.StyleProp;
@@ -24,26 +30,27 @@ export fn render_demo_clock(ctx: &RenderCtx, origin_x: i16, origin_y: i16) void 
     page.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 240, g: 246, b: 255, a: 255 });
 
     var panel: Panel = Panel.new();
-    panel.widget.at(40, 32);
-    panel.widget.size(560, 416);
+    panel.widget.at(sim_layout_x(40), sim_layout_y(32));
+    panel.widget.size(sim_layout_w(560), sim_layout_h(416));
     panel.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 255, g: 255, b: 255, a: 255 });
 
     var title: Label = Label.new("MON 08:45");
-    title.widget.at(96, 40);
-    title.widget.size(368, 44);
-    title.widget.base.style.set_u32(StyleProp.FontSize, 28u32);
+    title.widget.at(sim_layout_x(96), sim_layout_y(40));
+    title.widget.size(sim_layout_w(368), sim_layout_h(44));
+    title.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(28u8) as u32);
     _ = title.set_align(TextAlign.Center);
 
     var subtitle: Label = Label.new("UTC+08");
-    subtitle.widget.at(96, 96);
-    subtitle.widget.size(368, 28);
-    subtitle.widget.base.style.set_u32(StyleProp.FontSize, 18u32);
+    subtitle.widget.at(sim_layout_x(96), sim_layout_y(96));
+    subtitle.widget.size(sim_layout_w(368), sim_layout_h(28));
+    subtitle.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(18u8) as u32);
     _ = subtitle.set_align(TextAlign.Center);
     subtitle.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 91, g: 103, b: 122, a: 255 });
 
     var face: Canvas = Canvas.with_buffer(&face_bytes[0], 160, 160, 640, PixelFormat.ARGB8888);
-    face.widget.at(200, 160);
-    face.widget.size(160, 160);
+    const face_size: u16 = sim_layout_square(160u16);
+    face.widget.at(sim_layout_x(200), sim_layout_y(160));
+    face.widget.size(face_size, face_size);
     face.begin_draw().clear(Color{ r: 255, g: 255, b: 255, a: 0 });
     face.begin_draw().draw_circle(80, 80, 72, Color{ r: 51, g: 65, b: 85, a: 255 });
     face.begin_draw().draw_line(80, 80, 80, 28, Color{ r: 37, g: 99, b: 235, a: 255 }, 6);
