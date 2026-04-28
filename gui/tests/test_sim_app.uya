@@ -2,7 +2,9 @@ use core.event.Event;
 use core.event.EventType;
 use core.event.InputDev;
 use core.event.event_point;
+use core.color.Color;
 use core.point.Point;
+use core.rect.Rect;
 use platform.disp.FrameBuffer;
 use platform.disp.PixelFormat;
 use platform.disp.framebuffer_new;
@@ -239,4 +241,125 @@ test "standalone novel demo exposes 10k+ chinese text and supports scrolling" {
     try assert_eq_bool(app.novel_demo.auto_scroll, false);
     app.handle_key_event(SIM_KEY_SPACE, true, 100u32, false);
     try assert_eq_bool(app.novel_demo.auto_scroll, true);
+}
+
+test "standalone widgets and custom demos render showcase content" {
+    var app: SimApp = sim_app_new();
+    var cfg: SimConfig = sim_config_default();
+    cfg.demo = SimDemoKind.Widgets;
+    cfg.width = SIM_DEFAULT_RES_WIDTH;
+    cfg.height = SIM_DEFAULT_RES_HEIGHT;
+    try assert_eq_bool(app.init(cfg), true);
+
+    const pixels_len: usize = framebuffer_required_bytes(cfg.width, cfg.height, PixelFormat.ARGB8888);
+    const pixels: &byte = malloc(pixels_len) as &byte;
+    if pixels == null {
+        try assert_eq_bool(false, true);
+        return;
+    }
+    defer {
+        free(pixels as &void);
+    }
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(pixels, cfg.width, cfg.height, cfg.width * 4u16, PixelFormat.ARGB8888));
+    app.render(&ctx);
+    try assert_eq_bool(ctx.stats.text_ops > 0u32, true);
+    try assert_eq_bool(ctx.stats.image_ops > 0u32, true);
+
+    app.switch_demo(SimDemoKind.Custom, "test");
+    ctx.clear(Color{ r: 0, g: 0, b: 0, a: 255 });
+    app.render(&ctx);
+    try assert_eq_bool(ctx.stats.text_ops > 0u32, true);
+    try assert_eq_bool(ctx.stats.image_ops > 0u32, true);
+}
+
+test "home nav buttons and standalone back button switch demos" {
+    var app: SimApp = sim_app_new();
+    var cfg: SimConfig = sim_config_default();
+    cfg.width = SIM_DEFAULT_RES_WIDTH;
+    cfg.height = SIM_DEFAULT_RES_HEIGHT;
+    try assert_eq_bool(app.init(cfg), true);
+
+    const clock_rect: Rect = app.home_nav_button_rect(0);
+    var open_clock: Event = event_point(
+        EventType.Click,
+        InputDev.Touch,
+        -1,
+        40u32,
+        Point{ x: clock_rect.x + clock_rect.w as i16 / 2, y: clock_rect.y + clock_rect.h as i16 / 2 }
+    );
+    app.handle_translated_event(&open_clock);
+    try assert_eq_i32(app.config.demo as i32, SimDemoKind.Clock as i32);
+
+    const back_rect: Rect = app.standalone_back_button_rect();
+    var back_home: Event = event_point(
+        EventType.Click,
+        InputDev.Touch,
+        -1,
+        72u32,
+        Point{ x: back_rect.x + back_rect.w as i16 / 2, y: back_rect.y + back_rect.h as i16 / 2 }
+    );
+    app.handle_translated_event(&back_home);
+    try assert_eq_i32(app.config.demo as i32, sim_config_default().demo as i32);
+}
+
+test "widgets and custom demos react to mouse clicks" {
+    var app: SimApp = sim_app_new();
+    var cfg: SimConfig = sim_config_default();
+    cfg.demo = SimDemoKind.Widgets;
+    cfg.width = SIM_DEFAULT_RES_WIDTH;
+    cfg.height = SIM_DEFAULT_RES_HEIGHT;
+    try assert_eq_bool(app.init(cfg), true);
+
+    var widgets_slider_click: Event = event_point(
+        EventType.Click,
+        InputDev.Touch,
+        -1,
+        40u32,
+        Point{
+            x: sim_layout_x(20) + sim_layout_x(16) + sim_layout_w(132u16) as i16,
+            y: sim_layout_y(96) + sim_layout_y(148) + sim_layout_h(9u16) as i16,
+        }
+    );
+    app.handle_translated_event(&widgets_slider_click);
+    try assert_eq_bool(app.widgets_volume != 72, true);
+
+    var widgets_list_click: Event = event_point(
+        EventType.Click,
+        InputDev.Touch,
+        -1,
+        56u32,
+        Point{
+            x: sim_layout_x(20) + sim_layout_x(32),
+            y: sim_layout_y(274) + sim_layout_y(72) + 86,
+        }
+    );
+    app.handle_translated_event(&widgets_list_click);
+    try assert_eq_bool(app.widgets_selected_item != 2, true);
+
+    app.switch_demo(SimDemoKind.Custom, "test");
+    var custom_gauge_click: Event = event_point(
+        EventType.Click,
+        InputDev.Touch,
+        -1,
+        72u32,
+        Point{
+            x: sim_layout_x(20) + sim_layout_x(40),
+            y: sim_layout_y(96) + sim_layout_y(84),
+        }
+    );
+    app.handle_translated_event(&custom_gauge_click);
+    try assert_eq_bool(app.custom_gauge_cpu != 32, true);
+
+    var custom_key_click: Event = event_point(
+        EventType.Click,
+        InputDev.Touch,
+        -1,
+        88u32,
+        Point{
+            x: sim_layout_x(316) + sim_layout_x(28),
+            y: sim_layout_y(96) + sim_layout_y(92),
+        }
+    );
+    app.handle_translated_event(&custom_key_click);
+    try assert_eq_bool(app.custom_input_len > 12, true);
 }

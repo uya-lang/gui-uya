@@ -3,12 +3,14 @@ use examples.demo_game.GameMoveDir;
 use examples.demo_game.game_retained_move;
 use examples.demo_game.game_retained_new;
 use examples.demo_clock.run_demo_clock;
+use examples.demo_custom.run_demo_custom;
 use examples.demo_dashboard.run_demo_dashboard;
 use examples.demo_game.run_demo_game;
 use examples.demo_music.run_demo_music;
 use examples.demo_novel.run_demo_novel;
 use examples.demo_perf.run_demo_perf;
 use examples.demo_settings.run_demo_settings;
+use examples.demo_widgets.run_demo_widgets;
 use examples.phase6_smoke.run_phase6_smoke;
 use std.testing.assert_eq_bool;
 use std.testing.assert_eq_i32;
@@ -23,6 +25,8 @@ test "phase6 demos render successfully" {
     try assert_eq_i32(run_demo_game(), 0);
     try assert_eq_i32(run_demo_perf(), 0);
     try assert_eq_i32(run_demo_novel(), 0);
+    try assert_eq_i32(run_demo_widgets(), 0);
+    try assert_eq_i32(run_demo_custom(), 0);
 }
 
 test "phase6 smoke aggregates all examples" {

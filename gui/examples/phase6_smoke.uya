@@ -1,12 +1,14 @@
 use examples.custom.gauge.run_custom_gauge_example;
 use examples.custom.keyboard.run_custom_keyboard_example;
 use examples.demo_clock.run_demo_clock;
+use examples.demo_custom.run_demo_custom;
 use examples.demo_dashboard.run_demo_dashboard;
 use examples.demo_game.run_demo_game;
 use examples.demo_music.run_demo_music;
 use examples.demo_novel.run_demo_novel;
 use examples.demo_perf.run_demo_perf;
 use examples.demo_settings.run_demo_settings;
+use examples.demo_widgets.run_demo_widgets;
 
 export fn run_phase6_smoke() i32 {
     if run_demo_clock() != 0 {
@@ -30,11 +32,17 @@ export fn run_phase6_smoke() i32 {
     if run_demo_novel() != 0 {
         return 7;
     }
-    if run_custom_gauge_example() != 0 {
+    if run_demo_widgets() != 0 {
         return 8;
     }
-    if run_custom_keyboard_example() != 0 {
+    if run_demo_custom() != 0 {
         return 9;
+    }
+    if run_custom_gauge_example() != 0 {
+        return 10;
+    }
+    if run_custom_keyboard_example() != 0 {
+        return 11;
     }
     return 0;
 }

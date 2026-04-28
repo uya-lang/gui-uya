@@ -17,6 +17,7 @@ use core.point.POINT_ZERO;
 use core.point.Point;
 use core.rect.Rect;
 use examples.demo_clock.render_demo_clock;
+use examples.demo_custom.render_demo_custom_state;
 use examples.demo_dashboard.DashboardRetained;
 use examples.demo_dashboard.dashboard_retained_init;
 use examples.demo_dashboard.dashboard_retained_new;
@@ -39,6 +40,7 @@ use examples.demo_novel.novel_retained_update;
 use examples.demo_novel.render_demo_novel_state;
 use examples.demo_perf.render_demo_perf;
 use examples.demo_settings.render_demo_settings_state;
+use examples.demo_widgets.render_demo_widgets_state;
 use examples.phase4_smoke.run_phase4_smoke;
 use examples.phase6_smoke.run_phase6_smoke;
 use libc.snprintf;
@@ -138,6 +140,7 @@ const SIM_PREVIEW_RGB_BYTES: [byte: 48] = [
 const STANDALONE_DRAG_NONE: i32 = 0;
 const STANDALONE_DRAG_MUSIC_PROGRESS: i32 = 1;
 const STANDALONE_DRAG_SETTINGS_BRIGHTNESS: i32 = 2;
+const STANDALONE_DRAG_WIDGETS_SLIDER: i32 = 3;
 const MUSIC_TRACK_COUNT: i32 = 3;
 const SETTINGS_PANEL_X: i16 = 40;
 const SETTINGS_PANEL_Y: i16 = 32;
@@ -148,6 +151,14 @@ const DASHBOARD_BUTTON_Y: i16 = 110;
 const DASHBOARD_BUTTON_W: i16 = 128;
 const DASHBOARD_BUTTON_H: i16 = 56;
 const DASHBOARD_BUTTON_STEP_Y: i16 = 66;
+const HOME_NAV_BUTTON_COUNT: i32 = 9;
+const HOME_NAV_BUTTON_COLS: i32 = 3;
+const HOME_NAV_BUTTON_ROWS: i32 = 3;
+const HOME_NAV_BUTTON_GAP: i32 = 8;
+const HOME_NAV_BUTTON_H: i32 = 34;
+const HOME_NAV_TITLE_H: i32 = 16;
+const STANDALONE_BACK_BUTTON_W: u16 = 84u16;
+const STANDALONE_BACK_BUTTON_H: u16 = 32u16;
 
 export struct SimApp {
     config: SimConfig,
@@ -200,6 +211,17 @@ export struct SimApp {
     settings_wifi: bool,
     settings_alerts: bool,
     settings_brightness: i32,
+    widgets_control_idx: i32,
+    widgets_volume: i32,
+    widgets_auto_refresh: bool,
+    widgets_selected_item: i32,
+    widgets_action_idx: i32,
+    custom_gauge_cpu: i32,
+    custom_gauge_mem: i32,
+    custom_gauge_net: i32,
+    custom_uppercase: bool,
+    custom_input_text: [byte: 64],
+    custom_input_len: i32,
     dashboard_metric: i32,
     dashboard_retained: DashboardRetained,
     game_demo: Game2048Retained,
@@ -243,11 +265,10 @@ fn sim_phase_bg_color() Color {
 AppButtonClickAdapter {
     fn invoke(self: &Self, widget: &Widget, evt: &Event, user_data: &void) void {
         _ = self;
-        _ = widget;
         _ = evt;
         const app: &SimApp = user_data as &SimApp;
         if app != null {
-            app.on_button_click();
+            app.on_button_click(widget);
         }
     }
 }
@@ -421,6 +442,98 @@ SimApp {
         self.toggle.on_change(&APP_SWITCH_VALUE_ADAPTER, self as &void);
     }
 
+    fn home_demo_kind(self: &Self) SimDemoKind {
+        _ = self;
+        return sim_config_default().demo;
+    }
+
+    fn home_nav_button_demo(self: &Self, index: i32) SimDemoKind {
+        _ = self;
+        if index == 0 {
+            return SimDemoKind.Clock;
+        }
+        if index == 1 {
+            return SimDemoKind.Music;
+        }
+        if index == 2 {
+            return SimDemoKind.Settings;
+        }
+        if index == 3 {
+            return SimDemoKind.Dashboard;
+        }
+        if index == 4 {
+            return SimDemoKind.Game;
+        }
+        if index == 5 {
+            return SimDemoKind.Perf;
+        }
+        if index == 6 {
+            return SimDemoKind.Novel;
+        }
+        if index == 7 {
+            return SimDemoKind.Widgets;
+        }
+        return SimDemoKind.Custom;
+    }
+
+    fn home_nav_button_label(self: &Self, index: i32) &const byte {
+        _ = self;
+        if index == 0 {
+            return "时钟";
+        }
+        if index == 1 {
+            return "音乐";
+        }
+        if index == 2 {
+            return "设置";
+        }
+        if index == 3 {
+            return "看板";
+        }
+        if index == 4 {
+            return "2048";
+        }
+        if index == 5 {
+            return "性能";
+        }
+        if index == 6 {
+            return "小说";
+        }
+        if index == 7 {
+            return "控件";
+        }
+        return "自定义";
+    }
+
+    fn home_nav_status_text(self: &Self, demo: SimDemoKind) &const byte {
+        _ = self;
+        if demo == SimDemoKind.Clock {
+            return "已切到时钟 demo";
+        }
+        if demo == SimDemoKind.Music {
+            return "已切到音乐 demo";
+        }
+        if demo == SimDemoKind.Settings {
+            return "已切到设置 demo";
+        }
+        if demo == SimDemoKind.Dashboard {
+            return "已切到看板 demo";
+        }
+        if demo == SimDemoKind.Game {
+            return "已切到 2048 demo";
+        }
+        if demo == SimDemoKind.Perf {
+            return "已切到性能 demo";
+        }
+        if demo == SimDemoKind.Novel {
+            return "已切到小说 demo";
+        }
+        if demo == SimDemoKind.Widgets {
+            return "已切到控件总览 demo";
+        }
+        return "已切到自定义控件 demo";
+    }
+
     fn prewarm_label_text(self: &Self, ctx: &RenderCtx, label: &Label) void {
         _ = self;
         if label == null || label.text == null || label.text_len == 0usize {
@@ -460,6 +573,13 @@ SimApp {
         self.prewarm_label_text(&warm_ctx, &self.metrics_label);
         self.prewarm_label_text(&warm_ctx, &self.help_label);
         self.prewarm_button_text(&warm_ctx, &self.action_button);
+        var nav_idx: i32 = 0;
+        while nav_idx < HOME_NAV_BUTTON_COUNT {
+            var nav_button: Button = Button.outlined(self.home_nav_button_label(nav_idx));
+            nav_button.widget.base.style.set_u32(StyleProp.FontSize, 12u32);
+            self.prewarm_button_text(&warm_ctx, &nav_button);
+            nav_idx = nav_idx + 1;
+        }
     }
 
     fn build_tree(self: &Self) void {
@@ -592,9 +712,46 @@ SimApp {
         _ = sim_copy_cstr(
             &self.help_text[0],
             SIM_TEXT_CAPACITY as usize,
-            "Esc退出 | P截图 | R录制 | L回放 | 1/6阶段 | C/M/S/D/G/B/N切换 | 2048: 方向键/拖动"
+            "Esc退出 | P截图 | R录制 | L回放 | 首页点按钮 | Demo 左上角返回"
         );
         self.help_label.set_text(&self.help_text[0]);
+    }
+
+    fn home_nav_button_rect(self: &Self, index: i32) Rect {
+        const panel: Rect = self.left_panel.widget.base.screen_area();
+        const help: Rect = self.help_label.widget.base.screen_area();
+        const pad_x: i32 = 12;
+        const pad_y: i32 = 12;
+        const content_w: i32 = panel.w as i32 - pad_x * 2;
+        var button_w: i32 = (content_w - HOME_NAV_BUTTON_GAP * (HOME_NAV_BUTTON_COLS - 1)) / HOME_NAV_BUTTON_COLS;
+        if button_w < 44 {
+            button_w = 44;
+        }
+
+        const total_h: i32 = HOME_NAV_TITLE_H + 8 + HOME_NAV_BUTTON_ROWS * HOME_NAV_BUTTON_H + (HOME_NAV_BUTTON_ROWS - 1) * HOME_NAV_BUTTON_GAP;
+        var start_y: i32 = panel.y as i32 + panel.h as i32 - total_h - pad_y;
+        const help_bottom: i32 = help.y as i32 + help.h as i32 + 12;
+        if start_y < help_bottom {
+            start_y = help_bottom;
+        }
+
+        const row: i32 = index / HOME_NAV_BUTTON_COLS;
+        const col: i32 = index % HOME_NAV_BUTTON_COLS;
+        return Rect{
+            x: panel.x + pad_x as i16 + (col * (button_w + HOME_NAV_BUTTON_GAP)) as i16,
+            y: (start_y + HOME_NAV_TITLE_H + 8 + row * (HOME_NAV_BUTTON_H + HOME_NAV_BUTTON_GAP)) as i16,
+            w: (button_w as! u16).value,
+            h: (HOME_NAV_BUTTON_H as! u16).value,
+        };
+    }
+
+    fn standalone_back_button_rect(self: &Self) Rect {
+        return Rect{
+            x: self.current_demo_origin_x() + 12,
+            y: self.current_demo_origin_y() + 12,
+            w: STANDALONE_BACK_BUTTON_W,
+            h: STANDALONE_BACK_BUTTON_H,
+        };
     }
 
     fn current_demo_origin_x(self: &Self) i16 {
@@ -631,6 +788,46 @@ SimApp {
         self.refresh_status_label(status);
     }
 
+    fn render_home_nav(self: &Self, ctx: &RenderCtx) void {
+        if !sim_demo_is_phase(self.config.demo) {
+            return;
+        }
+        const title_rect: Rect = self.home_nav_button_rect(0);
+        const title_font: &Font = widget_font(&self.status_label.widget.base.style);
+        draw_text(
+            ctx,
+            title_rect.x,
+            title_rect.y - (HOME_NAV_TITLE_H + 8) as i16,
+            "Demo 快捷入口",
+            15usize,
+            title_font,
+            Color{ r: 71, g: 85, b: 105, a: 255 }
+        );
+
+        var i: i32 = 0;
+        while i < HOME_NAV_BUTTON_COUNT {
+            const rect: Rect = self.home_nav_button_rect(i);
+            var button: Button = Button.outlined(self.home_nav_button_label(i));
+            button.widget.at(rect.x, rect.y);
+            button.widget.size(rect.w, rect.h);
+            button.widget.base.style.set_u32(StyleProp.FontSize, 12u32);
+            button.render(ctx);
+            i = i + 1;
+        }
+    }
+
+    fn render_standalone_back_button(self: &Self, ctx: &RenderCtx) void {
+        if sim_demo_is_phase(self.config.demo) {
+            return;
+        }
+        const rect: Rect = self.standalone_back_button_rect();
+        var button: Button = Button.outlined("返回");
+        button.widget.at(rect.x, rect.y);
+        button.widget.size(rect.w, rect.h);
+        button.widget.base.style.set_u32(StyleProp.FontSize, 12u32);
+        button.render(ctx);
+    }
+
     fn render_selected_demo(self: &Self, ctx: &RenderCtx) void {
         const origin_x: i16 = self.current_demo_origin_x();
         const origin_y: i16 = self.current_demo_origin_y();
@@ -660,6 +857,34 @@ SimApp {
         }
         if self.config.demo == SimDemoKind.Novel {
             render_demo_novel_state(&self.novel_demo, ctx, origin_x, origin_y);
+            return;
+        }
+        if self.config.demo == SimDemoKind.Widgets {
+            render_demo_widgets_state(
+                ctx,
+                origin_x,
+                origin_y,
+                self.widgets_control_idx,
+                self.widgets_volume,
+                self.widgets_auto_refresh,
+                self.widgets_selected_item,
+                self.widgets_action_idx,
+                &self.status_text[0]
+            );
+            return;
+        }
+        if self.config.demo == SimDemoKind.Custom {
+            render_demo_custom_state(
+                ctx,
+                origin_x,
+                origin_y,
+                self.custom_gauge_cpu,
+                self.custom_gauge_mem,
+                self.custom_gauge_net,
+                &self.custom_input_text[0],
+                self.custom_uppercase,
+                &self.status_text[0]
+            );
         }
     }
 
@@ -671,6 +896,15 @@ SimApp {
         self.settings_wifi = true;
         self.settings_alerts = false;
         self.settings_brightness = 68;
+        self.widgets_control_idx = 0;
+        self.widgets_volume = 72;
+        self.widgets_auto_refresh = true;
+        self.widgets_selected_item = 2;
+        self.widgets_action_idx = 1;
+        self.custom_gauge_cpu = 32;
+        self.custom_gauge_mem = 68;
+        self.custom_gauge_net = 91;
+        self.custom_input_reset();
         self.dashboard_metric = 0;
         game_retained_reset(&self.game_demo);
         novel_retained_reset_state(&self.novel_demo);
@@ -833,11 +1067,275 @@ SimApp {
         }
     }
 
+    fn handle_widgets_demo_touch(self: &Self, evt: &Event, local: Point) void {
+        const controls_x: i16 = sim_layout_x(20);
+        const controls_y: i16 = sim_layout_y(96);
+        const primary_x: i16 = controls_x + sim_layout_x(16);
+        const primary_y: i16 = controls_y + sim_layout_y(48);
+        const primary_w: u16 = sim_layout_w(118u16);
+        const primary_h: u16 = sim_layout_h(40u16);
+        const secondary_x: i16 = controls_x + sim_layout_x(148);
+        const secondary_y: i16 = controls_y + sim_layout_y(48);
+        const secondary_w: u16 = sim_layout_w(122u16);
+        const secondary_h: u16 = sim_layout_h(40u16);
+        const text_x: i16 = controls_x + sim_layout_x(16);
+        const text_y: i16 = controls_y + sim_layout_y(94);
+        const text_w: u16 = sim_layout_w(118u16);
+        const text_h: u16 = sim_layout_h(32u16);
+        const sync_x: i16 = controls_x + sim_layout_x(148);
+        const sync_y: i16 = controls_y + sim_layout_y(92);
+        const sync_w: u16 = sim_layout_w(122u16);
+        const sync_h: u16 = sim_layout_h(36u16);
+        const slider_x: i16 = controls_x + sim_layout_x(16);
+        const slider_y: i16 = controls_y + sim_layout_y(148);
+        const slider_w: u16 = sim_layout_w(176u16);
+        const slider_h: u16 = sim_layout_h(18u16);
+        const switch_x: i16 = controls_x + sim_layout_x(224);
+        const switch_y: i16 = controls_y + sim_layout_y(146);
+        const switch_w: u16 = sim_layout_w(46u16);
+        const switch_h: u16 = sim_layout_h(24u16);
+        const list_x: i16 = sim_layout_x(20) + sim_layout_x(16);
+        const list_y: i16 = sim_layout_y(274) + sim_layout_y(72);
+        const list_w: u16 = sim_layout_w(254u16);
+        const list_h: u16 = sim_layout_h(94u16);
+        const list_item_h: i32 = 24;
+        const action_x: i16 = sim_layout_x(318) + sim_layout_x(16);
+        const action_y: i16 = sim_layout_y(274) + sim_layout_y(128);
+        const action_w: u16 = sim_layout_w(128u16);
+        const action_h: u16 = sim_layout_h(38u16);
+        const action_gap: i16 = sim_layout_w(8u16) as i16;
+
+        if evt.event_type == EventType.Press {
+            if self.standalone_rect_contains(local, slider_x, slider_y, slider_w, slider_h) {
+                self.standalone_drag_target = STANDALONE_DRAG_WIDGETS_SLIDER;
+                self.widgets_volume = self.standalone_slider_percent(local.x, slider_x, slider_w);
+                _ = snprintf(&self.status_text[0], SIM_TEXT_CAPACITY as usize, "音量已调到 %d%%" as &const byte, self.widgets_volume);
+            }
+            return;
+        }
+        if evt.event_type == EventType.Drag {
+            if self.standalone_drag_target == STANDALONE_DRAG_WIDGETS_SLIDER {
+                self.widgets_volume = self.standalone_slider_percent(local.x, slider_x, slider_w);
+                _ = snprintf(&self.status_text[0], SIM_TEXT_CAPACITY as usize, "音量已调到 %d%%" as &const byte, self.widgets_volume);
+            }
+            return;
+        }
+        if evt.event_type == EventType.Release || evt.event_type == EventType.DragEnd {
+            if self.standalone_drag_target == STANDALONE_DRAG_WIDGETS_SLIDER {
+                self.standalone_drag_target = STANDALONE_DRAG_NONE;
+            }
+            return;
+        }
+        if evt.event_type != EventType.Click {
+            return;
+        }
+
+        if self.standalone_rect_contains(local, primary_x, primary_y, primary_w, primary_h) {
+            self.widgets_control_idx = 0;
+            self.refresh_status_label("Primary 按钮已触发");
+            return;
+        }
+        if self.standalone_rect_contains(local, secondary_x, secondary_y, secondary_w, secondary_h) {
+            self.widgets_control_idx = 1;
+            self.refresh_status_label("Outlined 按钮已触发");
+            return;
+        }
+        if self.standalone_rect_contains(local, text_x, text_y, text_w, text_h) {
+            self.widgets_control_idx = 2;
+            self.refresh_status_label("Quiet Action 已触发");
+            return;
+        }
+        if self.standalone_rect_contains(local, sync_x, sync_y, sync_w, sync_h) {
+            self.widgets_control_idx = 3;
+            self.refresh_status_label("Sync 已开始");
+            return;
+        }
+        if self.standalone_rect_contains(local, switch_x, switch_y, switch_w, switch_h) {
+            self.widgets_auto_refresh = !self.widgets_auto_refresh;
+            if self.widgets_auto_refresh {
+                self.refresh_status_label("Auto refresh 已开启");
+            } else {
+                self.refresh_status_label("Auto refresh 已关闭");
+            }
+            return;
+        }
+        if self.standalone_rect_contains(local, slider_x, slider_y, slider_w, slider_h) {
+            self.widgets_volume = self.standalone_slider_percent(local.x, slider_x, slider_w);
+            _ = snprintf(&self.status_text[0], SIM_TEXT_CAPACITY as usize, "音量已调到 %d%%" as &const byte, self.widgets_volume);
+            return;
+        }
+        if self.standalone_rect_contains(local, list_x, list_y, list_w, list_h) {
+            var row: i32 = (local.y as i32 - list_y as i32) / list_item_h;
+            if row < 0 {
+                row = 0;
+            }
+            if row > 4 {
+                row = 4;
+            }
+            self.widgets_selected_item = row;
+            _ = snprintf(&self.status_text[0], SIM_TEXT_CAPACITY as usize, "已选中列表项 #%d" as &const byte, row + 1);
+            return;
+        }
+        if self.standalone_rect_contains(local, action_x, action_y, action_w, action_h) {
+            self.widgets_action_idx = 0;
+            self.refresh_status_label("Archive 操作已选中");
+            return;
+        }
+        if self.standalone_rect_contains(local, action_x + action_w as i16 + action_gap, action_y, action_w, action_h) {
+            self.widgets_action_idx = 1;
+            self.refresh_status_label("Ship 操作已选中");
+        }
+    }
+
+    fn handle_custom_demo_touch(self: &Self, evt: &Event, local: Point) void {
+        if evt.event_type != EventType.Click {
+            return;
+        }
+        const gauges_x: i16 = sim_layout_x(20);
+        const gauges_y: i16 = sim_layout_y(96);
+        const gauge_x: i16 = gauges_x + sim_layout_x(20);
+        const gauge_w: u16 = sim_layout_w(240u16);
+        const gauge_h: u16 = sim_layout_h(82u16);
+        const cpu_y: i16 = gauges_y + sim_layout_y(62);
+        const mem_y: i16 = gauges_y + sim_layout_y(174);
+        const net_y: i16 = gauges_y + sim_layout_y(286);
+        const keyboard_x: i16 = sim_layout_x(316);
+        const keyboard_y: i16 = sim_layout_y(96);
+        const row1_x: i16 = keyboard_x + sim_layout_x(16);
+        const row1_y: i16 = keyboard_y + sim_layout_y(76);
+        const row2_x: i16 = keyboard_x + sim_layout_x(30);
+        const row2_y: i16 = keyboard_y + sim_layout_y(116);
+        const row3_x: i16 = keyboard_x + sim_layout_x(56);
+        const row3_y: i16 = keyboard_y + sim_layout_y(156);
+        const key_w: u16 = sim_layout_w(24u16);
+        const key_h: u16 = sim_layout_h(30u16);
+        const key_gap_small: i16 = sim_layout_w(3u16) as i16;
+        const key_gap_large: i16 = sim_layout_w(4u16) as i16;
+        const action_x: i16 = keyboard_x + sim_layout_x(16);
+        const action_y: i16 = keyboard_y + sim_layout_y(198);
+        const action_w: u16 = sim_layout_w(86u16);
+        const action_h: u16 = sim_layout_h(34u16);
+        const action_gap: i16 = sim_layout_w(7u16) as i16;
+
+        if self.standalone_rect_contains(local, gauge_x, cpu_y, gauge_w, gauge_h) {
+            self.custom_gauge_cpu = sim_clamp_i32(self.custom_gauge_cpu + 9, 0, 100);
+            if self.custom_gauge_cpu >= 100 {
+                self.custom_gauge_cpu = 18;
+            }
+            _ = snprintf(&self.status_text[0], SIM_TEXT_CAPACITY as usize, "CPU 调到 %d%%" as &const byte, self.custom_gauge_cpu);
+            return;
+        }
+        if self.standalone_rect_contains(local, gauge_x, mem_y, gauge_w, gauge_h) {
+            self.custom_gauge_mem = sim_clamp_i32(self.custom_gauge_mem + 7, 0, 100);
+            if self.custom_gauge_mem >= 100 {
+                self.custom_gauge_mem = 24;
+            }
+            _ = snprintf(&self.status_text[0], SIM_TEXT_CAPACITY as usize, "Memory 调到 %d%%" as &const byte, self.custom_gauge_mem);
+            return;
+        }
+        if self.standalone_rect_contains(local, gauge_x, net_y, gauge_w, gauge_h) {
+            self.custom_gauge_net = sim_clamp_i32(self.custom_gauge_net + 5, 0, 100);
+            if self.custom_gauge_net >= 100 {
+                self.custom_gauge_net = 30;
+            }
+            _ = snprintf(&self.status_text[0], SIM_TEXT_CAPACITY as usize, "Network 调到 %d%%" as &const byte, self.custom_gauge_net);
+            return;
+        }
+
+        const row1_chars: [byte: 10] = ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P'];
+        var idx: i32 = 0;
+        while idx < 10 {
+            const key_x: i16 = row1_x + idx as i16 * (key_w as i16 + key_gap_small);
+            if self.standalone_rect_contains(local, key_x, row1_y, key_w, key_h) {
+                _ = self.custom_input_append(self.custom_input_char(row1_chars[idx as usize]));
+                _ = snprintf(&self.status_text[0], SIM_TEXT_CAPACITY as usize, "输入: %s" as &const byte, &self.custom_input_text[0]);
+                return;
+            }
+            idx = idx + 1;
+        }
+
+        const row2_chars: [byte: 9] = ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L'];
+        idx = 0;
+        while idx < 9 {
+            const key_x: i16 = row2_x + idx as i16 * (key_w as i16 + key_gap_small);
+            if self.standalone_rect_contains(local, key_x, row2_y, key_w, key_h) {
+                _ = self.custom_input_append(self.custom_input_char(row2_chars[idx as usize]));
+                _ = snprintf(&self.status_text[0], SIM_TEXT_CAPACITY as usize, "输入: %s" as &const byte, &self.custom_input_text[0]);
+                return;
+            }
+            idx = idx + 1;
+        }
+
+        const row3_chars: [byte: 7] = ['Z', 'X', 'C', 'V', 'B', 'N', 'M'];
+        idx = 0;
+        while idx < 7 {
+            const key_x: i16 = row3_x + idx as i16 * ((sim_layout_w(26u16) as i16) + key_gap_large);
+            if self.standalone_rect_contains(local, key_x, row3_y, sim_layout_w(26u16), key_h) {
+                _ = self.custom_input_append(self.custom_input_char(row3_chars[idx as usize]));
+                _ = snprintf(&self.status_text[0], SIM_TEXT_CAPACITY as usize, "输入: %s" as &const byte, &self.custom_input_text[0]);
+                return;
+            }
+            idx = idx + 1;
+        }
+
+        if self.standalone_rect_contains(local, action_x, action_y, action_w, action_h) {
+            self.custom_uppercase = !self.custom_uppercase;
+            if self.custom_uppercase {
+                self.refresh_status_label("Shift: 大写模式");
+            } else {
+                self.refresh_status_label("Shift: 小写模式");
+            }
+            return;
+        }
+        if self.standalone_rect_contains(local, action_x + action_w as i16 + action_gap, action_y, action_w, action_h) {
+            _ = self.custom_input_append(32);
+            _ = snprintf(&self.status_text[0], SIM_TEXT_CAPACITY as usize, "输入: %s" as &const byte, &self.custom_input_text[0]);
+            return;
+        }
+        if self.standalone_rect_contains(local, action_x + (action_w as i16 + action_gap) * 2, action_y, action_w, action_h) {
+            self.custom_input_reset();
+            self.refresh_status_label("输入已重置");
+        }
+    }
+
     fn handle_game_demo_touch(self: &Self, evt: &Event, local: Point) void {
         game_retained_handle_touch(&self.game_demo, evt, local);
     }
 
+    fn handle_home_nav_click(self: &Self, point: Point) bool {
+        if !sim_demo_is_phase(self.config.demo) {
+            return false;
+        }
+        var i: i32 = 0;
+        while i < HOME_NAV_BUTTON_COUNT {
+            const rect: Rect = self.home_nav_button_rect(i);
+            if rect.contains(point) {
+                const demo: SimDemoKind = self.home_nav_button_demo(i);
+                self.switch_demo(demo, self.home_nav_status_text(demo));
+                return true;
+            }
+            i = i + 1;
+        }
+        return false;
+    }
+
+    fn handle_standalone_back_click(self: &Self, point: Point) bool {
+        if sim_demo_is_phase(self.config.demo) {
+            return false;
+        }
+        const rect: Rect = self.standalone_back_button_rect();
+        if rect.contains(point) {
+            const home: SimDemoKind = self.home_demo_kind();
+            self.switch_demo(home, "已返回首页");
+            return true;
+        }
+        return false;
+    }
+
     fn handle_standalone_touch_event(self: &Self, evt: &Event) void {
+        if evt.event_type == EventType.Click && self.handle_standalone_back_click(evt.point()) {
+            return;
+        }
         const local: Point = self.standalone_local_point(evt.point());
         if self.config.demo == SimDemoKind.Music {
             self.handle_music_demo_touch(evt, local);
@@ -857,10 +1355,21 @@ SimApp {
         }
         if self.config.demo == SimDemoKind.Novel {
             novel_retained_handle_touch(&self.novel_demo, evt, local);
+            return;
+        }
+        if self.config.demo == SimDemoKind.Widgets {
+            self.handle_widgets_demo_touch(evt, local);
+            return;
+        }
+        if self.config.demo == SimDemoKind.Custom {
+            self.handle_custom_demo_touch(evt, local);
         }
     }
 
-    fn on_button_click(self: &Self) void {
+    fn on_button_click(self: &Self, widget: &Widget) void {
+        if widget != null && widget != &self.action_button.widget {
+            return;
+        }
         self.tap_count = self.tap_count + 1;
         if self.chart.point_count >= 60u16 {
             self.seed_chart();
@@ -909,6 +1418,29 @@ SimApp {
         return "关";
     }
 
+    fn custom_input_reset(self: &Self) void {
+        _ = sim_copy_cstr(&self.custom_input_text[0], 64usize, "HELLO UYAGUI");
+        self.custom_input_len = 12;
+        self.custom_uppercase = true;
+    }
+
+    fn custom_input_append(self: &Self, ch: byte) bool {
+        if self.custom_input_len < 0 || self.custom_input_len >= 63 {
+            return false;
+        }
+        self.custom_input_text[self.custom_input_len as usize] = ch;
+        self.custom_input_len = self.custom_input_len + 1;
+        self.custom_input_text[self.custom_input_len as usize] = 0;
+        return true;
+    }
+
+    fn custom_input_char(self: &Self, upper: byte) byte {
+        if self.custom_uppercase || upper < 65 || upper > 90 {
+            return upper;
+        }
+        return ((upper as i32 + 32) as! byte).value;
+    }
+
     fn update(self: &Self, delta_ms: u32, now_ms: u32) void {
         _ = delta_ms;
         if self.config.demo == SimDemoKind.Music && self.music_playing {
@@ -954,10 +1486,12 @@ SimApp {
                 ctx.clear(Color{ r: 226, g: 232, b: 240, a: 255 });
             }
             self.render_selected_demo(ctx);
+            self.render_standalone_back_button(ctx);
             return;
         }
         ctx.clear(sim_phase_bg_color());
         self.page.render(ctx);
+        self.render_home_nav(ctx);
     }
 
     fn supports_dirty_render(self: &Self) bool {
@@ -973,6 +1507,7 @@ SimApp {
         if force_full {
             ctx.clear(sim_phase_bg_color());
             self.page.render(ctx);
+            self.render_home_nav(ctx);
             self.tree.clear_invalid_regions();
             return;
         }
@@ -988,6 +1523,7 @@ SimApp {
         if dirty.should_full_refresh(screen) {
             ctx.clear(sim_phase_bg_color());
             self.page.render(ctx);
+            self.render_home_nav(ctx);
             self.tree.clear_invalid_regions();
             return;
         }
@@ -996,6 +1532,7 @@ SimApp {
         if view.len <= 0 {
             ctx.clear(sim_phase_bg_color());
             self.page.render(ctx);
+            self.render_home_nav(ctx);
             self.tree.clear_invalid_regions();
             return;
         }
@@ -1004,6 +1541,7 @@ SimApp {
         while i < view.len {
             ctx.push_clip(view.regions[i]);
             self.page.render(ctx);
+            self.render_home_nav(ctx);
             ctx.pop_clip();
             i = i + 1;
         }
@@ -1025,6 +1563,10 @@ SimApp {
             self.record_touch_edge(evt);
             if !sim_demo_is_phase(self.config.demo) {
                 self.handle_standalone_touch_event(evt);
+                self.refresh_input_label();
+                return;
+            }
+            if evt.event_type == EventType.Click && self.handle_home_nav_click(evt.point()) {
                 self.refresh_input_label();
                 return;
             }
@@ -1252,6 +1794,10 @@ SimApp {
                 self.switch_demo(SimDemoKind.Perf, "已切到性能 demo");
             } else if key_code == 'n' as u16 || key_code == 'N' as u16 {
                 self.switch_demo(SimDemoKind.Novel, "已切到小说 demo");
+            } else if key_code == 'w' as u16 || key_code == 'W' as u16 {
+                self.switch_demo(SimDemoKind.Widgets, "已切到控件总览 demo");
+            } else if key_code == 'k' as u16 || key_code == 'K' as u16 {
+                self.switch_demo(SimDemoKind.Custom, "已切到自定义控件 demo");
             } else if self.handle_game_key_event(key_code) {
             } else if self.handle_novel_key_event(key_code) {
             } else if key_code == SIM_KEY_LEFT || key_code == SIM_KEY_DOWN {
@@ -1432,6 +1978,17 @@ export fn sim_app_new() SimApp {
         settings_wifi: true,
         settings_alerts: false,
         settings_brightness: 68,
+        widgets_control_idx: 0,
+        widgets_volume: 72,
+        widgets_auto_refresh: true,
+        widgets_selected_item: 2,
+        widgets_action_idx: 1,
+        custom_gauge_cpu: 32,
+        custom_gauge_mem: 68,
+        custom_gauge_net: 91,
+        custom_uppercase: true,
+        custom_input_text: [],
+        custom_input_len: 0,
         dashboard_metric: 0,
         dashboard_retained: dashboard_retained_new(),
         game_demo: game_retained_new(),

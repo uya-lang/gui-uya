@@ -1,0 +1,337 @@
+use core.color.Color;
+use core.rect.Rect;
+use libc.snprintf;
+use platform.disp.PixelFormat;
+use platform.disp.framebuffer_new;
+use platform.disp.framebuffer_required_bytes;
+use render.ctx.RenderCtx;
+use render.ctx.render_ctx_new;
+use render.img.ImageData;
+use render.img.image_data_new;
+use sim.common.sim_layout_font;
+use sim.common.sim_layout_h;
+use sim.common.sim_layout_w;
+use sim.common.sim_layout_x;
+use sim.common.sim_layout_y;
+use sim.common.SIM_DEFAULT_RES_HEIGHT;
+use sim.common.SIM_DEFAULT_RES_WIDTH;
+use style.StyleProp;
+use widget.btn.Button;
+use widget.canvas.Canvas;
+use widget.chart.Chart;
+use widget.chart.ChartType;
+use widget.grid_view.GridCellContentMode;
+use widget.grid_view.GridContentAlign;
+use widget.grid_view.GridView;
+use widget.img.Image;
+use widget.lbl.Label;
+use widget.lbl.TextAlign;
+use widget.lbl.TextOverflow;
+use widget.list.ListView;
+use widget.page.Page;
+use widget.panel.Panel;
+use widget.slider.Slider;
+use widget.switch.Switch;
+
+extern fn malloc(size: usize) &void;
+extern fn free(ptr: &void) void;
+
+fn widgets_seed_preview(bytes: &byte) void {
+    if bytes == null {
+        return;
+    }
+    var y: i32 = 0;
+    while y < 8 {
+        var x: i32 = 0;
+        while x < 8 {
+            const idx: i32 = (y * 8 + x) * 3;
+            bytes[idx as usize] = ((32 + x * 24) as! byte).value;
+            bytes[(idx + 1) as usize] = ((72 + y * 18) as! byte).value;
+            bytes[(idx + 2) as usize] = ((180 - x * 10 + y * 4) as! byte).value;
+            x = x + 1;
+        }
+        y = y + 1;
+    }
+}
+
+fn widgets_fill_chart(chart: &Chart, volume_value: i32, auto_refresh: bool, selected_item: i32, action_idx: i32) void {
+    _ = chart.clear();
+    if auto_refresh || action_idx == 1 {
+        chart.chart_type = ChartType.Area;
+    } else {
+        chart.chart_type = ChartType.Bar;
+    }
+    const base: i32 = 14 + selected_item * 3 + action_idx * 5;
+    const peak: i32 = volume_value / 2;
+    _ = chart.add_point(base + 8);
+    _ = chart.add_point(base + peak / 3);
+    _ = chart.add_point(base + 11);
+    _ = chart.add_point(base + peak / 2);
+    _ = chart.add_point(base + 14);
+    _ = chart.add_point(base + peak / 2 + 6);
+}
+
+export fn render_demo_widgets_state(
+    ctx: &RenderCtx,
+    origin_x: i16,
+    origin_y: i16,
+    control_idx: i32,
+    volume_value: i32,
+    auto_refresh: bool,
+    selected_item: i32,
+    action_idx: i32,
+    status_text: &const byte
+) void {
+    var preview_rgb: [byte: 192] = [];
+    var canvas_bytes: [byte: 21504] = [];
+    var slider_text: [byte: 32] = [];
+    var subtitle_text: &const byte = "Click buttons, drag slider, toggle switch, select list rows." as &const byte;
+    if status_text != null && status_text[0] != 0 {
+        subtitle_text = status_text;
+    }
+
+    widgets_seed_preview(&preview_rgb[0]);
+    const preview_data: ImageData = image_data_new(&preview_rgb[0], 8, 8, 24, PixelFormat.RGB888);
+    _ = snprintf(&slider_text[0], 32usize, "Volume %d%%" as &const byte, volume_value);
+
+    var page: Page = Page.new("Widgets");
+    page.widget.at(origin_x, origin_y);
+    page.widget.size(SIM_DEFAULT_RES_WIDTH, SIM_DEFAULT_RES_HEIGHT);
+    page.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 244, g: 247, b: 251, a: 255 });
+
+    var hero: Panel = Panel.new();
+    hero.widget.at(sim_layout_x(20), sim_layout_y(16));
+    hero.widget.size(sim_layout_w(600), sim_layout_h(64));
+    hero.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 255, g: 255, b: 255, a: 255 });
+
+    var hero_title: Label = Label.new("Widget Showcase");
+    hero_title.widget.at(sim_layout_x(20), sim_layout_y(14));
+    hero_title.widget.size(sim_layout_w(560), sim_layout_h(20));
+    hero_title.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(26u8) as u32);
+    _ = hero_title.set_align(TextAlign.Center);
+
+    var hero_subtitle: Label = Label.new(subtitle_text);
+    hero_subtitle.widget.at(sim_layout_x(18), sim_layout_y(38));
+    hero_subtitle.widget.size(sim_layout_w(564), sim_layout_h(16));
+    hero_subtitle.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(12u8) as u32);
+    hero_subtitle.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 100, g: 116, b: 139, a: 255 });
+    _ = hero_subtitle.set_align(TextAlign.Center);
+
+    var controls: Panel = Panel.new();
+    controls.widget.at(sim_layout_x(20), sim_layout_y(96));
+    controls.widget.size(sim_layout_w(286), sim_layout_h(166));
+    controls.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 255, g: 255, b: 255, a: 255 });
+
+    var controls_title: Label = Label.new("Controls");
+    controls_title.widget.at(sim_layout_x(16), sim_layout_y(14));
+    controls_title.widget.size(sim_layout_w(140), sim_layout_h(18));
+    controls_title.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(18u8) as u32);
+
+    var primary_btn: Button = Button.outlined("Primary");
+    if control_idx == 0 {
+        primary_btn = Button.filled("Primary");
+    }
+    primary_btn.widget.at(sim_layout_x(16), sim_layout_y(48));
+    primary_btn.widget.size(sim_layout_w(118u16), sim_layout_h(40u16));
+    primary_btn.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(14u8) as u32);
+
+    var secondary_btn: Button = Button.outlined("Outlined");
+    if control_idx == 1 {
+        secondary_btn = Button.filled("Outlined");
+    }
+    secondary_btn.widget.at(sim_layout_x(148), sim_layout_y(48));
+    secondary_btn.widget.size(sim_layout_w(122u16), sim_layout_h(40u16));
+    secondary_btn.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(14u8) as u32);
+
+    var text_btn: Button = Button.text_only("Quiet Action");
+    if control_idx == 2 {
+        text_btn = Button.filled("Quiet Action");
+    }
+    text_btn.widget.at(sim_layout_x(16), sim_layout_y(94));
+    text_btn.widget.size(sim_layout_w(118u16), sim_layout_h(32u16));
+    text_btn.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(13u8) as u32);
+
+    var sync_btn: Button = Button.outlined("Sync");
+    if control_idx == 3 {
+        sync_btn = Button.with_icon(1u32, "Sync");
+    }
+    sync_btn.widget.at(sim_layout_x(148), sim_layout_y(92));
+    sync_btn.widget.size(sim_layout_w(122u16), sim_layout_h(36u16));
+    sync_btn.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(13u8) as u32);
+
+    var slider_label: Label = Label.new(&slider_text[0]);
+    slider_label.widget.at(sim_layout_x(16), sim_layout_y(132));
+    slider_label.widget.size(sim_layout_w(110), sim_layout_h(16));
+    slider_label.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(12u8) as u32);
+    slider_label.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 71, g: 85, b: 105, a: 255 });
+
+    var slider: Slider = Slider.new(0, 100, volume_value);
+    slider.widget.at(sim_layout_x(16), sim_layout_y(148));
+    slider.widget.size(sim_layout_w(176u16), sim_layout_h(18u16));
+
+    var switch_label: Label = Label.new("Auto refresh");
+    switch_label.widget.at(sim_layout_x(208), sim_layout_y(132));
+    switch_label.widget.size(sim_layout_w(64), sim_layout_h(16));
+    switch_label.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(12u8) as u32);
+    switch_label.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 71, g: 85, b: 105, a: 255 });
+
+    var toggle: Switch = Switch.new(auto_refresh);
+    toggle.widget.at(sim_layout_x(224), sim_layout_y(146));
+    toggle.widget.size(sim_layout_w(46u16), sim_layout_h(24u16));
+
+    var visuals: Panel = Panel.new();
+    visuals.widget.at(sim_layout_x(318), sim_layout_y(96));
+    visuals.widget.size(sim_layout_w(302), sim_layout_h(166));
+    visuals.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 255, g: 255, b: 255, a: 255 });
+
+    var visuals_title: Label = Label.new("Media & Draw");
+    visuals_title.widget.at(sim_layout_x(16), sim_layout_y(14));
+    visuals_title.widget.size(sim_layout_w(180), sim_layout_h(18));
+    visuals_title.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(18u8) as u32);
+
+    var preview: Image = Image.from_data(&preview_data);
+    preview.widget.at(sim_layout_x(16), sim_layout_y(44));
+    preview.widget.size(sim_layout_w(120u16), sim_layout_h(90u16));
+
+    var canvas: Canvas = Canvas.with_buffer(&canvas_bytes[0], 96, 56, 384, PixelFormat.ARGB8888);
+    canvas.widget.at(sim_layout_x(152), sim_layout_y(44));
+    canvas.widget.size(sim_layout_w(132u16), sim_layout_h(90u16));
+    canvas.begin_draw().clear(Color{ r: 247, g: 250, b: 252, a: 255 });
+    canvas.begin_draw().fill_round_rect(Rect{ x: 6, y: 8, w: 84, h: 12 }, 6, Color{ r: 226, g: 232, b: 240, a: 255 });
+    canvas.begin_draw().fill_round_rect(Rect{ x: 6, y: 8, w: 58, h: 12 }, 6, Color{ r: 59, g: 130, b: 246, a: 255 });
+    canvas.begin_draw().draw_line(12, 44, 32, 30, Color{ r: 16, g: 185, b: 129, a: 255 }, 3);
+    canvas.begin_draw().draw_line(32, 30, 52, 36, Color{ r: 16, g: 185, b: 129, a: 255 }, 3);
+    canvas.begin_draw().draw_line(52, 36, 74, 18, Color{ r: 16, g: 185, b: 129, a: 255 }, 3);
+    canvas.begin_draw().fill_circle(74, 18, 5, Color{ r: 248, g: 113, b: 113, a: 255 });
+    canvas.end_draw();
+
+    var visuals_note: Label = Label.new("Image shows bitmap scaling, while Canvas draws a tiny dashboard preview into an off-screen buffer.");
+    visuals_note.widget.at(sim_layout_x(16), sim_layout_y(140));
+    visuals_note.widget.size(sim_layout_w(270), sim_layout_h(22));
+    visuals_note.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(11u8) as u32);
+    visuals_note.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 100, g: 116, b: 139, a: 255 });
+    visuals_note.overflow = TextOverflow.Wrap;
+
+    var collections: Panel = Panel.new();
+    collections.widget.at(sim_layout_x(20), sim_layout_y(274));
+    collections.widget.size(sim_layout_w(286), sim_layout_h(182));
+    collections.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 255, g: 255, b: 255, a: 255 });
+
+    var collections_title: Label = Label.new("Collections");
+    collections_title.widget.at(sim_layout_x(16), sim_layout_y(14));
+    collections_title.widget.size(sim_layout_w(140), sim_layout_h(18));
+    collections_title.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(18u8) as u32);
+
+    var collections_note: Label = Label.new("ListView handles selection and scrolling; GridView lays out quick actions in compact cells.");
+    collections_note.widget.at(sim_layout_x(16), sim_layout_y(38));
+    collections_note.widget.size(sim_layout_w(254), sim_layout_h(24));
+    collections_note.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(11u8) as u32);
+    collections_note.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 100, g: 116, b: 139, a: 255 });
+    collections_note.overflow = TextOverflow.Wrap;
+
+    var inbox: ListView = ListView.new();
+    inbox.widget.at(sim_layout_x(16), sim_layout_y(72));
+    inbox.widget.size(sim_layout_w(254u16), sim_layout_h(94u16));
+    inbox.add_item("Build artifacts uploaded");
+    inbox.add_item("Settings snapshot synced");
+    inbox.add_item("Novel cache warmed");
+    inbox.add_item("Dashboard sample captured");
+    inbox.add_item("Phase6 smoke passed");
+    inbox.select(selected_item);
+
+    var data_panel: Panel = Panel.new();
+    data_panel.widget.at(sim_layout_x(318), sim_layout_y(274));
+    data_panel.widget.size(sim_layout_w(302), sim_layout_h(182));
+    data_panel.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 255, g: 255, b: 255, a: 255 });
+
+    var data_title: Label = Label.new("Data Widgets");
+    data_title.widget.at(sim_layout_x(16), sim_layout_y(14));
+    data_title.widget.size(sim_layout_w(160), sim_layout_h(18));
+    data_title.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(18u8) as u32);
+
+    var chart: Chart = Chart.new();
+    chart.widget.at(sim_layout_x(16), sim_layout_y(40));
+    chart.widget.size(sim_layout_w(270u16), sim_layout_h(78u16));
+    widgets_fill_chart(&chart, volume_value, auto_refresh, selected_item, action_idx);
+
+    var actions: GridView = GridView.new();
+    actions.widget.at(sim_layout_x(16), sim_layout_y(128));
+    actions.widget.size(sim_layout_w(270u16), sim_layout_h(38u16));
+    actions.columns = 2;
+    actions.item_size.w = sim_layout_w(128u16);
+    actions.item_size.h = sim_layout_h(38u16);
+    actions.col_gap = (sim_layout_w(8u16) as! u8).value;
+    actions.cell_padding = (sim_layout_h(2u16) as! u8).value;
+    actions.cell_content_mode = GridCellContentMode.Fill;
+    actions.content_align_x = GridContentAlign.Center;
+    actions.content_align_y = GridContentAlign.Center;
+
+    var archive_btn: Button = Button.outlined("Archive");
+    if action_idx == 0 {
+        archive_btn = Button.filled("Archive");
+    }
+    archive_btn.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(12u8) as u32);
+    var ship_btn: Button = Button.outlined("Ship");
+    if action_idx == 1 {
+        ship_btn = Button.filled("Ship");
+    }
+    ship_btn.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(12u8) as u32);
+    actions.add_child(archive_btn.obj());
+    actions.add_child(ship_btn.obj());
+
+    page.add(hero.obj());
+    page.add(controls.obj());
+    page.add(visuals.obj());
+    page.add(collections.obj());
+    page.add(data_panel.obj());
+
+    hero.add(hero_title.obj());
+    hero.add(hero_subtitle.obj());
+
+    controls.add(controls_title.obj());
+    controls.add(primary_btn.obj());
+    controls.add(secondary_btn.obj());
+    controls.add(text_btn.obj());
+    controls.add(sync_btn.obj());
+    controls.add(slider_label.obj());
+    controls.add(slider.obj());
+    controls.add(switch_label.obj());
+    controls.add(toggle.obj());
+
+    visuals.add(visuals_title.obj());
+    visuals.add(preview.obj());
+    visuals.add(canvas.obj());
+    visuals.add(visuals_note.obj());
+
+    collections.add(collections_title.obj());
+    collections.add(collections_note.obj());
+    collections.add(inbox.obj());
+
+    data_panel.add(data_title.obj());
+    data_panel.add(chart.obj());
+    data_panel.add(actions.obj());
+
+    page.render(ctx);
+}
+
+export fn render_demo_widgets(ctx: &RenderCtx, origin_x: i16, origin_y: i16) void {
+    render_demo_widgets_state(ctx, origin_x, origin_y, 0, 72, true, 2, 1, "Widget showcase static preview");
+}
+
+export fn run_demo_widgets() i32 {
+    const bytes_len: usize = framebuffer_required_bytes(SIM_DEFAULT_RES_WIDTH, SIM_DEFAULT_RES_HEIGHT, PixelFormat.ARGB8888);
+    const bytes: &byte = malloc(bytes_len) as &byte;
+    if bytes == null {
+        return 2;
+    }
+    defer {
+        free(bytes as &void);
+    }
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(bytes, SIM_DEFAULT_RES_WIDTH, SIM_DEFAULT_RES_HEIGHT, SIM_DEFAULT_RES_WIDTH * 4u16, PixelFormat.ARGB8888));
+    ctx.clear(Color{ r: 244, g: 247, b: 251, a: 255 });
+    render_demo_widgets(&ctx, 0, 0);
+    if ctx.stats.text_ops == 0u32 || ctx.stats.image_ops == 0u32 || ctx.stats.rect_ops == 0u32 {
+        return 1;
+    }
+    return 0;
+}
