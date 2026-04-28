@@ -85,6 +85,12 @@ fn run_simulator_sdl(cfg: SimConfig) i32 {
     }
     var last_tick_ms: u32 = get_tick_ms();
     while true {
+        if cfg.max_frames == 0u32 && !input.pointer_down {
+            const idle_delay_ms: i32 = app.next_wake_delay_ms(get_tick_ms());
+            if idle_delay_ms != 0 {
+                _ = input.wait(idle_delay_ms);
+            }
+        }
         const frame_start_ms: u32 = get_tick_ms();
         const delta_ms: u32 = frame_start_ms - last_tick_ms;
         last_tick_ms = frame_start_ms;

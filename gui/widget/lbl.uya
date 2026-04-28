@@ -78,6 +78,9 @@ LabelRenderAdapter {
 fn label_line_start_y(label: &Label, area: Rect, font: &Font) i16 {
     const line_height: i16 = font.line_height as i16;
     const total_h: i16 = label.line_count as i16 * line_height;
+    if total_h >= area.h as i16 {
+        return area.y;
+    }
     if label.align == TextAlign.BottomLeft || label.align == TextAlign.BottomCenter || label.align == TextAlign.BottomRight {
         return area.y + area.h as i16 - total_h;
     }

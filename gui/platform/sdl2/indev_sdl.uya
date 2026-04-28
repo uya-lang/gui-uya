@@ -23,6 +23,7 @@ const SDL_EVT_KEY_UP: u8 = 6;
 const SDL_EVT_WHEEL: u8 = 7;
 
 extern fn uya_gui_sim_sdl_poll_event(out_evt: &SdlHostEvent) i32;
+extern fn uya_gui_sim_sdl_wait_event(timeout_ms: i32) i32;
 
 export struct SdlHostEvent {
     kind: u8,
@@ -118,6 +119,11 @@ export struct SdlInputSystem {
 
     fn poll(self: &Self, out_evt: &Event) bool {
         return self.manager.poll(out_evt);
+    }
+
+    fn wait(self: &Self, timeout_ms: i32) bool {
+        _ = self;
+        return uya_gui_sim_sdl_wait_event(timeout_ms) != 0;
     }
 
     fn poll_hover(self: &Self, out_point: &Point) bool {

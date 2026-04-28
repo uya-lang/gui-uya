@@ -114,6 +114,8 @@ enum {
 static int g_sdl_refcount = 0;
 static UyaGuiSimDisplay *g_active_display = NULL;
 static char g_last_error[256] = {0};
+static SDL_Event g_pending_event;
+static int g_has_pending_event = 0;
 static void *(*g_host_malloc_fn)(size_t) = NULL;
 static void *(*g_host_calloc_fn)(size_t, size_t) = NULL;
 static void *(*g_host_realloc_fn)(void *, size_t) = NULL;
@@ -1045,7 +1047,10 @@ int32_t uya_gui_sim_sdl_poll_event(SdlHostEvent *out_evt) {
     out_evt->key_code = 0;
     out_evt->reserved = 0;
 
-    if (SDL_PollEvent(&evt) == 0) {
+    if (g_has_pending_event != 0) {
+        evt = g_pending_event;
+        g_has_pending_event = 0;
+    } else if (SDL_PollEvent(&evt) == 0) {
         return 0;
     }
     if (evt.type == SDL_QUIT) {
@@ -1102,6 +1107,23 @@ int32_t uya_gui_sim_sdl_poll_event(SdlHostEvent *out_evt) {
         default:
             return 0;
     }
+}
+
+int32_t uya_gui_sim_sdl_wait_event(int32_t timeout_ms) {
+    SDL_Event evt;
+    if (g_has_pending_event != 0) {
+        return 1;
+    }
+    if (timeout_ms < 0) {
+        if (SDL_WaitEvent(&evt) == 0) {
+            return 0;
+        }
+    } else if (SDL_WaitEventTimeout(&evt, timeout_ms) == 0) {
+        return 0;
+    }
+    g_pending_event = evt;
+    g_has_pending_event = 1;
+    return 1;
 }
 
 const uint8_t *uya_gui_sim_sdl_last_error(void) {

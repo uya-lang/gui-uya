@@ -176,6 +176,18 @@ export struct SimRecorder {
         }
         return true;
     }
+
+    fn next_due_in(self: &Self, frame: u32) i32 {
+        if !self.playing || self.playback_cursor >= self.event_count {
+            return -1;
+        }
+        const elapsed: u32 = frame - self.playback_start_frame;
+        const slot: usize = self.playback_cursor as usize;
+        if self.events[slot].frame_offset <= elapsed {
+            return 0;
+        }
+        return (self.events[slot].frame_offset - elapsed) as i32;
+    }
 }
 
 export fn sim_recorder_new() SimRecorder {
@@ -189,4 +201,3 @@ export fn sim_recorder_new() SimRecorder {
         playback_cursor: 0u16,
     };
 }
-

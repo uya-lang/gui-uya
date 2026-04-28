@@ -250,11 +250,11 @@ export fn custom_retained_init(custom: &CustomRetained) void {
     custom.hero.widget.at(sim_layout_x(20), sim_layout_y(16));
     custom.hero.widget.size(sim_layout_w(600), sim_layout_h(64));
     custom.hero.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 255, g: 252, b: 247, a: 255 });
-    custom.hero_title.widget.at(sim_layout_x(20), sim_layout_y(14));
-    custom.hero_title.widget.size(sim_layout_w(560), sim_layout_h(20));
+    custom.hero_title.widget.at(sim_layout_x(20), sim_layout_y(12));
+    custom.hero_title.widget.size(sim_layout_w(560), sim_layout_h(30));
     custom.hero_title.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(26u8) as u32);
     _ = custom.hero_title.set_align(TextAlign.Center);
-    custom.hero_subtitle.widget.at(sim_layout_x(20), sim_layout_y(38));
+    custom.hero_subtitle.widget.at(sim_layout_x(20), sim_layout_y(42));
     custom.hero_subtitle.widget.size(sim_layout_w(560), sim_layout_h(16));
     custom.hero_subtitle.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(12u8) as u32);
     custom.hero_subtitle.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 120, g: 113, b: 108, a: 255 });

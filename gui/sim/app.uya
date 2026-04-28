@@ -310,6 +310,30 @@ fn sim_standalone_bg_color(demo: SimDemoKind) Color {
     return Color{ r: 226, g: 232, b: 240, a: 255 };
 }
 
+fn sim_next_due_delay(now_ms: u32, last_tick_ms: u32, interval_ms: u32) i32 {
+    if interval_ms == 0u32 {
+        return 0;
+    }
+    if last_tick_ms == 0u32 {
+        return 0;
+    }
+    const elapsed: u32 = now_ms - last_tick_ms;
+    if elapsed >= interval_ms {
+        return 0;
+    }
+    return (interval_ms - elapsed) as i32;
+}
+
+fn sim_min_positive_delay(current: i32, next: i32) i32 {
+    if next < 0 {
+        return current;
+    }
+    if current < 0 || next < current {
+        return next;
+    }
+    return current;
+}
+
 AppButtonClickAdapter {
     fn invoke(self: &Self, widget: &Widget, evt: &Event, user_data: &void) void {
         _ = self;
@@ -1596,7 +1620,7 @@ SimApp {
         if self.config.demo == SimDemoKind.Novel {
             novel_retained_update(&self.novel_demo, now_ms);
         }
-        if self.toggle.checked && (self.last_chart_tick_ms == 0u32 || now_ms - self.last_chart_tick_ms >= 140u32) {
+        if sim_demo_is_phase(self.config.demo) && self.toggle.checked && (self.last_chart_tick_ms == 0u32 || now_ms - self.last_chart_tick_ms >= 140u32) {
             self.last_chart_tick_ms = now_ms;
             if self.chart.point_count >= 60u16 {
                 self.seed_chart();
@@ -1616,6 +1640,25 @@ SimApp {
         while self.recorder.next_due(now_ms, &playback_evt) {
             self.handle_recorded_event(&playback_evt, now_ms);
         }
+    }
+
+    fn next_wake_delay_ms(self: &Self, now_ms: u32) i32 {
+        if self.force_full_redraw || self.pending_exit || self.pending_screenshot || self.pending_fullscreen_toggle {
+            return 0;
+        }
+
+        var next_delay: i32 = -1;
+        if sim_demo_is_phase(self.config.demo) && self.toggle.checked {
+            next_delay = sim_min_positive_delay(next_delay, sim_next_due_delay(now_ms, self.last_chart_tick_ms, 140u32));
+        }
+        if self.config.demo == SimDemoKind.Music && self.music_playing {
+            next_delay = sim_min_positive_delay(next_delay, sim_next_due_delay(now_ms, self.standalone_anim_tick_ms, 120u32));
+        }
+        if self.config.demo == SimDemoKind.Novel && self.novel_demo.auto_scroll {
+            next_delay = sim_min_positive_delay(next_delay, sim_next_due_delay(now_ms, self.novel_demo.last_auto_tick_ms, 48u32));
+        }
+        next_delay = sim_min_positive_delay(next_delay, self.recorder.next_due_in(now_ms));
+        return next_delay;
     }
 
     fn render(self: &Self, ctx: &RenderCtx) void {
