@@ -74,6 +74,12 @@ typedef struct UyaGuiSimDisplay {
     int scale;
     int fullscreen;
     int present_kind;
+    const uint8_t *pending_pixels;
+    int pending_pitch;
+    int pending_width;
+    int pending_height;
+    int pending_format_tag;
+    int pending_present;
 } UyaGuiSimDisplay;
 
 typedef struct SdlHostEvent {
@@ -496,6 +502,99 @@ static int uya_gui_sim_present_gles2(UyaGuiSimDisplay *display, const uint8_t *p
     display->gl.DisableVertexAttribArray((GLuint)display->gl_attr_uv);
     display->gl.BindBuffer(GL_ARRAY_BUFFER, 0u);
     SDL_GL_SwapWindow(display->window);
+    return 1;
+}
+
+int32_t uya_gui_sim_sdl_display_present_begin(void *handle, int32_t width, int32_t height, int32_t format_tag) {
+    UyaGuiSimDisplay *display = (UyaGuiSimDisplay *)handle;
+    if (display == NULL) {
+        uya_gui_sim_set_error("display null");
+        return 0;
+    }
+    if (format_tag != 2) {
+        uya_gui_sim_set_error("unsupported framebuffer format (expected ARGB8888/BGRA texture)");
+        return 0;
+    }
+    display->pending_pixels = NULL;
+    display->pending_pitch = 0;
+    display->pending_width = width;
+    display->pending_height = height;
+    display->pending_format_tag = format_tag;
+    display->pending_present = 0;
+    return 1;
+}
+
+int32_t uya_gui_sim_sdl_display_present_region(void *handle, const uint8_t *pixels, int32_t pitch, int32_t width, int32_t height, int32_t format_tag,
+                                               int32_t x, int32_t y, int32_t w, int32_t h) {
+    UyaGuiSimDisplay *display = (UyaGuiSimDisplay *)handle;
+    SDL_Rect rect;
+    const uint8_t *region_pixels;
+    if (display == NULL || pixels == NULL) {
+        uya_gui_sim_set_error("display/pixels null");
+        return 0;
+    }
+    if (format_tag != 2) {
+        uya_gui_sim_set_error("unsupported framebuffer format (expected ARGB8888/BGRA texture)");
+        return 0;
+    }
+    if (w <= 0 || h <= 0) {
+        return 1;
+    }
+    if (x < 0 || y < 0 || x + w > width || y + h > height) {
+        uya_gui_sim_set_error("dirty rect out of bounds");
+        return 0;
+    }
+
+    if (display->present_kind == UYA_GUI_SIM_PRESENT_GLES2) {
+        display->pending_pixels = pixels;
+        display->pending_pitch = pitch;
+        display->pending_width = width;
+        display->pending_height = height;
+        display->pending_format_tag = format_tag;
+        display->pending_present = 1;
+        return 1;
+    }
+
+    rect.x = x;
+    rect.y = y;
+    rect.w = w;
+    rect.h = h;
+    region_pixels = pixels + (size_t)y * (size_t)pitch + (size_t)x * 4u;
+    if (SDL_UpdateTexture(display->texture, &rect, region_pixels, pitch) != 0) {
+        uya_gui_sim_set_error(SDL_GetError());
+        return 0;
+    }
+    display->pending_present = 1;
+    return 1;
+}
+
+int32_t uya_gui_sim_sdl_display_present_end(void *handle) {
+    UyaGuiSimDisplay *display = (UyaGuiSimDisplay *)handle;
+    if (display == NULL) {
+        uya_gui_sim_set_error("display null");
+        return 0;
+    }
+    if (!display->pending_present) {
+        return 1;
+    }
+    if (display->present_kind == UYA_GUI_SIM_PRESENT_GLES2) {
+        return uya_gui_sim_present_gles2(
+            display,
+            display->pending_pixels,
+            display->pending_pitch,
+            display->pending_width,
+            display->pending_height
+        );
+    }
+    if (SDL_RenderClear(display->renderer) != 0) {
+        uya_gui_sim_set_error(SDL_GetError());
+        return 0;
+    }
+    if (SDL_RenderCopy(display->renderer, display->texture, NULL, NULL) != 0) {
+        uya_gui_sim_set_error(SDL_GetError());
+        return 0;
+    }
+    SDL_RenderPresent(display->renderer);
     return 1;
 }
 

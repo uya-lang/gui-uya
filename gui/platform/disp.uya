@@ -4,6 +4,8 @@ use core.rect.Rect;
 use core.size.SIZE_ZERO;
 use core.size.Size;
 
+extern fn memcpy(dst: &byte, src: &const byte, n: usize) &void;
+
 type DispByteVec16 = @vector(u8, 16);
 
 fn copy_color(color: &Color) Color {
@@ -120,6 +122,16 @@ fn fill_repeat_rgb888(dst: &byte, width: usize, color: &Color) void {
         dst[off + 2usize] = color.b;
         x = x + 1usize;
     }
+}
+
+fn framebuffer_row_bytes(fb: &FrameBuffer) usize {
+    if fb.format == PixelFormat.I1 {
+        return (fb.size.w as usize + 7usize) / 8usize;
+    }
+    if fb.format == PixelFormat.I4 {
+        return (fb.size.w as usize + 1usize) / 2usize;
+    }
+    return fb.size.w as usize * bytes_per_pixel(fb.format) as usize;
 }
 
 fn clear_row_fast(fb: &FrameBuffer, row_offset: usize, width: usize, color: &Color) bool {
@@ -257,6 +269,73 @@ export fn framebuffer_required_bytes(w: u16, h: u16, format: PixelFormat) usize 
 
 export fn framebuffer_rect(fb: &FrameBuffer) Rect {
     return Rect{ x: 0, y: 0, w: fb.size.w, h: fb.size.h };
+}
+
+export fn framebuffer_copy(dst: &FrameBuffer, src: &FrameBuffer) bool {
+    if dst == null || src == null || dst.pixels == null || src.pixels == null {
+        return false;
+    }
+    if dst.size.w != src.size.w || dst.size.h != src.size.h || dst.format != src.format {
+        return false;
+    }
+
+    const row_bytes: usize = framebuffer_row_bytes(src);
+    if row_bytes == 0usize {
+        return false;
+    }
+
+    if dst.stride as usize == row_bytes && src.stride as usize == row_bytes {
+        _ = memcpy(dst.pixels, src.pixels as &const byte, row_bytes * src.size.h as usize);
+        return true;
+    }
+
+    var y: usize = 0usize;
+    while y < src.size.h as usize {
+        const dst_row: usize = y * dst.stride as usize;
+        const src_row: usize = y * src.stride as usize;
+        _ = memcpy(&dst.pixels[dst_row], &src.pixels[src_row] as &const byte, row_bytes);
+        y = y + 1usize;
+    }
+    return true;
+}
+
+export fn framebuffer_copy_rect(dst: &FrameBuffer, src: &FrameBuffer, rect: Rect) bool {
+    if dst == null || src == null || dst.pixels == null || src.pixels == null || rect.is_empty() {
+        return false;
+    }
+    if dst.format != src.format || dst.size.w != src.size.w || dst.size.h != src.size.h {
+        return false;
+    }
+
+    const src_rect: Rect = framebuffer_rect(src);
+    const clipped: Rect = src_rect.intersect(rect);
+    if clipped.is_empty() {
+        return false;
+    }
+
+    var pixel_bytes: usize = 0usize;
+    if src.format == PixelFormat.I1 {
+        if clipped.x as i32 % 8 != 0 || clipped.w as i32 % 8 != 0 {
+            return false;
+        }
+        pixel_bytes = clipped.w as usize / 8usize;
+    } else if src.format == PixelFormat.I4 {
+        if clipped.x as i32 % 2 != 0 || clipped.w as i32 % 2 != 0 {
+            return false;
+        }
+        pixel_bytes = clipped.w as usize / 2usize;
+    } else {
+        pixel_bytes = clipped.w as usize * bytes_per_pixel(src.format) as usize;
+    }
+
+    var y: usize = 0usize;
+    while y < clipped.h as usize {
+        const src_off: usize = pixel_byte_offset(src, clipped.x as i32, clipped.y as i32 + y as i32);
+        const dst_off: usize = pixel_byte_offset(dst, clipped.x as i32, clipped.y as i32 + y as i32);
+        _ = memcpy(&dst.pixels[dst_off], &src.pixels[src_off] as &const byte, pixel_bytes);
+        y = y + 1usize;
+    }
+    return true;
 }
 
 export fn framebuffer_new(pixels: &byte, w: u16, h: u16, stride: u16, format: PixelFormat) FrameBuffer {

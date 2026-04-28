@@ -1,4 +1,7 @@
 use core.color.BLACK;
+use core.dirty_region.DirtyRegion;
+use core.dirty_region.DirtyRegionView;
+use core.rect.Rect;
 use platform.disp.DisplayCtx;
 use platform.disp.FrameBuffer;
 use platform.disp.PixelFormat;
@@ -6,6 +9,7 @@ use platform.disp.display_ctx_new;
 use platform.disp.empty_framebuffer;
 use platform.disp.framebuffer_clear;
 use platform.disp.framebuffer_new;
+use platform.disp.framebuffer_rect;
 use platform.disp.framebuffer_required_bytes;
 
 extern fn malloc(size: usize) &void;
@@ -14,6 +18,9 @@ extern fn free(ptr: &void) void;
 extern fn uya_gui_sim_sdl_display_open(width: i32, height: i32, scale: i32, fullscreen: i32, gpu_mode: i32, title: &const byte) &void;
 extern fn uya_gui_sim_sdl_display_close(handle: &void) void;
 extern fn uya_gui_sim_sdl_display_present(handle: &void, pixels: &const byte, pitch: i32, width: i32, height: i32, format_tag: i32) i32;
+extern fn uya_gui_sim_sdl_display_present_begin(handle: &void, width: i32, height: i32, format_tag: i32) i32;
+extern fn uya_gui_sim_sdl_display_present_region(handle: &void, pixels: &const byte, pitch: i32, width: i32, height: i32, format_tag: i32, x: i32, y: i32, w: i32, h: i32) i32;
+extern fn uya_gui_sim_sdl_display_present_end(handle: &void) i32;
 extern fn uya_gui_sim_sdl_display_set_fullscreen(handle: &void, enabled: i32) i32;
 extern fn uya_gui_sim_sdl_display_set_title(handle: &void, title: &const byte) void;
 extern fn uya_gui_sim_sdl_display_gpu_name(handle: &void) &byte;
@@ -100,6 +107,55 @@ export struct SdlDisplay {
             front.size.h as i32,
             front.format as i32
         ) != 0;
+    }
+
+    fn present_dirty(self: &Self, dirty: &DirtyRegion) bool {
+        if !self.valid() || dirty == null {
+            return false;
+        }
+
+        dirty.merge();
+        const screen: Rect = framebuffer_rect(self.ctx.get_back_buffer());
+        if dirty.should_full_refresh(screen) {
+            return self.present();
+        }
+
+        self.ctx.swap_buffers();
+        const front: &FrameBuffer = self.ctx.get_front_buffer();
+        const view: DirtyRegionView = dirty.get_regions();
+        if view.len <= 0 {
+            return true;
+        }
+
+        if uya_gui_sim_sdl_display_present_begin(
+            self.host,
+            front.size.w as i32,
+            front.size.h as i32,
+            front.format as i32
+        ) == 0 {
+            return false;
+        }
+
+        var i: i32 = 0;
+        while i < view.len {
+            const rect: Rect = view.regions[i];
+            if uya_gui_sim_sdl_display_present_region(
+                self.host,
+                front.pixels as &const byte,
+                front.stride as i32,
+                front.size.w as i32,
+                front.size.h as i32,
+                front.format as i32,
+                rect.x as i32,
+                rect.y as i32,
+                rect.w as i32,
+                rect.h as i32
+            ) == 0 {
+                return false;
+            }
+            i = i + 1;
+        }
+        return uya_gui_sim_sdl_display_present_end(self.host) != 0;
     }
 
     fn set_fullscreen(self: &Self, enabled: bool) bool {

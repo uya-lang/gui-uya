@@ -12,6 +12,7 @@ use widget.base.WIDGET_TYPE_LABEL;
 use widget.base.widget_bind_callbacks;
 use widget.base.widget_draw_surface;
 use widget.base.widget_font;
+use widget.base.widget_inner_rect;
 use widget.base.widget_measure_text;
 use widget.base.widget_new;
 use widget.base.widget_text_color;
@@ -142,7 +143,7 @@ Label {
         }
 
         const font: &Font = widget_font(&self.widget.base.style);
-        const inner: Rect = widget_draw_surface(&self.widget, ctx);
+        const inner: Rect = widget_inner_rect(&self.widget);
         const advance: i32 = font.glyph_width as i32 + font.tracking as i32;
         var max_chars: i32 = inner.w as i32 / advance;
         if max_chars < 1 {

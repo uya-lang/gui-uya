@@ -9,6 +9,10 @@ use core.obj.gui_obj_reset_registry;
 use core.obj_tree.ObjTree;
 use core.obj_tree.obj_tree_new;
 use core.color.Color;
+use core.color.BLACK;
+use core.dirty_region.DirtyRegion;
+use core.dirty_region.DirtyRegionView;
+use core.dirty_region.dirty_region_new;
 use core.point.POINT_ZERO;
 use core.point.Point;
 use core.rect.Rect;
@@ -40,7 +44,11 @@ use examples.phase6_smoke.run_phase6_smoke;
 use libc.snprintf;
 use platform.disp.FrameBuffer;
 use platform.disp.PixelFormat;
+use platform.disp.framebuffer_new;
 use render.ctx.RenderCtx;
+use render.ctx.render_ctx_new;
+use render.font.Font;
+use render.font.draw_text;
 use render.font.ttf_cache_hit_count;
 use render.font.ttf_cache_miss_count;
 use render.font.ttf_cache_reset;
@@ -84,6 +92,7 @@ use std.async.block_on;
 use widget.base.IWidgetEventCallback;
 use widget.base.IWidgetValueCallback;
 use widget.base.Widget;
+use widget.base.widget_font;
 use widget.btn.Button;
 use widget.chart.Chart;
 use widget.chart.ChartType;
@@ -223,6 +232,10 @@ fn sim_clamp_i32(value: i32, min: i32, max: i32) i32 {
     return value;
 }
 
+fn sim_phase_bg_color() Color {
+    return Color{ r: 241, g: 245, b: 249, a: 255 };
+}
+
 AppButtonClickAdapter {
     fn invoke(self: &Self, widget: &Widget, evt: &Event, user_data: &void) void {
         _ = self;
@@ -302,6 +315,7 @@ SimApp {
         self.refresh_fs_label();
         self.refresh_metrics_label(0, 0u32, 0, 0u32, 0u32);
         self.refresh_help_label();
+        self.prewarm_phase_ui_text_cache();
 
         if !sim_cstr_empty(self.config.record_path) {
             self.recorder.start_recording(0u32);
@@ -329,6 +343,9 @@ SimApp {
 
         self.page.widget.at(0, 0);
         self.page.widget.size(page_w, page_h);
+        self.page.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 0, g: 0, b: 0, a: 0 });
+        self.page.widget.base.style.set_u32(StyleProp.BorderWidth, 0u32);
+        self.page.widget.base.style.set_u32(StyleProp.Radius, 0u32);
 
         self.title_label.widget.at(12, 8);
         self.title_label.widget.size(page_w - 24u16, 14);
@@ -398,6 +415,47 @@ SimApp {
         self.action_button.on_click(&APP_BUTTON_CLICK_ADAPTER, self as &void);
         self.slider.on_change(&APP_SLIDER_VALUE_ADAPTER, self as &void);
         self.toggle.on_change(&APP_SWITCH_VALUE_ADAPTER, self as &void);
+    }
+
+    fn prewarm_label_text(self: &Self, ctx: &RenderCtx, label: &Label) void {
+        _ = self;
+        if label == null || label.text == null || label.text_len == 0usize {
+            return;
+        }
+        const font: &Font = widget_font(&label.widget.base.style);
+        if font == null {
+            return;
+        }
+        draw_text(ctx, 0, 0, label.text, label.text_len, font, BLACK);
+    }
+
+    fn prewarm_button_text(self: &Self, ctx: &RenderCtx, button: &Button) void {
+        _ = self;
+        if button == null || button.label == null || button.label_len == 0usize {
+            return;
+        }
+        const font: &Font = widget_font(&button.widget.base.style);
+        if font == null {
+            return;
+        }
+        draw_text(ctx, 0, 0, button.label, button.label_len, font, BLACK);
+    }
+
+    fn prewarm_phase_ui_text_cache(self: &Self) void {
+        if !sim_demo_is_phase(self.config.demo) {
+            return;
+        }
+
+        var warm_pixels: [byte: 64] = [];
+        var warm_ctx: RenderCtx = render_ctx_new(framebuffer_new(&warm_pixels[0], 4, 4, 16, PixelFormat.ARGB8888));
+        self.prewarm_label_text(&warm_ctx, &self.title_label);
+        self.prewarm_label_text(&warm_ctx, &self.phase_label);
+        self.prewarm_label_text(&warm_ctx, &self.status_label);
+        self.prewarm_label_text(&warm_ctx, &self.fs_label);
+        self.prewarm_label_text(&warm_ctx, &self.input_label);
+        self.prewarm_label_text(&warm_ctx, &self.metrics_label);
+        self.prewarm_label_text(&warm_ctx, &self.help_label);
+        self.prewarm_button_text(&warm_ctx, &self.action_button);
     }
 
     fn build_tree(self: &Self) void {
@@ -858,8 +916,58 @@ SimApp {
             self.render_selected_demo(ctx);
             return;
         }
-        ctx.clear(Color{ r: 241, g: 245, b: 249, a: 255 });
+        ctx.clear(sim_phase_bg_color());
         self.page.render(ctx);
+    }
+
+    fn supports_dirty_render(self: &Self) bool {
+        return sim_demo_is_phase(self.config.demo);
+    }
+
+    fn render_retained(self: &Self, ctx: &RenderCtx, force_full: bool) void {
+        if !self.supports_dirty_render() {
+            self.render(ctx);
+            return;
+        }
+
+        if force_full {
+            ctx.clear(sim_phase_bg_color());
+            self.page.render(ctx);
+            self.tree.clear_invalid_regions();
+            return;
+        }
+
+        if !self.tree.has_invalid() {
+            return;
+        }
+
+        var dirty: DirtyRegion = dirty_region_new();
+        self.tree.collect_invalid_regions(&dirty);
+        dirty.merge();
+        const screen: Rect = Rect{ x: 0, y: 0, w: ctx.fb.size.w, h: ctx.fb.size.h };
+        if dirty.should_full_refresh(screen) {
+            ctx.clear(sim_phase_bg_color());
+            self.page.render(ctx);
+            self.tree.clear_invalid_regions();
+            return;
+        }
+
+        const view: DirtyRegionView = dirty.get_regions();
+        if view.len <= 0 {
+            ctx.clear(sim_phase_bg_color());
+            self.page.render(ctx);
+            self.tree.clear_invalid_regions();
+            return;
+        }
+
+        var i: i32 = 0;
+        while i < view.len {
+            ctx.push_clip(view.regions[i]);
+            self.page.render(ctx);
+            ctx.pop_clip();
+            i = i + 1;
+        }
+        self.tree.clear_invalid_regions();
     }
 
     fn record_touch_edge(self: &Self, evt: &Event) void {

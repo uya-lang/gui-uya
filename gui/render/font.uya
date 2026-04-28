@@ -250,6 +250,7 @@ var _ttf_cache_storage: [byte: 524288] = [];
 var _ttf_cache_clock: u32 = 0u32;
 var _ttf_cache_hits: u32 = 0u32;
 var _ttf_cache_misses: u32 = 0u32;
+var _font_backend_default_c_stb: bool = false;
 var _system_ui_font_data: &const byte = null;
 var _system_ui_font_len: usize = 0usize;
 var _system_ui_font_ready: bool = false;
@@ -2056,11 +2057,19 @@ fn font_backend_env_is_c(value: &byte) bool {
 }
 
 fn font_backend_use_c_stb() bool {
-    return font_backend_env_is_c(getenv("UYA_FONT_BACKEND\0"));
+    const env_value: &byte = getenv("UYA_FONT_BACKEND\0");
+    if env_value != null && env_value[0] != 0 {
+        return font_backend_env_is_c(env_value);
+    }
+    return _font_backend_default_c_stb;
 }
 
 export fn ttf_font_native_backend_is_c() bool {
     return font_backend_use_c_stb();
+}
+
+export fn ttf_font_set_default_native_backend_c(enabled: bool) void {
+    _font_backend_default_c_stb = enabled;
 }
 
 fn uya_font_uya_stb_create(data: &const byte, data_len: usize, sfnt_offset: u32, pixel_height: u16) &void {

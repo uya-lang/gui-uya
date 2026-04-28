@@ -309,6 +309,46 @@ int32_t uya_gui_sim_fb_present(void *handle, const uint8_t *pixels, int32_t pitc
     return 1;
 }
 
+int32_t uya_gui_sim_fb_present_region(void *handle, const uint8_t *pixels, int32_t pitch, int32_t width, int32_t height, int32_t format_tag,
+                                      int32_t x0, int32_t y0, int32_t w, int32_t h) {
+    UyaGuiSimFbDisplay *display = (UyaGuiSimFbDisplay *)handle;
+    int max_w;
+    int max_h;
+    if (display == NULL || !display->opened || pixels == NULL) {
+        uya_gui_sim_fb_set_error("framebuffer display not initialized");
+        return 0;
+    }
+    if (format_tag != 2) {
+        uya_gui_sim_fb_set_error("framebuffer backend only supports ARGB8888 source");
+        return 0;
+    }
+    if (w <= 0 || h <= 0) {
+        return 1;
+    }
+    if (x0 < 0 || y0 < 0 || x0 + w > width || y0 + h > height) {
+        uya_gui_sim_fb_set_error("dirty rect out of bounds");
+        return 0;
+    }
+
+    max_w = x0 + w;
+    max_h = y0 + h;
+    if (max_w > (int)display->vinfo.xres) {
+        max_w = (int)display->vinfo.xres;
+    }
+    if (max_h > (int)display->vinfo.yres) {
+        max_h = (int)display->vinfo.yres;
+    }
+
+    for (int y = y0; y < max_h; ++y) {
+        const uint8_t *row = pixels + (size_t)y * (size_t)pitch;
+        for (int x = x0; x < max_w; ++x) {
+            const uint8_t *src = row + (size_t)x * 4u;
+            uya_gui_sim_write_pixel(display, x, y, src[1], src[2], src[3], src[0]);
+        }
+    }
+    return 1;
+}
+
 int32_t uya_gui_sim_fb_get_width(void *handle) {
     const UyaGuiSimFbDisplay *display = (const UyaGuiSimFbDisplay *)handle;
     if (display == NULL || !display->opened) {

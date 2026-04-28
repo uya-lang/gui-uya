@@ -74,6 +74,8 @@ export struct GuiObj : IGuiObj, IContainer {
     w: u16,
     h: u16,
     flags: ObjFlags,
+    self_invalid: bool,
+    invalid_area: Rect,
     style: Style,
     user_data: &void,
     render_cb: &IGuiRenderCallback,
@@ -120,6 +122,27 @@ export fn event_callback_slot_default() EventCallbackSlot {
 }
 
 GuiObj {
+    fn invalidate_region(self: &Self, region: Rect) void {
+        if region.is_empty() {
+            return;
+        }
+        self.flags.invalid = true;
+        self.flags.dirty = true;
+        self.self_invalid = true;
+        if self.invalid_area.is_empty() {
+            self.invalid_area = region;
+        } else {
+            self.invalid_area = self.invalid_area.union_rect(region);
+        }
+
+        var current: &GuiObj = self.parent_ref;
+        while current != null {
+            current.flags.invalid = true;
+            current.flags.dirty = true;
+            current = current.parent_ref;
+        }
+    }
+
     fn type_id(self: &Self) u32 {
         return self.type_tag;
     }
@@ -138,11 +161,14 @@ GuiObj {
     }
 
     fn set_area(self: &Self, r: Rect) void {
+        const old_area: Rect = self.screen_area();
         self.x = r.x;
         self.y = r.y;
         self.w = r.w;
         self.h = r.h;
         self.flags.dirty = true;
+        const new_area: Rect = self.screen_area();
+        self.invalidate_region(old_area.union_rect(new_area));
     }
 
     fn screen_area(self: &Self) Rect {
@@ -165,15 +191,7 @@ GuiObj {
     }
 
     fn invalidate(self: &Self) void {
-        var current: &GuiObj = self;
-        while current != null {
-            if current.flags.invalid {
-                break;
-            }
-            current.flags.invalid = true;
-            current.flags.dirty = true;
-            current = current.parent_ref;
-        }
+        self.invalidate_region(self.screen_area());
     }
 
     fn visible(self: &Self) bool {
@@ -196,6 +214,12 @@ GuiObj {
     }
 
     fn render(self: &Self, ctx: &RenderCtx) void {
+        const clip: Rect = ctx.current_clip();
+        const area: Rect = self.screen_area();
+        const visible: Rect = clip.intersect(area);
+        if visible.is_empty() {
+            return;
+        }
         if self.render_cb != null {
             self.render_cb.invoke(self, ctx, self.user_data);
         }
@@ -327,18 +351,20 @@ GuiObj {
         if self.x == nx && self.y == ny {
             return;
         }
+        const old_area: Rect = self.screen_area();
         self.x = nx;
         self.y = ny;
-        self.invalidate();
+        self.invalidate_region(old_area.union_rect(self.screen_area()));
     }
 
     fn set_size(self: &Self, nw: u16, nh: u16) void {
         if self.w == nw && self.h == nh {
             return;
         }
+        const old_area: Rect = self.screen_area();
         self.w = nw;
         self.h = nh;
-        self.invalidate();
+        self.invalidate_region(old_area.union_rect(self.screen_area()));
     }
 
     fn on_click(self: &Self, callback: &IGuiEventCallback, user_data: &void) void {
@@ -455,6 +481,8 @@ export fn gui_obj_default() GuiObj {
         w: 0,
         h: 0,
         flags: obj_flags_default(),
+        self_invalid: false,
+        invalid_area: RECT_ZERO,
         style: DEFAULT_STYLE,
         user_data: null,
         render_cb: null,

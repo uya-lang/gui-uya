@@ -1,5 +1,6 @@
 use core.obj.GuiObj;
 use core.obj.gui_obj_get;
+use core.dirty_region.DirtyRegion;
 use core.point.Point;
 use core.rect.Rect;
 use layout.auto.AutoLayout;
@@ -171,6 +172,57 @@ export struct ObjTree {
             return node.obj_idx;
         }
         return -1;
+    }
+
+    fn has_invalid(self: &Self) bool {
+        return self.root != null && self.root.flags.invalid;
+    }
+
+    fn collect_invalid_regions(self: &Self, out: &DirtyRegion) void {
+        if self.root == null || out == null {
+            return;
+        }
+        self.collect_invalid_regions_recursive(self.root, out);
+    }
+
+    fn collect_invalid_regions_recursive(self: &Self, node: &GuiObj, out: &DirtyRegion) void {
+        _ = self;
+        if node == null || !node.flags.invalid {
+            return;
+        }
+
+        if node.self_invalid && !node.invalid_area.is_empty() {
+            out.add(node.invalid_area);
+        }
+
+        var child: &GuiObj = node.child_head;
+        while child != null {
+            self.collect_invalid_regions_recursive(child, out);
+            child = child.sibling_next;
+        }
+    }
+
+    fn clear_invalid_regions(self: &Self) void {
+        if self.root == null {
+            return;
+        }
+        self.clear_invalid_regions_recursive(self.root);
+    }
+
+    fn clear_invalid_regions_recursive(self: &Self, node: &GuiObj) void {
+        _ = self;
+        if node == null {
+            return;
+        }
+        node.flags.invalid = false;
+        node.self_invalid = false;
+        node.invalid_area = Rect{ x: 0, y: 0, w: 0, h: 0 };
+
+        var child: &GuiObj = node.child_head;
+        while child != null {
+            self.clear_invalid_regions_recursive(child);
+            child = child.sibling_next;
+        }
     }
 
     fn perform_layout(self: &Self, root_idx: i32, auto: &AutoLayout) void {

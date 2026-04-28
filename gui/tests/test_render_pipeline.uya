@@ -7,6 +7,7 @@ use platform.disp.DisplayCtx;
 use platform.disp.FrameBuffer;
 use platform.disp.PixelFormat;
 use platform.disp.display_ctx_new;
+use platform.disp.framebuffer_copy;
 use platform.disp.framebuffer_new;
 use render.batch.DrawBatch;
 use render.batch.draw_batch_new;
@@ -121,4 +122,18 @@ test "software gpu and zerocopy present rendered content" {
     try assert_eq_i32(display.frame_id as i32, 1);
     try assert_eq_bool(ctx_pixel(&ctx, 0, 0) == green1, true);
     try assert_eq_i32(gpu.sync_count as i32, 1);
+}
+
+test "framebuffer copy preserves previous frame for retained render" {
+    var src_bytes: [byte: 64] = [];
+    var dst_bytes: [byte: 64] = [];
+    var src_ctx: RenderCtx = render_ctx_new(framebuffer_new(&src_bytes[0], 4, 4, 16, PixelFormat.ARGB8888));
+    var dst_fb: FrameBuffer = framebuffer_new(&dst_bytes[0], 4, 4, 16, PixelFormat.ARGB8888);
+    var dst_ctx: RenderCtx = render_ctx_new(dst_fb);
+    const red_draw: Color = Color{ r: 255, g: 0, b: 0, a: 255 };
+    const red_expect: Color = Color{ r: 255, g: 0, b: 0, a: 255 };
+
+    src_ctx.fill_rect(Rect{ x: 1, y: 1, w: 2, h: 2 }, red_draw);
+    try assert_eq_bool(framebuffer_copy(&dst_fb, &src_ctx.fb), true);
+    try assert_eq_bool(ctx_pixel(&dst_ctx, 2, 2) == red_expect, true);
 }

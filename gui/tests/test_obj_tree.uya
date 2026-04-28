@@ -1,3 +1,6 @@
+use core.dirty_region.DirtyRegion;
+use core.dirty_region.DirtyRegionView;
+use core.dirty_region.dirty_region_new;
 use core.obj.GuiObj;
 use core.obj.gui_obj_default;
 use core.obj.gui_obj_register;
@@ -113,4 +116,66 @@ test "gui obj drop unregisters from registry" {
         try assert_eq_bool(gui_obj_get(7) != null, true);
     }
     try assert_eq_bool(gui_obj_get(7) == null, true);
+}
+
+test "obj tree collects precise invalid region from leaf change" {
+    gui_obj_reset_registry();
+
+    var root: GuiObj = gui_obj_default();
+    var child: GuiObj = gui_obj_default();
+    root.set_area(Rect{ x: 0, y: 0, w: 100, h: 100 });
+    child.set_area(Rect{ x: 12, y: 18, w: 24, h: 16 });
+
+    _ = gui_obj_register(0, &root);
+    _ = gui_obj_register(1, &child);
+
+    var tree: ObjTree = obj_tree_new();
+    tree.set_root(0, &root);
+    tree.attach(0, 1);
+    tree.clear_invalid_regions();
+
+    child.invalidate();
+
+    var dirty: DirtyRegion = dirty_region_new();
+    tree.collect_invalid_regions(&dirty);
+    dirty.merge();
+    const view: DirtyRegionView = dirty.get_regions();
+    try assert_eq_bool(tree.has_invalid(), true);
+    try assert_eq_i32(view.len, 1);
+    try assert_eq_i32(view.regions[0].x as i32, 12);
+    try assert_eq_i32(view.regions[0].y as i32, 18);
+    try assert_eq_i32(view.regions[0].w as i32, 24);
+    try assert_eq_i32(view.regions[0].h as i32, 16);
+
+    tree.clear_invalid_regions();
+    try assert_eq_bool(tree.has_invalid(), false);
+}
+
+test "gui obj move invalidates both old and new bounds" {
+    gui_obj_reset_registry();
+
+    var root: GuiObj = gui_obj_default();
+    var child: GuiObj = gui_obj_default();
+    root.set_area(Rect{ x: 0, y: 0, w: 120, h: 80 });
+    child.set_area(Rect{ x: 10, y: 20, w: 16, h: 12 });
+
+    _ = gui_obj_register(0, &root);
+    _ = gui_obj_register(1, &child);
+
+    var tree: ObjTree = obj_tree_new();
+    tree.set_root(0, &root);
+    tree.attach(0, 1);
+    tree.clear_invalid_regions();
+
+    child.move_to(34, 20);
+
+    var dirty: DirtyRegion = dirty_region_new();
+    tree.collect_invalid_regions(&dirty);
+    dirty.merge();
+    const view: DirtyRegionView = dirty.get_regions();
+    try assert_eq_i32(view.len, 1);
+    try assert_eq_i32(view.regions[0].x as i32, 10);
+    try assert_eq_i32(view.regions[0].y as i32, 20);
+    try assert_eq_i32(view.regions[0].w as i32, 40);
+    try assert_eq_i32(view.regions[0].h as i32, 12);
 }

@@ -2,6 +2,7 @@ use core.event.Event;
 use core.event.event_none;
 use libc.printf;
 use platform.disp.FrameBuffer;
+use platform.disp.framebuffer_copy;
 use platform.disp.framebuffer_new;
 use platform.fb.disp_fb.FbDisplay;
 use platform.fb.disp_fb.fb_display_last_error;
@@ -18,6 +19,7 @@ use platform.tick.get_tick_ms;
 use platform.tick.sleep_ms;
 use render.ctx.RenderCtx;
 use render.ctx.render_ctx_new;
+use render.font.ttf_font_set_default_native_backend_c;
 use sim.app.SimApp;
 use sim.app.sim_app_new;
 use sim.config.SimBackendKind;
@@ -41,8 +43,13 @@ fn sim_print_usage() void {
     );
 }
 
+fn sim_ensure_default_font_backend() void {
+    ttf_font_set_default_native_backend_c(true);
+}
+
 fn run_simulator_sdl(cfg: SimConfig) i32 {
     _ = printf("[sim] backend=%s gpu=%s\n" as *byte, sim_backend_name(cfg.backend), sim_gpu_name(cfg.gpu));
+    sim_ensure_default_font_backend();
  
     var display: SdlDisplay = sdl_display_new();
     if !display.init(cfg.width, cfg.height, cfg.scale, cfg.title, cfg.fullscreen, cfg.gpu as i32) {
@@ -63,6 +70,18 @@ fn run_simulator_sdl(cfg: SimConfig) i32 {
         return 3;
     }
 
+    var first_frame: bool = true;
+    var last_dirty_render: bool = false;
+    var pending_seed_present: bool = false;
+    if app.supports_dirty_render() {
+        const seed_back: &FrameBuffer = display.get_back_buffer();
+        var seed_ctx: RenderCtx = render_ctx_new(framebuffer_new(seed_back.pixels, seed_back.size.w, seed_back.size.h, seed_back.stride, seed_back.format));
+        app.render_retained(&seed_ctx, true);
+        _ = framebuffer_copy(display.get_front_buffer(), seed_back);
+        first_frame = false;
+        last_dirty_render = true;
+        pending_seed_present = true;
+    }
     var last_tick_ms: u32 = get_tick_ms();
     while true {
         const frame_start_ms: u32 = get_tick_ms();
@@ -93,9 +112,19 @@ fn run_simulator_sdl(cfg: SimConfig) i32 {
         app.update(delta_ms, frame_start_ms);
         const after_update_ms: u32 = get_tick_ms();
 
+        const dirty_render: bool = app.supports_dirty_render();
+        const force_full: bool = first_frame || dirty_render != last_dirty_render;
         const back_ref: &FrameBuffer = display.get_back_buffer();
+        if dirty_render && !force_full {
+            _ = framebuffer_copy(back_ref, display.get_front_buffer());
+        }
         var ctx: RenderCtx = render_ctx_new(framebuffer_new(back_ref.pixels, back_ref.size.w, back_ref.size.h, back_ref.stride, back_ref.format));
-        app.render(&ctx);
+        if dirty_render {
+            app.render_retained(&ctx, force_full);
+        } else {
+            app.render(&ctx);
+        }
+        ctx.dirty.merge();
         const after_render_ms: u32 = get_tick_ms();
 
         if app.consume_screenshot_request() {
@@ -105,7 +134,18 @@ fn run_simulator_sdl(cfg: SimConfig) i32 {
             _ = display.toggle_fullscreen();
         }
 
-        if !display.present() {
+        if dirty_render {
+            if pending_seed_present && ctx.dirty.get_regions().len <= 0 {
+                if !display.present() {
+                    _ = printf("[sim] present failed: %s\n" as *byte, sdl_display_last_error());
+                    break;
+                }
+            } else if !display.present_dirty(&ctx.dirty) {
+                _ = printf("[sim] present failed: %s\n" as *byte, sdl_display_last_error());
+                break;
+            }
+            pending_seed_present = false;
+        } else if !display.present() {
             _ = printf("[sim] present failed: %s\n" as *byte, sdl_display_last_error());
             break;
         }
@@ -126,6 +166,9 @@ fn run_simulator_sdl(cfg: SimConfig) i32 {
             break;
         }
 
+        first_frame = false;
+        last_dirty_render = dirty_render;
+
         const frame_ms: u32 = after_present_ms - frame_start_ms;
         if frame_ms < 16u32 {
             sleep_ms(16u32 - frame_ms);
@@ -139,6 +182,7 @@ fn run_simulator_sdl(cfg: SimConfig) i32 {
 fn run_simulator_fb(cfg_in: SimConfig) i32 {
     var cfg: SimConfig = cfg_in;
     _ = printf("[sim] backend=%s\n" as *byte, sim_backend_name(cfg.backend));
+    sim_ensure_default_font_backend();
 
     var display: FbDisplay = fb_display_new();
     if !display.init(cfg.width, cfg.height, cfg.fb_device_path) {
@@ -171,6 +215,18 @@ fn run_simulator_fb(cfg_in: SimConfig) i32 {
         return 3;
     }
 
+    var first_frame: bool = true;
+    var last_dirty_render: bool = false;
+    var pending_seed_present: bool = false;
+    if app.supports_dirty_render() {
+        const seed_back: &FrameBuffer = display.get_back_buffer();
+        var seed_ctx: RenderCtx = render_ctx_new(framebuffer_new(seed_back.pixels, seed_back.size.w, seed_back.size.h, seed_back.stride, seed_back.format));
+        app.render_retained(&seed_ctx, true);
+        _ = framebuffer_copy(display.get_front_buffer(), seed_back);
+        first_frame = false;
+        last_dirty_render = true;
+        pending_seed_present = true;
+    }
     var last_tick_ms: u32 = get_tick_ms();
     while true {
         const frame_start_ms: u32 = get_tick_ms();
@@ -199,16 +255,37 @@ fn run_simulator_fb(cfg_in: SimConfig) i32 {
         app.update(delta_ms, frame_start_ms);
         const after_update_ms: u32 = get_tick_ms();
 
+        const dirty_render: bool = app.supports_dirty_render();
+        const force_full: bool = first_frame || dirty_render != last_dirty_render;
         const back_ref: &FrameBuffer = display.get_back_buffer();
+        if dirty_render && !force_full {
+            _ = framebuffer_copy(back_ref, display.get_front_buffer());
+        }
         var ctx: RenderCtx = render_ctx_new(framebuffer_new(back_ref.pixels, back_ref.size.w, back_ref.size.h, back_ref.stride, back_ref.format));
-        app.render(&ctx);
+        if dirty_render {
+            app.render_retained(&ctx, force_full);
+        } else {
+            app.render(&ctx);
+        }
+        ctx.dirty.merge();
         const after_render_ms: u32 = get_tick_ms();
 
         if app.consume_screenshot_request() {
             app.save_screenshot(display.get_back_buffer());
         }
 
-        if !display.present() {
+        if dirty_render {
+            if pending_seed_present && ctx.dirty.get_regions().len <= 0 {
+                if !display.present() {
+                    _ = printf("[sim] framebuffer present failed: %s\n" as *byte, fb_display_last_error());
+                    break;
+                }
+            } else if !display.present_dirty(&ctx.dirty) {
+                _ = printf("[sim] framebuffer present failed: %s\n" as *byte, fb_display_last_error());
+                break;
+            }
+            pending_seed_present = false;
+        } else if !display.present() {
             _ = printf("[sim] framebuffer present failed: %s\n" as *byte, fb_display_last_error());
             break;
         }
@@ -225,6 +302,9 @@ fn run_simulator_fb(cfg_in: SimConfig) i32 {
         if app.should_exit() || display.ctx.frame_id >= cfg.max_frames {
             break;
         }
+
+        first_frame = false;
+        last_dirty_render = dirty_render;
 
         const frame_ms: u32 = after_present_ms - frame_start_ms;
         if frame_ms < 16u32 {
