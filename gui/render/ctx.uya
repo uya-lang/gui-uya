@@ -761,6 +761,49 @@ export struct RenderCtx {
             inner_radius = outer_radius - width;
         }
 
+        const straight_w: i32 = rect.w as i32 - outer_radius as i32 * 2;
+        const straight_h: i32 = rect.h as i32 - outer_radius as i32 * 2;
+        if straight_w > 0 {
+            _ = self.fill_rect_no_dirty(
+                Rect{
+                    x: rect.x + outer_radius as i16,
+                    y: rect.y,
+                    w: straight_w as u16,
+                    h: width as u16,
+                },
+                color
+            );
+            _ = self.fill_rect_no_dirty(
+                Rect{
+                    x: rect.x + outer_radius as i16,
+                    y: rect.y + rect.h as i16 - width as i16,
+                    w: straight_w as u16,
+                    h: width as u16,
+                },
+                color
+            );
+        }
+        if straight_h > 0 {
+            _ = self.fill_rect_no_dirty(
+                Rect{
+                    x: rect.x,
+                    y: rect.y + outer_radius as i16,
+                    w: width as u16,
+                    h: straight_h as u16,
+                },
+                color
+            );
+            _ = self.fill_rect_no_dirty(
+                Rect{
+                    x: rect.x + rect.w as i16 - width as i16,
+                    y: rect.y + outer_radius as i16,
+                    w: width as u16,
+                    h: straight_h as u16,
+                },
+                color
+            );
+        }
+
         var y: i32 = draw_rect.y as i32;
         while y < draw_rect.y as i32 + draw_rect.h as i32 {
             var x: i32 = draw_rect.x as i32;

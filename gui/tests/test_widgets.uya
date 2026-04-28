@@ -111,6 +111,20 @@ test "panel renders child button and label through gui tree" {
     try assert_eq_bool(ctx.stats.text_ops >= 2u32, true);
 }
 
+test "outlined button keeps horizontal border edges visible" {
+    var bytes: [byte: 12288] = [];
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 96, 32, 384, PixelFormat.ARGB8888));
+    var button: Button = Button.outlined("Outlined");
+    const blue_expect: Color = Color{ r: 33, g: 126, b: 227, a: 255 };
+
+    button.widget.at(8, 4);
+    button.widget.size(80, 20);
+    button.render(&ctx);
+
+    try assert_eq_bool(ctx_pixel(&ctx, 48, 4) == blue_expect, true);
+    try assert_eq_bool(ctx_pixel(&ctx, 48, 23) == blue_expect, true);
+}
+
 test "image widget scales source into target area" {
     var fb: [byte: 4096] = [];
     var ctx: RenderCtx = render_ctx_new(framebuffer_new(&fb[0], 16, 16, 64, PixelFormat.ARGB8888));

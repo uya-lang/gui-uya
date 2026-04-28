@@ -68,6 +68,19 @@ test "draw round rect clips corner arcs to quadrants" {
     try assert_eq_bool(ctx_pixel(&ctx, 4, 4) == black_expect1, true);
 }
 
+test "draw round rect keeps bottom edge visible on wide rounded outlines" {
+    var bytes: [byte: 20480] = [];
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 128, 40, 512, PixelFormat.ARGB8888));
+    const bg: Color = Color{ r: 255, g: 255, b: 255, a: 255 };
+    const blue_draw: Color = Color{ r: 33, g: 126, b: 227, a: 255 };
+    const blue_expect: Color = Color{ r: 33, g: 126, b: 227, a: 255 };
+
+    ctx.clear(bg);
+    ctx.draw_round_rect(Rect{ x: 8, y: 4, w: 112, h: 36 }, 10u8, blue_draw, 1u8);
+
+    try assert_eq_bool(ctx_pixel(&ctx, 64, 39) == blue_expect, true);
+}
+
 test "render ctx blends alpha on i4 framebuffer" {
     var bytes: [byte: 8] = [];
     var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 4, 4, 2, PixelFormat.I4));

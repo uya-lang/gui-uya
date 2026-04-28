@@ -11,7 +11,11 @@ use platform.disp.framebuffer_copy;
 use platform.disp.framebuffer_new;
 use platform.disp.framebuffer_required_bytes;
 use render.ctx.RenderCtx;
+use render.ctx.ctx_pixel;
 use render.ctx.render_ctx_new;
+use examples.demo_widgets.WidgetsRetained;
+use examples.demo_widgets.render_demo_widgets_retained_state;
+use examples.demo_widgets.widgets_retained_new;
 use examples.demo_game.game_retained_new;
 use sim.app.SimApp;
 use sim.app.sim_app_new;
@@ -136,10 +140,10 @@ test "sim app retained render repaints only affected phase widgets" {
     var frame_a_ctx: RenderCtx = render_ctx_new(framebuffer_new(&frame_a_bytes[0], cfg.width, cfg.height, cfg.width * 4u16, PixelFormat.ARGB8888));
     app.render_retained(&frame_a_ctx, true);
 
-    var partial_fb: FrameBuffer = framebuffer_new(&partial_bytes[0], cfg.width, cfg.height, cfg.width * 4u16, PixelFormat.ARGB8888);
-    try assert_eq_bool(framebuffer_copy(&partial_fb, &frame_a_ctx.fb), true);
+    var partial_copy_fb: FrameBuffer = framebuffer_new(&partial_bytes[0], cfg.width, cfg.height, cfg.width * 4u16, PixelFormat.ARGB8888);
+    try assert_eq_bool(framebuffer_copy(&partial_copy_fb, &frame_a_ctx.fb), true);
     app.refresh_status_label("状态 B");
-    var partial_ctx: RenderCtx = render_ctx_new(partial_fb);
+    var partial_ctx: RenderCtx = render_ctx_new(framebuffer_new(&partial_bytes[0], cfg.width, cfg.height, cfg.width * 4u16, PixelFormat.ARGB8888));
     app.render_retained(&partial_ctx, false);
 
     var expected_app: SimApp = sim_app_new();
@@ -319,6 +323,106 @@ test "standalone widgets and custom demos render showcase content" {
     app.render(&ctx);
     try assert_eq_bool(ctx.stats.text_ops > 0u32, true);
     try assert_eq_bool(ctx.stats.image_ops > 0u32, true);
+}
+
+test "widgets retained click matches full redraw for outlined selection" {
+    var app: SimApp = sim_app_new();
+    var cfg: SimConfig = sim_config_default();
+    cfg.demo = SimDemoKind.Widgets;
+    cfg.width = SIM_DEFAULT_RES_WIDTH;
+    cfg.height = SIM_DEFAULT_RES_HEIGHT;
+    try assert_eq_bool(app.init(cfg), true);
+    try assert_eq_bool(app.supports_dirty_render(), true);
+
+    const pixels_len: usize = framebuffer_required_bytes(cfg.width, cfg.height, PixelFormat.ARGB8888);
+    var partial_bytes: [byte: 8294400] = [];
+    var expected_bytes: [byte: 8294400] = [];
+    var frame_a_bytes: [byte: 8294400] = [];
+
+    var frame_a_ctx: RenderCtx = render_ctx_new(framebuffer_new(&frame_a_bytes[0], cfg.width, cfg.height, cfg.width * 4u16, PixelFormat.ARGB8888));
+    app.render_retained(&frame_a_ctx, true);
+
+    var partial_fb: FrameBuffer = framebuffer_new(&partial_bytes[0], cfg.width, cfg.height, cfg.width * 4u16, PixelFormat.ARGB8888);
+    try assert_eq_bool(framebuffer_copy(&partial_fb, &frame_a_ctx.fb), true);
+
+    const click_x: i16 = app.current_demo_origin_x() + sim_layout_x(20) + sim_layout_x(148) + sim_layout_w(122u16) as i16 / 2;
+    const click_y: i16 = app.current_demo_origin_y() + sim_layout_y(96) + sim_layout_y(48) + sim_layout_h(40u16) as i16 / 2;
+    var outlined_click: Event = event_point(
+        EventType.Click,
+        InputDev.Touch,
+        -1,
+        48u32,
+        Point{ x: click_x, y: click_y }
+    );
+    app.handle_translated_event(&outlined_click);
+
+    var partial_ctx: RenderCtx = render_ctx_new(partial_fb);
+    app.render_retained(&partial_ctx, false);
+
+    var expected_app: SimApp = sim_app_new();
+    try assert_eq_bool(expected_app.init(cfg), true);
+    expected_app.widgets_control_idx = 1;
+    expected_app.refresh_status_label("Outlined 按钮已触发");
+    var expected_ctx: RenderCtx = render_ctx_new(framebuffer_new(&expected_bytes[0], cfg.width, cfg.height, cfg.width * 4u16, PixelFormat.ARGB8888));
+    expected_app.render_retained(&expected_ctx, true);
+
+    try sim_expect_frame_equal(&partial_bytes[0], &expected_bytes[0], pixels_len);
+}
+
+test "widgets demo action buttons keep full bottom borders visible" {
+    const pixels_len: usize = framebuffer_required_bytes(SIM_DEFAULT_RES_WIDTH, SIM_DEFAULT_RES_HEIGHT, PixelFormat.ARGB8888);
+    const pixels: &byte = malloc(pixels_len) as &byte;
+    if pixels == null {
+        try assert_eq_bool(false, true);
+        return;
+    }
+    defer {
+        free(pixels as &void);
+    }
+
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(pixels, SIM_DEFAULT_RES_WIDTH, SIM_DEFAULT_RES_HEIGHT, SIM_DEFAULT_RES_WIDTH * 4u16, PixelFormat.ARGB8888));
+    var widgets: WidgetsRetained = widgets_retained_new();
+    const blue_expect: Color = Color{ r: 33, g: 126, b: 227, a: 255 };
+    const ship_border_expect: Color = Color{ r: 25, g: 95, b: 169, a: 255 };
+
+    ctx.clear(Color{ r: 244, g: 247, b: 251, a: 255 });
+    render_demo_widgets_retained_state(&widgets, &ctx, 0, 0, 0, 72, true, 2, 1, "Widget showcase static preview");
+
+    const archive_area: Rect = widgets.archive_btn.widget.base.screen_area();
+    const archive_center_x: i16 = archive_area.x + archive_area.w as i16 / 2;
+    const archive_bottom_y: i16 = archive_area.y + archive_area.h as i16 - 1;
+    try assert_eq_bool(ctx_pixel(&ctx, archive_center_x, archive_area.y) == blue_expect, true);
+    try assert_eq_bool(ctx_pixel(&ctx, archive_center_x, archive_bottom_y) == blue_expect, true);
+
+    const ship_area: Rect = widgets.ship_btn.widget.base.screen_area();
+    const ship_center_x: i16 = ship_area.x + ship_area.w as i16 / 2;
+    const ship_bottom_y: i16 = ship_area.y + ship_area.h as i16 - 1;
+    try assert_eq_bool(ctx_pixel(&ctx, ship_center_x, ship_bottom_y) == ship_border_expect, true);
+}
+
+test "widgets demo quiet action keeps visible outlined border" {
+    const pixels_len: usize = framebuffer_required_bytes(SIM_DEFAULT_RES_WIDTH, SIM_DEFAULT_RES_HEIGHT, PixelFormat.ARGB8888);
+    const pixels: &byte = malloc(pixels_len) as &byte;
+    if pixels == null {
+        try assert_eq_bool(false, true);
+        return;
+    }
+    defer {
+        free(pixels as &void);
+    }
+
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(pixels, SIM_DEFAULT_RES_WIDTH, SIM_DEFAULT_RES_HEIGHT, SIM_DEFAULT_RES_WIDTH * 4u16, PixelFormat.ARGB8888));
+    var widgets: WidgetsRetained = widgets_retained_new();
+    const blue_expect: Color = Color{ r: 33, g: 126, b: 227, a: 255 };
+
+    ctx.clear(Color{ r: 244, g: 247, b: 251, a: 255 });
+    render_demo_widgets_retained_state(&widgets, &ctx, 0, 0, 0, 72, true, 2, 1, "Widget showcase static preview");
+
+    const quiet_area: Rect = widgets.text_btn.widget.base.screen_area();
+    const quiet_center_x: i16 = quiet_area.x + quiet_area.w as i16 / 2;
+    const quiet_bottom_y: i16 = quiet_area.y + quiet_area.h as i16 - 1;
+    try assert_eq_bool(ctx_pixel(&ctx, quiet_center_x, quiet_area.y) == blue_expect, true);
+    try assert_eq_bool(ctx_pixel(&ctx, quiet_center_x, quiet_bottom_y) == blue_expect, true);
 }
 
 test "home nav buttons and standalone back button switch demos" {

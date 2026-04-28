@@ -173,7 +173,7 @@ export fn widgets_retained_new() WidgetsRetained {
         controls_title: Label.new("Controls"),
         primary_btn: Button.outlined("Primary"),
         secondary_btn: Button.outlined("Outlined"),
-        text_btn: Button.text_only("Quiet Action"),
+        text_btn: Button.outlined("Quiet Action"),
         sync_btn: Button.outlined("Sync"),
         slider_label: Label.new("Volume 72%"),
         slider: Slider.new(0, 100, 72),
@@ -223,21 +223,29 @@ export fn widgets_retained_init(widgets: &WidgetsRetained) void {
     widgets.hero.widget.at(sim_layout_x(20), sim_layout_y(16));
     widgets.hero.widget.size(sim_layout_w(600), sim_layout_h(64));
     widgets.hero.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 255, g: 255, b: 255, a: 255 });
+    widgets.hero.widget.base.style.set_u32(StyleProp.PaddingLeft, 0u32);
+    widgets.hero.widget.base.style.set_u32(StyleProp.PaddingRight, 0u32);
+    widgets.hero.widget.base.style.set_u32(StyleProp.PaddingTop, 0u32);
+    widgets.hero.widget.base.style.set_u32(StyleProp.PaddingBottom, 0u32);
 
-    widgets.hero_title.widget.at(sim_layout_x(20), sim_layout_y(14));
-    widgets.hero_title.widget.size(sim_layout_w(560), sim_layout_h(20));
+    widgets.hero_title.widget.at(sim_layout_x(20), sim_layout_y(12));
+    widgets.hero_title.widget.size(sim_layout_w(560), sim_layout_h(30));
     widgets.hero_title.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(26u8) as u32);
     _ = widgets.hero_title.set_align(TextAlign.Center);
 
-    widgets.hero_subtitle.widget.at(sim_layout_x(18), sim_layout_y(38));
+    widgets.hero_subtitle.widget.at(sim_layout_x(18), sim_layout_y(42));
     widgets.hero_subtitle.widget.size(sim_layout_w(564), sim_layout_h(16));
     widgets.hero_subtitle.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(12u8) as u32);
     widgets.hero_subtitle.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 100, g: 116, b: 139, a: 255 });
     _ = widgets.hero_subtitle.set_align(TextAlign.Center);
 
     widgets.controls.widget.at(sim_layout_x(20), sim_layout_y(96));
-    widgets.controls.widget.size(sim_layout_w(286), sim_layout_h(166));
+    widgets.controls.widget.size(sim_layout_w(286), sim_layout_h(176));
     widgets.controls.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 255, g: 255, b: 255, a: 255 });
+    widgets.controls.widget.base.style.set_u32(StyleProp.PaddingLeft, 0u32);
+    widgets.controls.widget.base.style.set_u32(StyleProp.PaddingRight, 0u32);
+    widgets.controls.widget.base.style.set_u32(StyleProp.PaddingTop, 0u32);
+    widgets.controls.widget.base.style.set_u32(StyleProp.PaddingBottom, 0u32);
 
     widgets.controls_title.widget.at(sim_layout_x(16), sim_layout_y(14));
     widgets.controls_title.widget.size(sim_layout_w(140), sim_layout_h(18));
@@ -247,30 +255,34 @@ export fn widgets_retained_init(widgets: &WidgetsRetained) void {
     widgets.primary_btn.widget.size(sim_layout_w(118u16), sim_layout_h(40u16));
     widgets.secondary_btn.widget.at(sim_layout_x(148), sim_layout_y(48));
     widgets.secondary_btn.widget.size(sim_layout_w(122u16), sim_layout_h(40u16));
-    widgets.text_btn.widget.at(sim_layout_x(16), sim_layout_y(94));
+    widgets.text_btn.widget.at(sim_layout_x(16), sim_layout_y(98));
     widgets.text_btn.widget.size(sim_layout_w(118u16), sim_layout_h(32u16));
-    widgets.sync_btn.widget.at(sim_layout_x(148), sim_layout_y(92));
+    widgets.sync_btn.widget.at(sim_layout_x(148), sim_layout_y(96));
     widgets.sync_btn.widget.size(sim_layout_w(122u16), sim_layout_h(36u16));
 
-    widgets.slider_label.widget.at(sim_layout_x(16), sim_layout_y(132));
+    widgets.slider_label.widget.at(sim_layout_x(16), sim_layout_y(136));
     widgets.slider_label.widget.size(sim_layout_w(110), sim_layout_h(16));
     widgets.slider_label.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(12u8) as u32);
     widgets.slider_label.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 71, g: 85, b: 105, a: 255 });
 
-    widgets.slider.widget.at(sim_layout_x(16), sim_layout_y(148));
+    widgets.slider.widget.at(sim_layout_x(16), sim_layout_y(152));
     widgets.slider.widget.size(sim_layout_w(176u16), sim_layout_h(18u16));
 
-    widgets.switch_label.widget.at(sim_layout_x(208), sim_layout_y(132));
+    widgets.switch_label.widget.at(sim_layout_x(208), sim_layout_y(136));
     widgets.switch_label.widget.size(sim_layout_w(64), sim_layout_h(16));
     widgets.switch_label.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(12u8) as u32);
     widgets.switch_label.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 71, g: 85, b: 105, a: 255 });
 
-    widgets.toggle.widget.at(sim_layout_x(224), sim_layout_y(146));
+    widgets.toggle.widget.at(sim_layout_x(224), sim_layout_y(150));
     widgets.toggle.widget.size(sim_layout_w(46u16), sim_layout_h(24u16));
 
     widgets.visuals.widget.at(sim_layout_x(318), sim_layout_y(96));
     widgets.visuals.widget.size(sim_layout_w(302), sim_layout_h(166));
     widgets.visuals.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 255, g: 255, b: 255, a: 255 });
+    widgets.visuals.widget.base.style.set_u32(StyleProp.PaddingLeft, 0u32);
+    widgets.visuals.widget.base.style.set_u32(StyleProp.PaddingRight, 0u32);
+    widgets.visuals.widget.base.style.set_u32(StyleProp.PaddingTop, 0u32);
+    widgets.visuals.widget.base.style.set_u32(StyleProp.PaddingBottom, 0u32);
 
     widgets.visuals_title.widget.at(sim_layout_x(16), sim_layout_y(14));
     widgets.visuals_title.widget.size(sim_layout_w(180), sim_layout_h(18));
@@ -301,6 +313,10 @@ export fn widgets_retained_init(widgets: &WidgetsRetained) void {
     widgets.collections.widget.at(sim_layout_x(20), sim_layout_y(274));
     widgets.collections.widget.size(sim_layout_w(286), sim_layout_h(182));
     widgets.collections.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 255, g: 255, b: 255, a: 255 });
+    widgets.collections.widget.base.style.set_u32(StyleProp.PaddingLeft, 0u32);
+    widgets.collections.widget.base.style.set_u32(StyleProp.PaddingRight, 0u32);
+    widgets.collections.widget.base.style.set_u32(StyleProp.PaddingTop, 0u32);
+    widgets.collections.widget.base.style.set_u32(StyleProp.PaddingBottom, 0u32);
 
     widgets.collections_title.widget.at(sim_layout_x(16), sim_layout_y(14));
     widgets.collections_title.widget.size(sim_layout_w(140), sim_layout_h(18));
@@ -323,6 +339,10 @@ export fn widgets_retained_init(widgets: &WidgetsRetained) void {
     widgets.data_panel.widget.at(sim_layout_x(318), sim_layout_y(274));
     widgets.data_panel.widget.size(sim_layout_w(302), sim_layout_h(182));
     widgets.data_panel.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 255, g: 255, b: 255, a: 255 });
+    widgets.data_panel.widget.base.style.set_u32(StyleProp.PaddingLeft, 0u32);
+    widgets.data_panel.widget.base.style.set_u32(StyleProp.PaddingRight, 0u32);
+    widgets.data_panel.widget.base.style.set_u32(StyleProp.PaddingTop, 0u32);
+    widgets.data_panel.widget.base.style.set_u32(StyleProp.PaddingBottom, 0u32);
 
     widgets.data_title.widget.at(sim_layout_x(16), sim_layout_y(14));
     widgets.data_title.widget.size(sim_layout_w(160), sim_layout_h(18));
@@ -333,6 +353,10 @@ export fn widgets_retained_init(widgets: &WidgetsRetained) void {
 
     widgets.actions.widget.at(sim_layout_x(16), sim_layout_y(128));
     widgets.actions.widget.size(sim_layout_w(270u16), sim_layout_h(38u16));
+    widgets.actions.widget.base.style.set_u32(StyleProp.PaddingLeft, 0u32);
+    widgets.actions.widget.base.style.set_u32(StyleProp.PaddingRight, 0u32);
+    widgets.actions.widget.base.style.set_u32(StyleProp.PaddingTop, 0u32);
+    widgets.actions.widget.base.style.set_u32(StyleProp.PaddingBottom, 0u32);
     widgets.actions.columns = 2;
     widgets.actions.item_size.w = sim_layout_w(128u16);
     widgets.actions.item_size.h = sim_layout_h(38u16);
@@ -408,7 +432,7 @@ export fn widgets_retained_sync(
         widgets.control_idx = control_idx;
         var primary_variant: BtnVariant = BtnVariant.Outlined;
         var secondary_variant: BtnVariant = BtnVariant.Outlined;
-        var text_variant: BtnVariant = BtnVariant.Text;
+        var text_variant: BtnVariant = BtnVariant.Outlined;
         var sync_variant: BtnVariant = BtnVariant.Outlined;
         var sync_icon: u32 = 0u32;
         if control_idx == 0 {

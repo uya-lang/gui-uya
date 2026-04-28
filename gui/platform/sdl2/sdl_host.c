@@ -586,6 +586,7 @@ static int uya_gui_sim_init_gles2_pipeline(UyaGuiSimDisplay *display) {
 }
 
 static int uya_gui_sim_init_renderer_pipeline(UyaGuiSimDisplay *display) {
+    (void)SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");
     display->renderer = SDL_CreateRenderer(display->window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
     if (display->renderer == NULL) {
         display->renderer = SDL_CreateRenderer(display->window, -1, SDL_RENDERER_SOFTWARE);
@@ -607,6 +608,9 @@ static int uya_gui_sim_init_renderer_pipeline(UyaGuiSimDisplay *display) {
         uya_gui_sim_destroy_renderer_resources(display);
         return 0;
     }
+#if SDL_VERSION_ATLEAST(2, 0, 12)
+    (void)SDL_SetTextureScaleMode(display->texture, SDL_ScaleModeNearest);
+#endif
     display->present_kind = UYA_GUI_SIM_PRESENT_SOFTWARE;
     return 1;
 }

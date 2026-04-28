@@ -211,9 +211,23 @@ Button {
     }
 
     fn render(self: &Self, ctx: &RenderCtx) void {
+        const area: Rect = self.widget.base.screen_area();
         const inner: Rect = widget_draw_surface(&self.widget, ctx);
         const font: &Font = widget_font(&self.widget.base.style);
         const color: Color = widget_text_color(&self.widget.base.style, self.widget.state);
+        const border_width: u8 = (self.widget.base.style.get_u32_or(StyleProp.BorderWidth, 0u32) as! u8).value;
+        const border_color: Color = self.widget.base.style.get_color_or(StyleProp.BorderColor, TRANSPARENT);
+        const radius: u8 = (self.widget.base.style.get_u32_or(StyleProp.Radius, 0u32) as! u8).value;
+
+        if border_width > 0u8 && border_color.a > 0u8 && radius > 0u8 {
+            const rx: i16 = radius as i16;
+            const right_x: i16 = area.x + area.w as i16 - rx - 1;
+            const bottom_y: i16 = area.y + area.h as i16 - 1;
+            if right_x >= area.x + rx {
+                ctx.draw_line(area.x + rx, area.y, right_x, area.y, border_color, border_width);
+                ctx.draw_line(area.x + rx, bottom_y, right_x, bottom_y, border_color, border_width);
+            }
+        }
 
         if self.variant == BtnVariant.Icon {
             button_draw_icon(self, ctx, inner, color);
