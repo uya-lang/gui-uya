@@ -6,6 +6,7 @@ use core.rect.Rect;
 use libc.snprintf;
 use platform.disp.PixelFormat;
 use platform.disp.framebuffer_new;
+use platform.disp.framebuffer_required_bytes;
 use render.ctx.RenderCtx;
 use render.ctx.render_ctx_new;
 use render.font.Font;
@@ -13,14 +14,19 @@ use render.font.draw_text;
 use render.font.font_system_ui_ref;
 use render.font.font_ui_default_ref;
 use render.font.text_width;
+use sim.common.SIM_DEFAULT_RES_HEIGHT;
+use sim.common.SIM_DEFAULT_RES_WIDTH;
+
+extern fn malloc(size: usize) &void;
+extern fn free(ptr: &void) void;
 
 const NOVEL_TEXT_CAPACITY: i32 = 49152;
 const NOVEL_LINE_CAPACITY: i32 = 1536;
 const NOVEL_CHAPTER_COUNT: i32 = 12;
 const NOVEL_SCRATCH_CAPACITY: i32 = 1536;
 
-const NOVEL_DEMO_W: u16 = 640u16;
-const NOVEL_DEMO_H: u16 = 480u16;
+const NOVEL_DEMO_W: u16 = SIM_DEFAULT_RES_WIDTH;
+const NOVEL_DEMO_H: u16 = SIM_DEFAULT_RES_HEIGHT;
 const NOVEL_RAIL_X: i16 = 24;
 const NOVEL_RAIL_Y: i16 = 18;
 const NOVEL_RAIL_W: u16 = 150u16;
@@ -1106,8 +1112,15 @@ export fn render_demo_novel(ctx: &RenderCtx, origin_x: i16, origin_y: i16) void 
 }
 
 export fn run_demo_novel() i32 {
-    var bytes: [byte: 1228800] = [];
-    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 640, 480, 2560, PixelFormat.ARGB8888));
+    const bytes_len: usize = framebuffer_required_bytes(SIM_DEFAULT_RES_WIDTH, SIM_DEFAULT_RES_HEIGHT, PixelFormat.ARGB8888);
+    const bytes: &byte = malloc(bytes_len) as &byte;
+    if bytes == null {
+        return 2;
+    }
+    defer {
+        free(bytes as &void);
+    }
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(bytes, SIM_DEFAULT_RES_WIDTH, SIM_DEFAULT_RES_HEIGHT, SIM_DEFAULT_RES_WIDTH * 4u16, PixelFormat.ARGB8888));
     ctx.clear(Color{ r: 16, g: 44, b: 52, a: 255 });
     var novel: NovelRetained = novel_retained_new();
     render_demo_novel_state(&novel, &ctx, 0, 0);

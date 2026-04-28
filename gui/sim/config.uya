@@ -1,5 +1,7 @@
 use libc.atoi;
 use libc.getenv;
+use sim.common.SIM_DEFAULT_RES_HEIGHT;
+use sim.common.SIM_DEFAULT_RES_WIDTH;
 use sim.common.sim_cstr_empty;
 use sim.common.sim_cstr_eq;
 use std.runtime.get_argc;
@@ -86,29 +88,13 @@ export fn sim_demo_name(kind: SimDemoKind) &const byte {
 }
 
 export fn sim_demo_default_width(kind: SimDemoKind) u16 {
-    if kind == SimDemoKind.Clock
-        || kind == SimDemoKind.Music
-        || kind == SimDemoKind.Settings
-        || kind == SimDemoKind.Dashboard
-        || kind == SimDemoKind.Game
-        || kind == SimDemoKind.Perf
-        || kind == SimDemoKind.Novel {
-        return 640;
-    }
-    return 320;
+    _ = kind;
+    return SIM_DEFAULT_RES_WIDTH;
 }
 
 export fn sim_demo_default_height(kind: SimDemoKind) u16 {
-    if kind == SimDemoKind.Clock
-        || kind == SimDemoKind.Music
-        || kind == SimDemoKind.Settings
-        || kind == SimDemoKind.Dashboard
-        || kind == SimDemoKind.Game
-        || kind == SimDemoKind.Perf
-        || kind == SimDemoKind.Novel {
-        return 480;
-    }
-    return 240;
+    _ = kind;
+    return SIM_DEFAULT_RES_HEIGHT;
 }
 
 export fn sim_demo_is_phase(kind: SimDemoKind) bool {
@@ -137,9 +123,9 @@ export fn sim_config_default() SimConfig {
         backend: SimBackendKind.Sdl2,
         gpu: SimGpuKind.Auto,
         demo: SimDemoKind.Phase4,
-        width: 640,
-        height: 480,
-        scale: 3,
+        width: SIM_DEFAULT_RES_WIDTH,
+        height: SIM_DEFAULT_RES_HEIGHT,
+        scale: 1,
         fullscreen: false,
         hud_enabled: true,
         show_help: false,

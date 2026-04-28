@@ -1,5 +1,7 @@
 export const SIM_TEXT_CAPACITY: i32 = 160;
 export const SIM_PATH_CAPACITY: i32 = 256;
+export const SIM_DEFAULT_RES_WIDTH: u16 = 1920u16;
+export const SIM_DEFAULT_RES_HEIGHT: u16 = 1080u16;
 
 export const SIM_KEY_ESCAPE: u16 = 27;
 export const SIM_KEY_ENTER: u16 = 13;
@@ -50,4 +52,3 @@ export fn sim_copy_cstr(dst: &byte, capacity: usize, src: &const byte) bool {
     dst[i] = 0;
     return true;
 }
-

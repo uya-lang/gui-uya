@@ -1,8 +1,11 @@
 use core.color.Color;
 use platform.disp.PixelFormat;
 use platform.disp.framebuffer_new;
+use platform.disp.framebuffer_required_bytes;
 use render.ctx.RenderCtx;
 use render.ctx.render_ctx_new;
+use sim.common.SIM_DEFAULT_RES_HEIGHT;
+use sim.common.SIM_DEFAULT_RES_WIDTH;
 use style.StyleProp;
 use widget.btn.Button;
 use widget.lbl.Label;
@@ -10,6 +13,9 @@ use widget.list.ListView;
 use widget.page.Page;
 use widget.panel.Panel;
 use widget.slider.Slider;
+
+extern fn malloc(size: usize) &void;
+extern fn free(ptr: &void) void;
 
 fn music_track_name(index: i32) &const byte {
     if index == 0 {
@@ -24,7 +30,7 @@ fn music_track_name(index: i32) &const byte {
 export fn render_demo_music_state(ctx: &RenderCtx, origin_x: i16, origin_y: i16, track_idx: i32, playing: bool, progress_value: i32) void {
     var page: Page = Page.new("Music");
     page.widget.at(origin_x, origin_y);
-    page.widget.size(640, 480);
+    page.widget.size(SIM_DEFAULT_RES_WIDTH, SIM_DEFAULT_RES_HEIGHT);
     page.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 247, g: 244, b: 255, a: 255 });
 
     var hero: Panel = Panel.new();
@@ -84,8 +90,15 @@ export fn render_demo_music(ctx: &RenderCtx, origin_x: i16, origin_y: i16) void 
 }
 
 export fn run_demo_music() i32 {
-    var bytes: [byte: 1228800] = [];
-    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 640, 480, 2560, PixelFormat.ARGB8888));
+    const bytes_len: usize = framebuffer_required_bytes(SIM_DEFAULT_RES_WIDTH, SIM_DEFAULT_RES_HEIGHT, PixelFormat.ARGB8888);
+    const bytes: &byte = malloc(bytes_len) as &byte;
+    if bytes == null {
+        return 2;
+    }
+    defer {
+        free(bytes as &void);
+    }
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(bytes, SIM_DEFAULT_RES_WIDTH, SIM_DEFAULT_RES_HEIGHT, SIM_DEFAULT_RES_WIDTH * 4u16, PixelFormat.ARGB8888));
     ctx.clear(Color{ r: 247, g: 244, b: 255, a: 255 });
     render_demo_music(&ctx, 0, 0);
     if ctx.stats.text_ops == 0u32 || ctx.stats.rect_ops == 0u32 {
