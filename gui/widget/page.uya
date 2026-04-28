@@ -25,6 +25,8 @@ use widget.base.widget_bind_callbacks;
 use widget.base.widget_draw_surface;
 use widget.base.widget_inner_rect;
 use widget.base.widget_new;
+use widget.base.widget_render_children;
+use widget.base.widget_render_children_translated;
 use widget.canvas.Canvas;
 use widget.chart.Chart;
 use widget.grid_view.GridView;
@@ -235,19 +237,12 @@ Page {
     fn render(self: &Self, ctx: &RenderCtx) void {
         const inner: Rect = widget_draw_surface(&self.widget, ctx);
         ctx.push_clip(inner);
-        var child: &GuiObj = self.widget.base.child_head;
-        while child != null {
-            const orig_x: i16 = child.x;
-            const orig_y: i16 = child.y;
-            if self.scrollable {
-                child.x = orig_x - self.scroll_x;
-                child.y = orig_y - self.scroll_y;
-            }
-            child.render(ctx);
-            child.x = orig_x;
-            child.y = orig_y;
-            child = child.sibling_next;
+        if !self.scrollable {
+            widget_render_children(&self.widget.base, ctx);
+            ctx.pop_clip();
+            return;
         }
+        widget_render_children_translated(&self.widget.base, ctx, 0i16 - self.scroll_x, 0i16 - self.scroll_y);
         ctx.pop_clip();
     }
 

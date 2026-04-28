@@ -22,6 +22,7 @@ use widget.base.widget_bind_callbacks;
 use widget.base.widget_draw_surface;
 use widget.base.widget_inner_rect;
 use widget.base.widget_new;
+use widget.base.widget_render_children;
 use widget.canvas.Canvas;
 use widget.chart.Chart;
 use widget.grid_view.GridView;
@@ -160,11 +161,7 @@ Panel {
     fn render(self: &Self, ctx: &RenderCtx) void {
         const inner: Rect = widget_draw_surface(&self.widget, ctx);
         ctx.push_clip(inner);
-        var child: &GuiObj = self.widget.base.child_head;
-        while child != null {
-            child.render(ctx);
-            child = child.sibling_next;
-        }
+        widget_render_children(&self.widget.base, ctx);
         ctx.pop_clip();
     }
 

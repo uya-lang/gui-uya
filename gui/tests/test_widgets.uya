@@ -282,6 +282,97 @@ test "page can render nested widgets" {
     try assert_eq_bool(ctx.stats.text_ops > 0u32, true);
 }
 
+test "page culls fully occluded lower sibling subtree when later sibling is opaque" {
+    gui_obj_reset_registry();
+
+    var bytes: [byte: 8192] = [];
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 40, 40, 160, PixelFormat.ARGB8888));
+    var page: Page = Page.new("CullPage");
+    var bottom: Panel = Panel.new();
+    var top: Panel = Panel.new();
+    var label: Label = Label.new("Hidden");
+    const top_color_draw: Color = Color{ r: 24, g: 32, b: 48, a: 255 };
+    const top_color_expect: Color = Color{ r: 24, g: 32, b: 48, a: 255 };
+
+    page.widget.size(40, 40);
+    page.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 0, g: 0, b: 0, a: 0 });
+    page.widget.base.style.set_u32(StyleProp.BorderWidth, 0u32);
+    page.widget.base.style.set_u32(StyleProp.PaddingLeft, 0u32);
+    page.widget.base.style.set_u32(StyleProp.PaddingRight, 0u32);
+    page.widget.base.style.set_u32(StyleProp.PaddingTop, 0u32);
+    page.widget.base.style.set_u32(StyleProp.PaddingBottom, 0u32);
+
+    bottom.widget.at(4, 4);
+    bottom.widget.size(24, 24);
+    bottom.widget.base.style.set_u32(StyleProp.Radius, 0u32);
+    bottom.widget.base.style.set_u32(StyleProp.PaddingLeft, 0u32);
+    bottom.widget.base.style.set_u32(StyleProp.PaddingRight, 0u32);
+    bottom.widget.base.style.set_u32(StyleProp.PaddingTop, 0u32);
+    bottom.widget.base.style.set_u32(StyleProp.PaddingBottom, 0u32);
+
+    label.widget.at(4, 8);
+    label.widget.size(16, 8);
+    bottom.add(label.obj());
+
+    top.widget.at(4, 4);
+    top.widget.size(24, 24);
+    top.widget.base.style.set_color(StyleProp.BgColor, top_color_draw);
+    top.widget.base.style.set_u32(StyleProp.Radius, 0u32);
+
+    page.add(bottom.obj());
+    page.add(top.obj());
+    page.render(&ctx);
+
+    try assert_eq_i32(ctx.stats.text_ops as i32, 0);
+    try assert_eq_bool(ctx_pixel(&ctx, 10, 10) == top_color_expect, true);
+}
+
+test "scrollable page also culls fully occluded lower sibling subtree" {
+    gui_obj_reset_registry();
+
+    var bytes: [byte: 8192] = [];
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 40, 40, 160, PixelFormat.ARGB8888));
+    var page: Page = Page.new("ScrollCullPage");
+    var bottom: Panel = Panel.new();
+    var top: Panel = Panel.new();
+    var label: Label = Label.new("Hidden");
+    const scroll_top_color_draw: Color = Color{ r: 38, g: 52, b: 74, a: 255 };
+    const scroll_top_color_expect: Color = Color{ r: 38, g: 52, b: 74, a: 255 };
+
+    page.scrollable = true;
+    page.widget.size(40, 40);
+    page.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 0, g: 0, b: 0, a: 0 });
+    page.widget.base.style.set_u32(StyleProp.BorderWidth, 0u32);
+    page.widget.base.style.set_u32(StyleProp.PaddingLeft, 0u32);
+    page.widget.base.style.set_u32(StyleProp.PaddingRight, 0u32);
+    page.widget.base.style.set_u32(StyleProp.PaddingTop, 0u32);
+    page.widget.base.style.set_u32(StyleProp.PaddingBottom, 0u32);
+
+    bottom.widget.at(4, 4);
+    bottom.widget.size(24, 24);
+    bottom.widget.base.style.set_u32(StyleProp.Radius, 0u32);
+    bottom.widget.base.style.set_u32(StyleProp.PaddingLeft, 0u32);
+    bottom.widget.base.style.set_u32(StyleProp.PaddingRight, 0u32);
+    bottom.widget.base.style.set_u32(StyleProp.PaddingTop, 0u32);
+    bottom.widget.base.style.set_u32(StyleProp.PaddingBottom, 0u32);
+
+    label.widget.at(4, 8);
+    label.widget.size(16, 8);
+    bottom.add(label.obj());
+
+    top.widget.at(4, 4);
+    top.widget.size(24, 24);
+    top.widget.base.style.set_color(StyleProp.BgColor, scroll_top_color_draw);
+    top.widget.base.style.set_u32(StyleProp.Radius, 0u32);
+
+    page.add(bottom.obj());
+    page.add(top.obj());
+    page.render(&ctx);
+
+    try assert_eq_i32(ctx.stats.text_ops as i32, 0);
+    try assert_eq_bool(ctx_pixel(&ctx, 10, 10) == scroll_top_color_expect, true);
+}
+
 test "page navigator supports push pop transitions and edge swipe" {
     var bytes: [byte: 8192] = [];
     var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 48, 32, 192, PixelFormat.ARGB8888));
