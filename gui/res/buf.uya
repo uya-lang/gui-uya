@@ -74,6 +74,7 @@ export struct Buffer {
     }
 }
 
+/// 创建基于指定分配器的动态缓冲区。
 export fn buffer_new(allocator: &MallocAllocator) Buffer {
     return Buffer{
         allocator: allocator,
@@ -83,6 +84,7 @@ export fn buffer_new(allocator: &MallocAllocator) Buffer {
     };
 }
 
+/// 基于指针和长度构造类型安全切片。
 export fn slice_from_ptr<T>(ptr: &T, len: usize) Slice<T> {
     return Slice<T>{
         ptr: ptr,

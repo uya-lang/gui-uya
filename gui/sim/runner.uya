@@ -341,6 +341,7 @@ fn run_simulator_fb(cfg_in: SimConfig) i32 {
     return 0;
 }
 
+/// 启动模拟器主循环并返回退出码。
 export fn run_simulator() i32 {
     const cfg: SimConfig = sim_config_from_runtime();
     if cfg.show_help {

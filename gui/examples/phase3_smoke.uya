@@ -30,6 +30,7 @@ use widget.panel.Panel;
 use widget.slider.Slider;
 use widget.switch.Switch;
 
+/// 运行 `phase3_smoke` 场景并返回退出码。
 export fn run_phase3_smoke() i32 {
     var front_bytes: [byte: 16384] = [];
     var back_bytes: [byte: 16384] = [];

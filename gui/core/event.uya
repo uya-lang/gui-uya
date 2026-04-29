@@ -293,6 +293,7 @@ export struct GestureConfig {
     pinch_threshold: u16,
 }
 
+/// 返回默认的手势识别配置。
 export fn gesture_config_default() GestureConfig {
     return GestureConfig{
         click_max_duration: 500,
@@ -304,6 +305,7 @@ export fn gesture_config_default() GestureConfig {
     };
 }
 
+/// 按指定配置创建手势识别器。
 export fn gesture_detector_with_config(config: GestureConfig) GestureDetector {
     return GestureDetector{
         config: config,
@@ -320,12 +322,14 @@ export fn gesture_detector_with_config(config: GestureConfig) GestureDetector {
     };
 }
 
+/// 返回带有指定传播阶段的事件副本。
 export fn event_with_phase(evt: Event, phase: EventPhase) Event {
     var next: Event = evt;
     next.phase = phase;
     return next;
 }
 
+/// 构造同时携带坐标和值的事件。
 export fn event_point_value(kind: EventType, dev: InputDev, target: i32, timestamp: u32, point: Point, value: i32) Event {
     return Event{
         event_type: kind,
@@ -342,6 +346,7 @@ export fn event_point_value(kind: EventType, dev: InputDev, target: i32, timesta
     };
 }
 
+/// 构造焦点进入或离开事件。
 export fn event_focus(kind: EventType, target: i32, timestamp: u32) Event {
     return Event{
         event_type: kind,
@@ -355,6 +360,7 @@ export fn event_focus(kind: EventType, target: i32, timestamp: u32) Event {
     };
 }
 
+/// 构造空事件值。
 export fn event_none() Event {
     return Event{
         event_type: EventType.None,
@@ -368,6 +374,7 @@ export fn event_none() Event {
     };
 }
 
+/// 构造包含事件值的 `EventOption`。
 export fn event_option_some(evt: Event) EventOption {
     return EventOption{
         has_value: true,
@@ -375,6 +382,7 @@ export fn event_option_some(evt: Event) EventOption {
     };
 }
 
+/// 构造空的 `EventOption`。
 export fn event_option_none() EventOption {
     return EventOption{
         has_value: false,
@@ -382,6 +390,7 @@ export fn event_option_none() EventOption {
     };
 }
 
+/// 构造携带坐标的事件。
 export fn event_point(kind: EventType, dev: InputDev, target: i32, timestamp: u32, point: Point) Event {
     return Event{
         event_type: kind,
@@ -395,6 +404,7 @@ export fn event_point(kind: EventType, dev: InputDev, target: i32, timestamp: u3
     };
 }
 
+/// 构造携带键码的事件。
 export fn event_key(kind: EventType, dev: InputDev, target: i32, timestamp: u32, key_code: u16) Event {
     return Event{
         event_type: kind,
@@ -408,6 +418,7 @@ export fn event_key(kind: EventType, dev: InputDev, target: i32, timestamp: u32,
     };
 }
 
+/// 构造携带数值的事件。
 export fn event_value(kind: EventType, dev: InputDev, target: i32, timestamp: u32, value: i32) Event {
     return Event{
         event_type: kind,
@@ -421,6 +432,7 @@ export fn event_value(kind: EventType, dev: InputDev, target: i32, timestamp: u3
     };
 }
 
+/// 创建空的事件队列。
 export fn event_queue_new() EventQueue {
     return EventQueue{
         buffer: [],
@@ -431,6 +443,7 @@ export fn event_queue_new() EventQueue {
     };
 }
 
+/// 创建使用默认配置的手势识别器。
 export fn gesture_detector_new() GestureDetector {
     return gesture_detector_with_config(gesture_config_default());
 }

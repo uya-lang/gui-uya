@@ -336,6 +336,7 @@ export struct InputManager {
     }
 }
 
+/// 根据采样点拟合触摸校准参数。
 export fn touch_calibration_from_samples(samples: &TouchCalibSample, count: i32) TouchCalibration {
     if samples == null || count <= 0 {
         return indev_identity_calibration();
@@ -384,6 +385,7 @@ export fn touch_calibration_from_samples(samples: &TouchCalibSample, count: i32)
     return calib;
 }
 
+/// 创建触摸输入驱动实例。
 export fn touch_driver_new() TouchDriver {
     return TouchDriver{
         queue: event_queue_new(),
@@ -399,6 +401,7 @@ export fn touch_driver_new() TouchDriver {
     };
 }
 
+/// 将触摸驱动切换到更适合桌面指针的精度配置。
 export fn touch_driver_configure_pointer_precision(driver: &TouchDriver) void {
     if driver == null {
         return;
@@ -408,18 +411,22 @@ export fn touch_driver_configure_pointer_precision(driver: &TouchDriver) void {
     driver.set_filter_enabled(false);
 }
 
+/// 创建鼠标输入驱动实例。
 export fn mouse_driver_new() MouseDriver {
     return MouseDriver{ queue: event_queue_new() };
 }
 
+/// 创建键盘输入驱动实例。
 export fn key_driver_new() KeyDriver {
     return KeyDriver{ queue: event_queue_new() };
 }
 
+/// 创建编码器输入驱动实例。
 export fn encoder_driver_new() EncoderDriver {
     return EncoderDriver{ queue: event_queue_new() };
 }
 
+/// 创建输入设备管理器实例。
 export fn input_manager_new() InputManager {
     return InputManager{
         slots: [],
@@ -428,10 +435,12 @@ export fn input_manager_new() InputManager {
     };
 }
 
+/// 返回不做变换的触摸校准参数。
 export fn touch_calibration_identity() TouchCalibration {
     return indev_identity_calibration();
 }
 
+/// 返回默认的触摸中值滤波器。
 export fn touch_filter_default() TouchMedianFilter {
     return TouchMedianFilter{
         enabled: true,

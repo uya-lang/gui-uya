@@ -541,6 +541,7 @@ export struct PageNavigator {
     }
 }
 
+/// 返回空的页面过渡状态。
 export fn page_transition_none() PageTransitionState {
     return PageTransitionState{
         kind: PageTransitionKind.None,
@@ -554,6 +555,7 @@ export fn page_transition_none() PageTransitionState {
     };
 }
 
+/// 创建页面导航器实例。
 export fn page_navigator_new(viewport: Rect) PageNavigator {
     return PageNavigator{
         pages: [],

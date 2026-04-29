@@ -296,6 +296,7 @@ fn dashboard_present(display: &SdlDisplay, result: RenderFrameResult, ctx: &Rend
     return true;
 }
 
+/// 运行 Uya 侧 dashboard 对照程序并返回退出码。
 export fn run_dashboard_compare() i32 {
     const capture: bool = dashboard_env_bool("UYA_DASHBOARD_CAPTURE" as &const byte, true);
     const frames: u32 = dashboard_env_u32("UYA_DASHBOARD_FRAMES" as &const byte, COMPARE_DEFAULT_FRAMES, 1000000u32);

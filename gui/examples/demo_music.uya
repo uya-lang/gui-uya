@@ -47,6 +47,7 @@ export struct MusicRetained {
     ready: bool,
 }
 
+/// 创建默认的 `MusicRetained` 实例。
 export fn music_retained_new() MusicRetained {
     return MusicRetained{
         tree: obj_tree_new(),
@@ -62,6 +63,7 @@ export fn music_retained_new() MusicRetained {
     };
 }
 
+/// 初始化 `music_retained` 的内部状态。
 export fn music_retained_init(music: &MusicRetained) void {
     if music == null || music.ready {
         return;
@@ -114,6 +116,7 @@ export fn music_retained_init(music: &MusicRetained) void {
     music.ready = true;
 }
 
+/// 将外部状态同步到 `music_retained`。
 export fn music_retained_sync(music: &MusicRetained, track_idx: i32, playing: bool, progress_value: i32) void {
     if music == null {
         return;
@@ -129,6 +132,7 @@ export fn music_retained_sync(music: &MusicRetained, track_idx: i32, playing: bo
     music.queue.select(track_idx);
 }
 
+/// 按 retained 状态参数将 `music` demo 渲染到指定上下文。
 export fn render_demo_music_retained_state(music: &MusicRetained, ctx: &RenderCtx, origin_x: i16, origin_y: i16, track_idx: i32, playing: bool, progress_value: i32) void {
     if music == null {
         return;
@@ -138,15 +142,18 @@ export fn render_demo_music_retained_state(music: &MusicRetained, ctx: &RenderCt
     music.page.render(ctx);
 }
 
+/// 按显式状态参数将 `music` demo 渲染到指定上下文。
 export fn render_demo_music_state(ctx: &RenderCtx, origin_x: i16, origin_y: i16, track_idx: i32, playing: bool, progress_value: i32) void {
     var music: MusicRetained = music_retained_new();
     render_demo_music_retained_state(&music, ctx, origin_x, origin_y, track_idx, playing, progress_value);
 }
 
+/// 将 `music` demo 渲染到指定上下文。
 export fn render_demo_music(ctx: &RenderCtx, origin_x: i16, origin_y: i16) void {
     render_demo_music_state(ctx, origin_x, origin_y, 1, false, 42);
 }
 
+/// 运行 `music` demo 并返回退出码。
 export fn run_demo_music() i32 {
     const bytes_len: usize = framebuffer_required_bytes(SIM_DEFAULT_RES_WIDTH, SIM_DEFAULT_RES_HEIGHT, PixelFormat.ARGB8888);
     const bytes: &byte = malloc(bytes_len) as &byte;

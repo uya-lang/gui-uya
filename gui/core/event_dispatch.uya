@@ -229,6 +229,7 @@ export struct EventDispatcher {
     }
 }
 
+/// 创建默认的事件分发器。
 export fn event_dispatcher_new() EventDispatcher {
     return EventDispatcher{
         queue: event_queue_new(),

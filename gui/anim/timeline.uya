@@ -88,6 +88,7 @@ export struct AnimManager {
     }
 }
 
+/// 创建默认的动画管理器实例。
 export fn anim_manager_new() AnimManager {
     return AnimManager{
         tweens: [],

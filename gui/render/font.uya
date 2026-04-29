@@ -1776,6 +1776,7 @@ fn ttf_cache_slot_offset(idx: i32) usize {
     return (idx as usize) * TTF_CACHE_SLOT_BYTES as usize;
 }
 
+/// 重置运行时 TTF 字形缓存统计与内容。
 export fn ttf_cache_reset() void {
     var i: i32 = 0;
     while i < TTF_CACHE_ENTRY_CAPACITY {
@@ -1798,10 +1799,12 @@ export fn ttf_cache_reset() void {
     _ttf_cache_misses = 0u32;
 }
 
+/// 返回当前 TTF 字形缓存命中次数。
 export fn ttf_cache_hit_count() u32 {
     return _ttf_cache_hits;
 }
 
+/// 返回当前 TTF 字形缓存未命中次数。
 export fn ttf_cache_miss_count() u32 {
     return _ttf_cache_misses;
 }
@@ -1875,6 +1878,7 @@ fn ttf_cache_reserve(asset: &TtfFontAsset, glyph: &Glyph) i32 {
     return idx;
 }
 
+/// 切换指定 TTF 字体资产的 hinting 开关。
 export fn ttf_font_set_hinting(asset: &TtfFontAsset, enabled: bool) void {
     if asset != null {
         asset.hint_enabled = enabled;
@@ -1990,6 +1994,7 @@ fn ttf_font_asset_reset(asset: &TtfFontAsset) void {
     asset.native_backend = null;
 }
 
+/// 创建空的 TTF 字体资产对象。
 export fn ttf_font_asset_new() TtfFontAsset {
     var asset: TtfFontAsset = TtfFontAsset{
         font: font_empty(),
@@ -2064,10 +2069,12 @@ fn font_backend_use_c_stb() bool {
     return _font_backend_default_c_stb;
 }
 
+/// 判断当前默认 TTF 后端是否使用 C 实现。
 export fn ttf_font_native_backend_is_c() bool {
     return font_backend_use_c_stb();
 }
 
+/// 设置默认 TTF 后端是否优先使用 C 实现。
 export fn ttf_font_set_default_native_backend_c(enabled: bool) void {
     _font_backend_default_c_stb = enabled;
 }
@@ -2923,6 +2930,7 @@ fn ttf_font_load_memory_with_face(asset: &TtfFontAsset, name: &const byte, data:
     return true;
 }
 
+/// 从内存字节中加载一份 TTF 字体资产。
 export fn ttf_font_load_memory(asset: &TtfFontAsset, name: &const byte, data: &const byte, len: usize, pixel_height: u16) bool {
     return ttf_font_load_memory_with_face(asset, name, data, len, pixel_height, null);
 }
@@ -3061,6 +3069,7 @@ fn bitmap_font_asset_add_kerning(asset: &BitmapFontAsset, left: u32, right: u32,
     return true;
 }
 
+/// 创建空的位图字体资产对象。
 export fn bitmap_font_asset_new() BitmapFontAsset {
     var asset: BitmapFontAsset = BitmapFontAsset{
         font: font_empty(),
@@ -3081,6 +3090,7 @@ export fn bitmap_font_asset_new() BitmapFontAsset {
     return asset;
 }
 
+/// 从 BMFont 描述文本和位图数据加载位图字体。
 export fn bitmap_font_load_bmfont(asset: &BitmapFontAsset, desc: &const byte, len: usize, bitmap_data: &const byte, bitmap_stride: u16) bool {
     if asset == null || desc == null || bitmap_data == null || len == 0usize || bitmap_stride == 0u16 {
         return false;
@@ -3186,6 +3196,7 @@ export fn bitmap_font_load_bmfont(asset: &BitmapFontAsset, desc: &const byte, le
     return true;
 }
 
+/// 返回默认系统字体。
 export fn font_system_default() Font {
     font_init_builtin_tables();
     return Font{
@@ -3210,6 +3221,7 @@ export fn font_system_default() Font {
     };
 }
 
+/// 返回更紧凑的系统字体。
 export fn font_system_compact() Font {
     font_init_builtin_tables();
     return Font{
@@ -3234,6 +3246,7 @@ export fn font_system_compact() Font {
     };
 }
 
+/// 返回矢量系统字体。
 export fn font_system_vector() Font {
     font_init_builtin_tables();
     return Font{
@@ -3258,6 +3271,7 @@ export fn font_system_vector() Font {
     };
 }
 
+/// 返回按像素高度解析后的默认 UI 字体引用。
 export fn font_ui_default_ref(pixel_height: u8) &Font {
     if pixel_height == 0u8 {
         return null;
@@ -3300,6 +3314,7 @@ export fn font_ui_default_ref(pixel_height: u8) &Font {
     return &slot.asset.font;
 }
 
+/// 返回按像素高度解析后的系统 UI 字体引用。
 export fn font_system_ui_ref(pixel_height: u8) &Font {
     if pixel_height == 0u8 {
         return null;
@@ -3344,6 +3359,7 @@ export fn font_system_ui_ref(pixel_height: u8) &Font {
     return &slot.asset.font;
 }
 
+/// 设置 UI 字体逻辑到像素的 DPI 标尺。
 export fn font_ui_set_dpi(dpi: u16) void {
     if dpi == 0u16 {
         _font_ui_dpi = UI_FONT_BASE_DPI;
@@ -3352,10 +3368,12 @@ export fn font_ui_set_dpi(dpi: u16) void {
     _font_ui_dpi = dpi;
 }
 
+/// 返回当前 UI 字体 DPI 标尺。
 export fn font_ui_dpi() u16 {
     return _font_ui_dpi;
 }
 
+/// 将逻辑字号换算为运行时像素高度。
 export fn font_ui_pixel_height(logical_height: u8) u8 {
     if logical_height == 0u8 {
         return 0u8;
@@ -3363,22 +3381,27 @@ export fn font_ui_pixel_height(logical_height: u8) u8 {
     return (font_resolve_ui_height(logical_height as u16) as! u8).value;
 }
 
+/// 重置 UI 字体运行时缓存和 DPI 状态。
 export fn font_ui_reset_runtime() void {
     _font_ui_dpi = UI_FONT_BASE_DPI;
 }
 
+/// 返回默认字体值。
 export fn font_default() Font {
     return font_system_default();
 }
 
+/// 根据 ASCII 码点返回对应字形。
 export fn glyph_for_char(font: &Font, code: u8) Glyph {
     return font.get_glyph(code as u32);
 }
 
+/// 计算指定文本在给定字体下的显示宽度。
 export fn text_width(text: &const byte, len: usize, font: &Font) i16 {
     return font.text_width(text, len);
 }
 
+/// 在渲染上下文中绘制一段文本。
 export fn draw_text(ctx: &RenderCtx, x: i16, y: i16, text: &const byte, len: usize, font: &Font, color: Color) void {
     if ctx == null || font == null || text == null || len == 0usize {
         return;
@@ -3408,6 +3431,7 @@ export fn draw_text(ctx: &RenderCtx, x: i16, y: i16, text: &const byte, len: usi
     ctx.stats.text_ops = ctx.stats.text_ops + 1u32;
 }
 
+/// 在指定矩形内按对齐方式绘制文本。
 export fn draw_text_aligned(ctx: &RenderCtx, rect: Rect, text: &const byte, len: usize, font: &Font, color: Color, align: TextAlign) void {
     const width: i16 = text_width(text, len, font);
     var x: i16 = rect.x;

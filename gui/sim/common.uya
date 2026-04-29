@@ -21,22 +21,27 @@ fn sim_layout_scale_axis_i32(value: i32, target: u16, base: u16) i32 {
     return (value * target as i32 + base as i32 / 2) / base as i32;
 }
 
+/// 提供 `sim_layout_x` 的公开辅助入口。
 export fn sim_layout_x(value: i16) i16 {
     return (sim_layout_scale_axis_i32(value as i32, SIM_DEFAULT_RES_WIDTH, SIM_LAYOUT_BASE_WIDTH) as! i16).value;
 }
 
+/// 提供 `sim_layout_y` 的公开辅助入口。
 export fn sim_layout_y(value: i16) i16 {
     return (sim_layout_scale_axis_i32(value as i32, SIM_DEFAULT_RES_HEIGHT, SIM_LAYOUT_BASE_HEIGHT) as! i16).value;
 }
 
+/// 提供 `sim_layout_w` 的公开辅助入口。
 export fn sim_layout_w(value: u16) u16 {
     return (sim_layout_scale_axis_i32(value as i32, SIM_DEFAULT_RES_WIDTH, SIM_LAYOUT_BASE_WIDTH) as! u16).value;
 }
 
+/// 提供 `sim_layout_h` 的公开辅助入口。
 export fn sim_layout_h(value: u16) u16 {
     return (sim_layout_scale_axis_i32(value as i32, SIM_DEFAULT_RES_HEIGHT, SIM_LAYOUT_BASE_HEIGHT) as! u16).value;
 }
 
+/// 提供 `sim_layout_font` 的公开辅助入口。
 export fn sim_layout_font(value: u8) u8 {
     const scaled_w: i32 = sim_layout_scale_axis_i32(value as i32, SIM_DEFAULT_RES_WIDTH, SIM_LAYOUT_BASE_WIDTH);
     const scaled_h: i32 = sim_layout_scale_axis_i32(value as i32, SIM_DEFAULT_RES_HEIGHT, SIM_LAYOUT_BASE_HEIGHT);
@@ -53,6 +58,7 @@ export fn sim_layout_font(value: u8) u8 {
     return (scaled as! u8).value;
 }
 
+/// 提供 `sim_layout_square` 的公开辅助入口。
 export fn sim_layout_square(value: u16) u16 {
     const scaled_w: u16 = sim_layout_w(value);
     const scaled_h: u16 = sim_layout_h(value);
@@ -62,6 +68,7 @@ export fn sim_layout_square(value: u16) u16 {
     return scaled_h;
 }
 
+/// 返回 `sim_layout` 对应的矩形区域。
 export fn sim_layout_rect(x: i16, y: i16, w: u16, h: u16) Rect {
     return Rect{
         x: sim_layout_x(x),
@@ -71,6 +78,7 @@ export fn sim_layout_rect(x: i16, y: i16, w: u16, h: u16) Rect {
     };
 }
 
+/// 返回 `sim_layout_square` 对应的矩形区域。
 export fn sim_layout_square_rect(x: i16, y: i16, size: u16) Rect {
     const scaled_size: u16 = sim_layout_square(size);
     return Rect{
@@ -81,6 +89,7 @@ export fn sim_layout_square_rect(x: i16, y: i16, size: u16) Rect {
     };
 }
 
+/// 返回 `sim_layout` 对应的尺寸。
 export fn sim_layout_size(w: u16, h: u16) Size {
     return Size{
         w: sim_layout_w(w),
@@ -88,10 +97,12 @@ export fn sim_layout_size(w: u16, h: u16) Size {
     };
 }
 
+/// 判断 C 字符串是否为空。
 export fn sim_cstr_empty(text: &const byte) bool {
     return text == null || text[0] == 0;
 }
 
+/// 比较两个 C 字符串是否内容相等。
 export fn sim_cstr_eq(a: &const byte, b: &const byte) bool {
     if a == null || b == null {
         return a == b;
@@ -108,6 +119,7 @@ export fn sim_cstr_eq(a: &const byte, b: &const byte) bool {
     }
 }
 
+/// 将 C 字符串复制到固定容量缓冲区。
 export fn sim_copy_cstr(dst: &byte, capacity: usize, src: &const byte) bool {
     if dst == null || capacity == 0usize {
         return false;

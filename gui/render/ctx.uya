@@ -923,10 +923,12 @@ export struct RenderCtx {
     }
 }
 
+/// 返回空帧缓冲上下文使用的清屏颜色。
 export fn empty_framebuffer_color() Color {
     return TRANSPARENT;
 }
 
+/// 基于帧缓冲创建渲染上下文。
 export fn render_ctx_new(fb: FrameBuffer) RenderCtx {
     const clip: Rect = render_full_rect(&fb);
     return RenderCtx{
@@ -949,14 +951,17 @@ export fn render_ctx_new(fb: FrameBuffer) RenderCtx {
     };
 }
 
+/// 返回空的渲染上下文。
 export fn empty_render_ctx() RenderCtx {
     return render_ctx_new(empty_framebuffer());
 }
 
+/// 返回带默认帧缓冲的渲染上下文。
 export fn default_ctx() RenderCtx {
     return empty_render_ctx();
 }
 
+/// 读取渲染上下文帧缓冲中的指定像素。
 export fn ctx_pixel(ctx: &RenderCtx, x: i16, y: i16) Color {
     return framebuffer_get_pixel(&ctx.fb, x as i32, y as i32);
 }

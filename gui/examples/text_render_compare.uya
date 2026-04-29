@@ -166,6 +166,7 @@ fn draw_panel(
     draw_text(ctx, panel.x + 8, panel.y + 19, detail, text_len(detail), meta_font, detail_color[0]);
 }
 
+/// 运行 `text_render_compare` 并返回退出码。
 export fn run_text_render_compare() i32 {
     _ = mkdir("build\0" as &const byte, 0o755);
     _ = mkdir("build/text_compare\0" as &const byte, 0o755);

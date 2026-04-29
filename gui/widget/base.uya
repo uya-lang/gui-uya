@@ -653,6 +653,7 @@ Widget {
     }
 }
 
+/// 计算以 NUL 结尾的组件文本长度。
 export fn widget_text_len(text: &const byte) usize {
     if text == null {
         return 0usize;
@@ -660,6 +661,7 @@ export fn widget_text_len(text: &const byte) usize {
     return strlen(text as *const byte);
 }
 
+/// 创建基础 `Widget` 并初始化交互标志。
 export fn widget_new(name_ptr: &const byte, type_tag: u32, clickable: bool, focusable: bool) Widget {
     var base: GuiObj = gui_obj_default();
     base.type_tag = type_tag;
@@ -678,6 +680,7 @@ export fn widget_new(name_ptr: &const byte, type_tag: u32, clickable: bool, focu
     };
 }
 
+/// 为 `GuiObj` 绑定渲染与输入回调。
 export fn widget_bind_callbacks(base: &GuiObj, render_cb: &IGuiRenderCallback, input_cb: &IGuiInputCallback, user_data: &void) &GuiObj {
     base.render_cb = render_cb;
     base.input_cb = input_cb;
@@ -685,6 +688,7 @@ export fn widget_bind_callbacks(base: &GuiObj, render_cb: &IGuiRenderCallback, i
     return base;
 }
 
+/// 根据样式解析组件当前应使用的字体引用。
 export fn widget_font(style: &Style) &Font {
     const font_ptr: &void = style.get_ptr_or(StyleProp.Font, null);
     if font_ptr == null {
@@ -703,6 +707,7 @@ export fn widget_font(style: &Style) &Font {
     return font_ptr as &Font;
 }
 
+/// 按组件状态解析文本颜色。
 export fn widget_text_color(style: &Style, state: WidgetState) Color {
     const fg: Color = style.get_color_or(StyleProp.FgColor, BLACK);
     const bg: Color = style.get_color_or(StyleProp.BgColor, WHITE);
@@ -718,6 +723,7 @@ export fn widget_text_color(style: &Style, state: WidgetState) Color {
     return fg;
 }
 
+/// 按组件状态解析背景颜色。
 export fn widget_state_bg(style: &Style, state: WidgetState) Color {
     const base: Color = style.get_color_or(StyleProp.BgColor, WHITE);
     if state == WidgetState.Hovered {
@@ -735,6 +741,7 @@ export fn widget_state_bg(style: &Style, state: WidgetState) Color {
     return base;
 }
 
+/// 计算组件去除 padding 后的内容区域。
 export fn widget_inner_rect(widget: &Widget) Rect {
     const area: Rect = widget.base.screen_area();
     const pad_left: i16 = (widget.base.style.get_u32_or(StyleProp.PaddingLeft, 0u32) as! i16).value;
@@ -757,6 +764,7 @@ export fn widget_inner_rect(widget: &Widget) Rect {
     };
 }
 
+/// 绘制组件表面并返回内部内容区域。
 export fn widget_draw_surface(widget: &Widget, ctx: &RenderCtx) Rect {
     const area: Rect = widget.base.screen_area();
     const style: &Style = &widget.base.style;
@@ -785,6 +793,7 @@ export fn widget_draw_surface(widget: &Widget, ctx: &RenderCtx) Rect {
     return widget_inner_rect(widget);
 }
 
+/// 按当前坐标渲染组件的直接子节点。
 export fn widget_render_children(base: &GuiObj, ctx: &RenderCtx) void {
     var child: &GuiObj = base.child_head;
     while child != null {
@@ -793,12 +802,14 @@ export fn widget_render_children(base: &GuiObj, ctx: &RenderCtx) void {
     }
 }
 
+/// 带平移量渲染组件的直接子节点。
 export fn widget_render_children_translated(base: &GuiObj, ctx: &RenderCtx, dx: i16, dy: i16) void {
     widget_offset_children(base, dx, dy);
     widget_render_children(base, ctx);
     widget_offset_children(base, 0i16 - dx, 0i16 - dy);
 }
 
+/// 测量文本在指定字体下的像素宽度。
 export fn widget_measure_text(text: &const byte, font: &Font) i16 {
     const len: usize = widget_text_len(text);
     if len == 0 {
@@ -807,10 +818,12 @@ export fn widget_measure_text(text: &const byte, font: &Font) i16 {
     return text_width(text, len, font);
 }
 
+/// 复制颜色值。
 export fn widget_clone_color(color: Color) Color {
     return widget_copy_color(color);
 }
 
+/// 返回默认组件字体。
 export fn widget_default_font() Font {
     return font_default();
 }

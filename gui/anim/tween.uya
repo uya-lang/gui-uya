@@ -433,14 +433,17 @@ export struct Tween {
     }
 }
 
+/// 构造 `i32` 类型的动画值。
 export fn anim_value_i32(value: i32) AnimValue {
     return tween_value_i32(value);
 }
 
+/// 构造 `f32` 类型的动画值。
 export fn anim_value_f32(value: f32) AnimValue {
     return tween_value_f32(value);
 }
 
+/// 构造 `Color` 类型的动画值。
 export fn anim_value_color(value: Color) AnimValue {
     return tween_value_color(value);
 }

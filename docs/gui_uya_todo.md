@@ -23,6 +23,7 @@
 
 ## 当前实现快照
 
+- 2026-04-29 已补公共函数文档注释闭环: 为 `gui/**/*.uya` 的公开导出函数补齐源码 `///` 注释，并增强 `tools/gen_gui_api_docs.sh` 让 `make docs-api` 在 `docs/gui_uya_api_reference.md` 中同时展示函数签名与说明文字。
 - 2026-04-29 已补 Week 17 Day 3-4 集成测试闭环: 新增 `tests/test_integration.uya`，覆盖 10+ 页面复杂场景导航回路、`24h` 级虚拟时钟 retained 长稳、重复场景批量渲染 RSS 增长 smoke，以及多线程事件注入后串行分发一致性；当前 `make test` 稳定通过 `183` 个 GUI/runtime 测试与 `31` 个 render 测试。
 - 2026-04-29 已补 Week 17 Day 1-2 单元测试矩阵: 扩展 `tests/{test_rect,test_color,test_event,test_anim,test_widgets}.uya`，补齐 Rect / Color / 事件 / 动画 / 关键组件状态机与事件路径的高密度 case matrix；当前 `make test` 稳定通过 `179` 个 GUI/runtime 测试与 `31` 个 render 测试。
 - 2026-04-29 已补 benchmark snapshot / threshold 闭环: `benchmarks/core_bench.uya` 新增 `empty frame` / `fullscreen`，仓库新增 `gui/benchmarks/phase5_bench_baseline.json`、`tools/check_gui_bench.py`、`make bench-json`、`make bench-verify`，CI 现默认校验 benchmark 回归阈值。
@@ -963,7 +964,7 @@
 
 #### Day 1-2: API 文档
 - [x] 自动生成 API 文档
-- [ ] 每个公共函数文档注释
+- [x] 每个公共函数文档注释
 - [x] 使用示例代码
 - [x] 类型说明
 

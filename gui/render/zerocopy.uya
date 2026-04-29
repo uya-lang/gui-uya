@@ -153,6 +153,7 @@ export struct ZeroCopyCtx {
     }
 }
 
+/// 创建零拷贝显示提交上下文。
 export fn zerocopy_ctx_new(display: &DisplayCtx) ZeroCopyCtx {
     return ZeroCopyCtx{
         display: display,

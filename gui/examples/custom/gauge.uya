@@ -33,6 +33,7 @@ fn render_gauge(ctx: &RenderCtx, area: Rect, value: i32) void {
     ctx.fill_circle(cx, cy, 4, color_fill);
 }
 
+/// 运行 `custom_gauge_example` 示例并返回退出码。
 export fn run_custom_gauge_example() i32 {
     var bytes: [byte: 4608] = [];
     var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 48, 24, 192, PixelFormat.ARGB8888));

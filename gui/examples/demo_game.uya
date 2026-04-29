@@ -327,6 +327,7 @@ fn game_retained_init(game: &Game2048Retained) void {
     game_retained_reset(game);
 }
 
+/// 为 `game_retained` 设置确定性的随机种子。
 export fn game_retained_seed(game: &Game2048Retained, seed: u32) void {
     if game == null {
         return;
@@ -338,6 +339,7 @@ export fn game_retained_seed(game: &Game2048Retained, seed: u32) void {
     game.rng_state = seed;
 }
 
+/// 重置 `game_retained` 的运行时状态。
 export fn game_retained_reset(game: &Game2048Retained) void {
     if game == null {
         return;
@@ -390,6 +392,7 @@ fn game_try_move_from_delta(game: &Game2048Retained, dx: i32, dy: i32) bool {
     return game_retained_move(game, GameMoveDir.Up);
 }
 
+/// 处理 `game_retained` 的触摸输入。
 export fn game_retained_handle_touch(game: &Game2048Retained, evt: &Event, local: Point) void {
     if game == null || evt == null {
         return;
@@ -461,6 +464,7 @@ export fn game_retained_handle_touch(game: &Game2048Retained, evt: &Event, local
     }
 }
 
+/// 对 `game_retained` 执行一次移动操作。
 export fn game_retained_move(game: &Game2048Retained, dir: GameMoveDir) bool {
     if game == null {
         return false;
@@ -725,6 +729,7 @@ fn game_snapshot_board(a: &GamePageRetained, game: &Game2048Retained) void {
     a.game_over_snapshot = game.game_over;
 }
 
+/// 创建默认的 `GamePageRetained` 实例。
 export fn game_page_retained_new() GamePageRetained {
     return GamePageRetained{
         tree: obj_tree_new(),
@@ -756,6 +761,7 @@ export fn game_page_retained_new() GamePageRetained {
     };
 }
 
+/// 初始化 `game_page_retained` 的内部状态。
 export fn game_page_retained_init(page_state: &GamePageRetained, game: &Game2048Retained) void {
     if page_state == null || page_state.ready {
         return;
@@ -868,6 +874,7 @@ export fn game_page_retained_init(page_state: &GamePageRetained, game: &Game2048
     page_state.ready = true;
 }
 
+/// 将外部状态同步到 `game_page_retained`。
 export fn game_page_retained_sync(page_state: &GamePageRetained, game: &Game2048Retained) void {
     if page_state == null || game == null {
         return;
@@ -888,6 +895,7 @@ export fn game_page_retained_sync(page_state: &GamePageRetained, game: &Game2048
     }
 }
 
+/// 按 retained 状态参数将 `game` demo 渲染到指定上下文。
 export fn render_demo_game_retained_state(page_state: &GamePageRetained, game: &Game2048Retained, ctx: &RenderCtx, origin_x: i16, origin_y: i16) void {
     if page_state == null || game == null || ctx == null {
         return;
@@ -897,6 +905,7 @@ export fn render_demo_game_retained_state(page_state: &GamePageRetained, game: &
     page_state.page.render(ctx);
 }
 
+/// 按显式状态参数将 `game` demo 渲染到指定上下文。
 export fn render_demo_game_state(game: &Game2048Retained, ctx: &RenderCtx, origin_x: i16, origin_y: i16) void {
     if game == null || ctx == null {
         return;
@@ -984,11 +993,13 @@ export fn render_demo_game_state(game: &Game2048Retained, ctx: &RenderCtx, origi
     }
 }
 
+/// 将 `game` demo 渲染到指定上下文。
 export fn render_demo_game(ctx: &RenderCtx, origin_x: i16, origin_y: i16) void {
     var game: Game2048Retained = game_retained_new();
     render_demo_game_state(&game, ctx, origin_x, origin_y);
 }
 
+/// 运行 `game` demo 并返回退出码。
 export fn run_demo_game() i32 {
     const bytes_len: usize = framebuffer_required_bytes(SIM_DEFAULT_RES_WIDTH, SIM_DEFAULT_RES_HEIGHT, PixelFormat.ARGB8888);
     const bytes: &byte = malloc(bytes_len) as &byte;
@@ -1008,6 +1019,7 @@ export fn run_demo_game() i32 {
     return 0;
 }
 
+/// 创建默认的 `Game2048Retained` 实例。
 export fn game_retained_new() Game2048Retained {
     return Game2048Retained{
         ready: false,

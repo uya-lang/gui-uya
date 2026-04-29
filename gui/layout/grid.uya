@@ -106,6 +106,7 @@ export struct GridLayout {
     }
 }
 
+/// 返回默认的网格布局器。
 export fn grid_layout_default() GridLayout {
     return GridLayout{
         config: GridConfig{

@@ -73,6 +73,7 @@ export struct AbsLayout {
     }
 }
 
+/// 返回默认的绝对布局实例。
 export fn abs_layout_default() AbsLayout {
     return AbsLayout{ clip_children: false };
 }

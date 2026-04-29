@@ -118,6 +118,7 @@ export struct ImageData {
     ref_count: u16,
 }
 
+/// 根据像素指针和尺寸信息构造图像描述符。
 export fn image_data_new(pixels: &byte, w: u16, h: u16, stride: u16, format: PixelFormat) ImageData {
     return ImageData{
         pixels: pixels,
@@ -128,6 +129,7 @@ export fn image_data_new(pixels: &byte, w: u16, h: u16, stride: u16, format: Pix
     };
 }
 
+/// 返回空的图像描述符。
 export fn empty_image() ImageData {
     return ImageData{
         pixels: null,
@@ -138,6 +140,7 @@ export fn empty_image() ImageData {
     };
 }
 
+/// 返回图像像素数据占用的字节数。
 export fn image_size_bytes(img: &ImageData) u32 {
     if img.format == PixelFormat.I1 {
         return ((img.size.w as u32 + 7u32) / 8u32) * img.size.h as u32;
@@ -148,16 +151,19 @@ export fn image_size_bytes(img: &ImageData) u32 {
     return img.stride as u32 * img.size.h as u32;
 }
 
+/// 增加图像的引用计数。
 export fn image_retain(img: &ImageData) void {
     img.ref_count = img.ref_count + 1;
 }
 
+/// 释放图像的一次引用。
 export fn image_release(img: &ImageData) void {
     if img.ref_count > 0 {
         img.ref_count = img.ref_count - 1;
     }
 }
 
+/// 在指定坐标绘制原始图像。
 export fn draw_image(ctx: &RenderCtx, x: i16, y: i16, img: &ImageData) void {
     if img == null || img.pixels == null {
         return;
@@ -189,6 +195,7 @@ export fn draw_image(ctx: &RenderCtx, x: i16, y: i16, img: &ImageData) void {
     ctx.stats.image_ops = ctx.stats.image_ops + 1u32;
 }
 
+/// 按目标矩形缩放绘制图像。
 export fn draw_image_scaled(ctx: &RenderCtx, rect: Rect, img: &ImageData) void {
     if rect.is_empty() || img == null || img.pixels == null {
         return;
@@ -218,6 +225,7 @@ export fn draw_image_scaled(ctx: &RenderCtx, rect: Rect, img: &ImageData) void {
     ctx.stats.image_ops = ctx.stats.image_ops + 1u32;
 }
 
+/// 按源矩形裁剪后绘制图像。
 export fn draw_image_clipped(ctx: &RenderCtx, dst_rect: Rect, img: &ImageData, src_rect: Rect) void {
     if dst_rect.is_empty() || src_rect.is_empty() || img == null || img.pixels == null {
         return;
@@ -247,6 +255,7 @@ export fn draw_image_clipped(ctx: &RenderCtx, dst_rect: Rect, img: &ImageData, s
     ctx.stats.image_ops = ctx.stats.image_ops + 1u32;
 }
 
+/// 按指定角度旋转绘制图像。
 export fn draw_image_rotated(ctx: &RenderCtx, x: i16, y: i16, img: &ImageData, angle_deg: i16) void {
     if img == null || img.pixels == null {
         return;

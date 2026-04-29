@@ -162,6 +162,7 @@ export struct WidgetsRetained {
     action_idx: i32,
 }
 
+/// 创建默认的 `WidgetsRetained` 实例。
 export fn widgets_retained_new() WidgetsRetained {
     return WidgetsRetained{
         tree: obj_tree_new(),
@@ -208,6 +209,7 @@ export fn widgets_retained_new() WidgetsRetained {
     };
 }
 
+/// 初始化 `widgets_retained` 的内部状态。
 export fn widgets_retained_init(widgets: &WidgetsRetained) void {
     if widgets == null || widgets.ready {
         return;
@@ -400,6 +402,7 @@ export fn widgets_retained_init(widgets: &WidgetsRetained) void {
     widgets.ready = true;
 }
 
+/// 将外部状态同步到 `widgets_retained`。
 export fn widgets_retained_sync(
     widgets: &WidgetsRetained,
     control_idx: i32,
@@ -491,6 +494,7 @@ export fn widgets_retained_sync(
     }
 }
 
+/// 按 retained 状态参数将 `widgets` demo 渲染到指定上下文。
 export fn render_demo_widgets_retained_state(
     widgets: &WidgetsRetained,
     ctx: &RenderCtx,
@@ -511,6 +515,7 @@ export fn render_demo_widgets_retained_state(
     widgets.page.render(ctx);
 }
 
+/// 按显式状态参数将 `widgets` demo 渲染到指定上下文。
 export fn render_demo_widgets_state(
     ctx: &RenderCtx,
     origin_x: i16,
@@ -537,10 +542,12 @@ export fn render_demo_widgets_state(
     );
 }
 
+/// 将 `widgets` demo 渲染到指定上下文。
 export fn render_demo_widgets(ctx: &RenderCtx, origin_x: i16, origin_y: i16) void {
     render_demo_widgets_state(ctx, origin_x, origin_y, 0, 72, true, 2, 1, "Widget showcase static preview");
 }
 
+/// 运行 `widgets` demo 并返回退出码。
 export fn run_demo_widgets() i32 {
     const bytes_len: usize = framebuffer_required_bytes(SIM_DEFAULT_RES_WIDTH, SIM_DEFAULT_RES_HEIGHT, PixelFormat.ARGB8888);
     const bytes: &byte = malloc(bytes_len) as &byte;

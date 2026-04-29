@@ -102,6 +102,7 @@ fn gui_obj_dispatch_slot(obj: &GuiObj, slot: &EventCallbackSlot, evt: &Event) bo
     return slot.callback.invoke(obj, evt, slot.user_data);
 }
 
+/// 返回默认的 GUI 对象标志位集合。
 export fn obj_flags_default() ObjFlags {
     return ObjFlags{
         visible: true,
@@ -116,6 +117,7 @@ export fn obj_flags_default() ObjFlags {
     };
 }
 
+/// 返回空的对象事件回调槽位。
 export fn event_callback_slot_default() EventCallbackSlot {
     return EventCallbackSlot{
         callback: null,
@@ -472,6 +474,7 @@ GuiObj {
 
 }
 
+/// 构造默认初始化的 `GuiObj`。
 export fn gui_obj_default() GuiObj {
     return GuiObj{
         obj_idx: -1,
@@ -506,6 +509,7 @@ export fn gui_obj_default() GuiObj {
     };
 }
 
+/// 将对象注册到全局 GUI 对象表。
 export fn gui_obj_register(idx: i32, obj: &GuiObj) bool {
     if idx < 0 || idx >= GUI_OBJ_REGISTRY_CAPACITY || obj == null {
         return false;
@@ -519,6 +523,7 @@ export fn gui_obj_register(idx: i32, obj: &GuiObj) bool {
     return true;
 }
 
+/// 按注册索引获取 GUI 对象引用。
 export fn gui_obj_get(idx: i32) &GuiObj {
     if idx < 0 || idx >= GUI_OBJ_REGISTRY_CAPACITY {
         return null;
@@ -530,6 +535,7 @@ export fn gui_obj_get(idx: i32) &GuiObj {
     return _gui_obj_registry[slot];
 }
 
+/// 从全局 GUI 对象表中移除对象。
 export fn gui_obj_unregister(idx: i32) void {
     if idx < 0 || idx >= GUI_OBJ_REGISTRY_CAPACITY {
         return;
@@ -541,6 +547,7 @@ export fn gui_obj_unregister(idx: i32) void {
     _gui_obj_registry[slot] = null;
 }
 
+/// 清空全局 GUI 对象注册表。
 export fn gui_obj_reset_registry() void {
     var i: i32 = 0;
     while i < GUI_OBJ_REGISTRY_CAPACITY {

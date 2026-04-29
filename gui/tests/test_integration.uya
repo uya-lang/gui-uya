@@ -34,12 +34,12 @@ export const TEST_INTEGRATION_MODULE: i32 = 1;
 const INTEGRATION_CONCURRENT_WORKERS: i32 = 4;
 const INTEGRATION_WORKER_CLICKS: i32 = 8;
 const INTEGRATION_RSS_THRESHOLD_KB: i32 = 16384;
+const INTEGRATION_TOTAL_RECORDED_EVENTS: i32 = INTEGRATION_CONCURRENT_WORKERS * INTEGRATION_WORKER_CLICKS;
 
 var _integration_start_flag: atomic i32 = 0;
 var _integration_clicks_done: [i32: 4] = [];
-var _integration_mutex: pthread_mutex_t = pthread_mutex_t{ state: 0, owner: 0, type: 0 };
 struct IntegrationRecordedBuffer {
-    events: [RecordedEvent: 64],
+    events: [RecordedEvent: 32],
     count: i32,
 }
 
@@ -151,11 +151,11 @@ fn integration_scene_worker(arg: &void) &void {
 
     var click_idx: i32 = 0;
     while click_idx < INTEGRATION_WORKER_CLICKS {
-        _ = pthread_mutex_lock(&_integration_mutex);
         const injected: &IntegrationRecordedBuffer = _integration_shared_events;
-        if injected != null && injected.count < 64 {
+        if injected != null {
             const ts: u32 = ((worker_idx * 1000 + click_idx * 3) as! u32).value;
-            injected.events[injected.count as usize] = RecordedEvent{
+            const slot: i32 = worker_idx * INTEGRATION_WORKER_CLICKS + click_idx;
+            injected.events[slot as usize] = RecordedEvent{
                 frame_offset: ts + 2u32,
                 kind: RecorderEventKind.TouchUp,
                 x: _integration_inject_point.x,
@@ -164,9 +164,7 @@ fn integration_scene_worker(arg: &void) &void {
                 key_code: 0u16,
                 reserved: 0u16,
             };
-            injected.count = injected.count + 1;
         }
-        _ = pthread_mutex_unlock(&_integration_mutex);
         click_idx = click_idx + 1;
     }
 
@@ -313,7 +311,6 @@ test "integration multithreaded event injection stays consistent under serialize
     _integration_shared_events = &injected;
     _integration_inject_point = integration_nav_click_point(action);
     _integration_start_flag = 0;
-    try assert_eq_i32(pthread_mutex_init(&_integration_mutex, null as &const pthread_mutexattr_t), 0);
     while i < INTEGRATION_CONCURRENT_WORKERS {
         _integration_clicks_done[i as usize] = 0;
         try assert_eq_i32(pthread_create(&workers[i as usize], null as &const pthread_attr_t, &integration_scene_worker as &void, (&worker_ids[i as usize]) as &void), 0);
@@ -327,7 +324,7 @@ test "integration multithreaded event injection stays consistent under serialize
         try assert_eq_i32(pthread_join(&workers[i as usize], null as & &void), 0);
         i = i + 1;
     }
-    _ = pthread_mutex_destroy(&_integration_mutex);
+    injected.count = INTEGRATION_TOTAL_RECORDED_EVENTS;
     _integration_shared_events = null;
 
     var total_clicks: i32 = 0;

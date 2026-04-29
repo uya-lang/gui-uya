@@ -2151,6 +2151,7 @@ SimApp {
     }
 }
 
+/// 创建模拟器应用状态对象。
 export fn sim_app_new() SimApp {
     return SimApp{
         config: sim_config_default(),

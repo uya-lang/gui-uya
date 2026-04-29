@@ -9,17 +9,20 @@ fn tick_monotonic_now() TimeSpec {
     return ts;
 }
 
+/// 获取当前单调时钟的毫秒值。
 export fn get_tick_ms() u32 {
     const ts: TimeSpec = tick_monotonic_now();
     const total_ms: u64 = (ts.tv_sec as u64) * 1000u64 + (ts.tv_nsec as u64) / 1000000u64;
     return total_ms as u32;
 }
 
+/// 获取当前单调时钟的微秒值。
 export fn get_tick_us() u64 {
     const ts: TimeSpec = tick_monotonic_now();
     return (ts.tv_sec as u64) * 1000000u64 + (ts.tv_nsec as u64) / 1000u64;
 }
 
+/// 以毫秒为单位休眠当前线程。
 export fn sleep_ms(ms: u32) void {
     var req: TimeSpec = TimeSpec{
         tv_sec: (ms / 1000u32) as i64,

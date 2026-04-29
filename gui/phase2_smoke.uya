@@ -2,6 +2,7 @@ use std.runtime.entry;
 
 use examples.phase2_smoke.run_phase2_smoke;
 
+/// 模块入口，运行当前模块的默认流程。
 export fn main() i32 {
     return run_phase2_smoke();
 }

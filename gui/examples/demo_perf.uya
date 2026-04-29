@@ -34,6 +34,7 @@ export struct PerfRetained {
     ready: bool,
 }
 
+/// 创建默认的 `PerfRetained` 实例。
 export fn perf_retained_new() PerfRetained {
     return PerfRetained{
         tree: obj_tree_new(),
@@ -47,6 +48,7 @@ export fn perf_retained_new() PerfRetained {
     };
 }
 
+/// 初始化 `perf_retained` 的内部状态。
 export fn perf_retained_init(perf: &PerfRetained) void {
     if perf == null || perf.ready {
         return;
@@ -94,6 +96,7 @@ export fn perf_retained_init(perf: &PerfRetained) void {
     perf.ready = true;
 }
 
+/// 使用 retained 状态将 `perf_retained` 渲染到指定上下文。
 export fn render_demo_perf_retained(perf: &PerfRetained, ctx: &RenderCtx, origin_x: i16, origin_y: i16) void {
     if perf == null {
         return;
@@ -103,11 +106,13 @@ export fn render_demo_perf_retained(perf: &PerfRetained, ctx: &RenderCtx, origin
     perf.page.render(ctx);
 }
 
+/// 将 `perf` demo 渲染到指定上下文。
 export fn render_demo_perf(ctx: &RenderCtx, origin_x: i16, origin_y: i16) void {
     var perf: PerfRetained = perf_retained_new();
     render_demo_perf_retained(&perf, ctx, origin_x, origin_y);
 }
 
+/// 运行 `perf` demo 并返回退出码。
 export fn run_demo_perf() i32 {
     const bytes_len: usize = framebuffer_required_bytes(SIM_DEFAULT_RES_WIDTH, SIM_DEFAULT_RES_HEIGHT, PixelFormat.ARGB8888);
     const bytes: &byte = malloc(bytes_len) as &byte;

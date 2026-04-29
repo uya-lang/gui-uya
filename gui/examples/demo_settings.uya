@@ -37,6 +37,7 @@ export struct SettingsRetained {
     ready: bool,
 }
 
+/// 创建默认的 `SettingsRetained` 实例。
 export fn settings_retained_new() SettingsRetained {
     return SettingsRetained{
         tree: obj_tree_new(),
@@ -53,6 +54,7 @@ export fn settings_retained_new() SettingsRetained {
     };
 }
 
+/// 初始化 `settings_retained` 的内部状态。
 export fn settings_retained_init(settings: &SettingsRetained) void {
     if settings == null || settings.ready {
         return;
@@ -100,6 +102,7 @@ export fn settings_retained_init(settings: &SettingsRetained) void {
     settings.ready = true;
 }
 
+/// 将外部状态同步到 `settings_retained`。
 export fn settings_retained_sync(settings: &SettingsRetained, wifi_enabled: bool, alerts_enabled: bool, brightness_value: i32) void {
     if settings == null {
         return;
@@ -110,6 +113,7 @@ export fn settings_retained_sync(settings: &SettingsRetained, wifi_enabled: bool
     settings.brightness.set_value(brightness_value);
 }
 
+/// 按 retained 状态参数将 `settings` demo 渲染到指定上下文。
 export fn render_demo_settings_retained_state(settings: &SettingsRetained, ctx: &RenderCtx, origin_x: i16, origin_y: i16, wifi_enabled: bool, alerts_enabled: bool, brightness_value: i32) void {
     if settings == null {
         return;
@@ -119,15 +123,18 @@ export fn render_demo_settings_retained_state(settings: &SettingsRetained, ctx: 
     settings.page.render(ctx);
 }
 
+/// 按显式状态参数将 `settings` demo 渲染到指定上下文。
 export fn render_demo_settings_state(ctx: &RenderCtx, origin_x: i16, origin_y: i16, wifi_enabled: bool, alerts_enabled: bool, brightness_value: i32) void {
     var settings: SettingsRetained = settings_retained_new();
     render_demo_settings_retained_state(&settings, ctx, origin_x, origin_y, wifi_enabled, alerts_enabled, brightness_value);
 }
 
+/// 将 `settings` demo 渲染到指定上下文。
 export fn render_demo_settings(ctx: &RenderCtx, origin_x: i16, origin_y: i16) void {
     render_demo_settings_state(ctx, origin_x, origin_y, true, false, 68);
 }
 
+/// 运行 `settings` demo 并返回退出码。
 export fn run_demo_settings() i32 {
     const bytes_len: usize = framebuffer_required_bytes(SIM_DEFAULT_RES_WIDTH, SIM_DEFAULT_RES_HEIGHT, PixelFormat.ARGB8888);
     const bytes: &byte = malloc(bytes_len) as &byte;

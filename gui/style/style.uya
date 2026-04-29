@@ -786,6 +786,7 @@ StyleBuilder {
     }
 }
 
+/// 创建样式构建器实例。
 export fn style_builder_new() StyleBuilder {
     return StyleBuilder{ style: style_default() };
 }
@@ -819,14 +820,17 @@ export const DEFAULT_STYLE: Style = Style{
     ext_props: [],
 };
 
+/// 返回空样式。
 export fn style_empty() Style {
     return DEFAULT_STYLE;
 }
 
+/// 返回默认样式。
 export fn style_default() Style {
     return DEFAULT_STYLE;
 }
 
+/// 按显式参数构造样式值。
 export fn style_make(bg: Color, fg: Color, border_width: u8, border_color: Color, radius: u8, opacity: u8) Style {
     var builder: StyleBuilder = style_builder_new();
     builder.bg_color(bg);

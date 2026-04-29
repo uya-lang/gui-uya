@@ -59,6 +59,7 @@ fn render_frame_result_with_plan(plan: ObjTreeDirtyRenderPlan, present_mode: Ren
     };
 }
 
+/// 将 `frame_result_idle` 渲染到指定上下文。
 export fn render_frame_result_idle() RenderFrameResult {
     return render_frame_result_with_plan(
         ObjTreeDirtyRenderPlan{
@@ -147,6 +148,7 @@ fn render_schedule_dirty_requests(
     return view.len;
 }
 
+/// 将 `schedule_tree_frame` 渲染到指定上下文。
 export fn render_schedule_tree_frame(
     ctx: &RenderCtx,
     tree: &ObjTree,
@@ -292,6 +294,7 @@ export struct RenderFramePacer {
     }
 }
 
+/// 将 `frame_pacer_new` 渲染到指定上下文。
 export fn render_frame_pacer_new(target_fps: u8, vsync_enabled: bool, adaptive: bool) RenderFramePacer {
     var pacer: RenderFramePacer = RenderFramePacer{
         target_fps: 60u8,
@@ -308,6 +311,7 @@ export fn render_frame_pacer_new(target_fps: u8, vsync_enabled: bool, adaptive: 
     return pacer;
 }
 
+/// 将 `scheduler_default_clear_color` 渲染到指定上下文。
 export fn render_scheduler_default_clear_color() Color {
     return BLACK;
 }

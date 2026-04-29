@@ -35,6 +35,7 @@ export struct ClockRetained {
     ready: bool,
 }
 
+/// 创建默认的 `ClockRetained` 实例。
 export fn clock_retained_new() ClockRetained {
     return ClockRetained{
         tree: obj_tree_new(),
@@ -48,6 +49,7 @@ export fn clock_retained_new() ClockRetained {
     };
 }
 
+/// 初始化 `clock_retained` 的内部状态。
 export fn clock_retained_init(clock: &ClockRetained) void {
     if clock == null || clock.ready {
         return;
@@ -91,6 +93,7 @@ export fn clock_retained_init(clock: &ClockRetained) void {
     clock.ready = true;
 }
 
+/// 使用 retained 状态将 `clock_retained` 渲染到指定上下文。
 export fn render_demo_clock_retained(clock: &ClockRetained, ctx: &RenderCtx, origin_x: i16, origin_y: i16) void {
     if clock == null {
         return;
@@ -100,11 +103,13 @@ export fn render_demo_clock_retained(clock: &ClockRetained, ctx: &RenderCtx, ori
     clock.page.render(ctx);
 }
 
+/// 将 `clock` demo 渲染到指定上下文。
 export fn render_demo_clock(ctx: &RenderCtx, origin_x: i16, origin_y: i16) void {
     var clock: ClockRetained = clock_retained_new();
     render_demo_clock_retained(&clock, ctx, origin_x, origin_y);
 }
 
+/// 运行 `clock` demo 并返回退出码。
 export fn run_demo_clock() i32 {
     const bytes_len: usize = framebuffer_required_bytes(SIM_DEFAULT_RES_WIDTH, SIM_DEFAULT_RES_HEIGHT, PixelFormat.ARGB8888);
     const bytes: &byte = malloc(bytes_len) as &byte;

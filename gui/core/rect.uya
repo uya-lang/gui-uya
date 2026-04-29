@@ -145,6 +145,7 @@ Rect {
     }
 }
 
+/// 返回两个矩形的并集。
 export fn rect_union(a: Rect, b: Rect) Rect {
     return a.union_rect(b);
 }

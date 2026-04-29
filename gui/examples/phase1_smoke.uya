@@ -18,6 +18,7 @@ use layout.auto.LayoutMode;
 use layout.auto.auto_layout_new;
 use style.StyleProp;
 
+/// 运行 `phase1_smoke` 场景并返回退出码。
 export fn run_phase1_smoke() i32 {
     gui_obj_reset_registry();
 

@@ -65,6 +65,7 @@ export struct SimConfig {
     playback_path: &const byte,
 }
 
+/// 返回指定 demo 的显示名称。
 export fn sim_demo_name(kind: SimDemoKind) &const byte {
     if kind == SimDemoKind.Phase6 {
         return "阶段6" as &const byte;
@@ -99,20 +100,24 @@ export fn sim_demo_name(kind: SimDemoKind) &const byte {
     return "阶段4" as &const byte;
 }
 
+/// 返回指定 demo 的默认宽度。
 export fn sim_demo_default_width(kind: SimDemoKind) u16 {
     _ = kind;
     return SIM_DEFAULT_RES_WIDTH;
 }
 
+/// 返回指定 demo 的默认高度。
 export fn sim_demo_default_height(kind: SimDemoKind) u16 {
     _ = kind;
     return SIM_DEFAULT_RES_HEIGHT;
 }
 
+/// 判断指定 demo 是否属于 phase 首页场景。
 export fn sim_demo_is_phase(kind: SimDemoKind) bool {
     return kind == SimDemoKind.Phase4 || kind == SimDemoKind.Phase6;
 }
 
+/// 返回指定模拟器后端的显示名称。
 export fn sim_backend_name(kind: SimBackendKind) &const byte {
     if kind == SimBackendKind.FrameBuffer {
         return "fb" as &const byte;
@@ -120,6 +125,7 @@ export fn sim_backend_name(kind: SimBackendKind) &const byte {
     return "sdl2" as &const byte;
 }
 
+/// 返回指定 GPU 模式的显示名称。
 export fn sim_gpu_name(kind: SimGpuKind) &const byte {
     if kind == SimGpuKind.Software {
         return "software" as &const byte;
@@ -130,6 +136,7 @@ export fn sim_gpu_name(kind: SimGpuKind) &const byte {
     return "auto" as &const byte;
 }
 
+/// 返回默认的模拟器配置。
 export fn sim_config_default() SimConfig {
     return SimConfig{
         backend: SimBackendKind.Sdl2,
@@ -158,6 +165,7 @@ export fn sim_config_default() SimConfig {
     };
 }
 
+/// 从环境变量和命令行参数构建模拟器配置。
 export fn sim_config_from_runtime() SimConfig {
     var cfg: SimConfig = sim_config_default();
     const env_root: &byte = getenv("UYA_GUI_SIM_ROOT");

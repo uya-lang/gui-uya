@@ -95,6 +95,7 @@ export struct ObjPool<T: IGuiObj> {
     }
 }
 
+/// 创建指定 GUI 对象类型的对象池。
 export fn obj_pool_new<T: IGuiObj>() ObjPool<T> {
     return ObjPool<T>{
         storage: [],

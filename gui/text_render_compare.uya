@@ -2,6 +2,7 @@ use std.runtime.entry;
 
 use examples.text_render_compare.run_text_render_compare;
 
+/// 模块入口，生成文字渲染对比样张。
 export fn main() i32 {
     return run_text_render_compare();
 }

@@ -396,6 +396,7 @@ export struct DrawBatch {
     }
 }
 
+/// 创建空的绘制批处理缓冲区。
 export fn draw_batch_new() DrawBatch {
     return DrawBatch{
         cmds: [],

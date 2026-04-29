@@ -85,6 +85,7 @@ export struct SimProfiler {
     }
 }
 
+/// 创建空的性能统计对象。
 export fn profile_stat_new() ProfileStat {
     return ProfileStat{
         last_ms: 0u32,
@@ -95,6 +96,7 @@ export fn profile_stat_new() ProfileStat {
     };
 }
 
+/// 创建按指定汇报周期工作的模拟器 profiler。
 export fn sim_profiler_new(report_every_frames: u32) SimProfiler {
     return SimProfiler{
         frame: profile_stat_new(),

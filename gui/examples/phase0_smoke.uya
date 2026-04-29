@@ -14,6 +14,7 @@ use core.obj_tree.obj_tree_new;
 use core.point.Point;
 use core.rect.Rect;
 
+/// 运行 `phase0_smoke` 场景并返回退出码。
 export fn run_phase0_smoke() i32 {
     gui_obj_reset_registry();
 

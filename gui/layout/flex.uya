@@ -157,6 +157,7 @@ FlexConfig {
     }
 }
 
+/// 返回按行排布的默认 Flex 配置。
 export fn flex_config_row() FlexConfig {
     return FlexConfig{
         direction: FlexDir.Row,
@@ -171,6 +172,7 @@ export fn flex_config_row() FlexConfig {
     };
 }
 
+/// 返回按列排布的默认 Flex 配置。
 export fn flex_config_column() FlexConfig {
     var cfg: FlexConfig = flex_config_row();
     cfg.direction = FlexDir.Column;
@@ -453,10 +455,12 @@ export struct FlexLayout {
     }
 }
 
+/// 创建按行方向工作的 Flex 布局器。
 export fn flex_layout_row() FlexLayout {
     return FlexLayout{ config: flex_config_row() };
 }
 
+/// 创建按列方向工作的 Flex 布局器。
 export fn flex_layout_column() FlexLayout {
     return FlexLayout{ config: flex_config_column() };
 }

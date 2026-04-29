@@ -75,10 +75,12 @@ export enum EasingType {
     EaseInOutBounce,
 }
 
+/// 返回当前公开的缓动函数变体数量。
 export fn easing_variant_count() i32 {
     return 25;
 }
 
+/// 按指定缓动函数计算归一化进度。
 export fn apply_easing(t: f32, easing: EasingType) f32 {
     const tt: f64 = easing_clamp_unit(t as f64);
     if easing == EasingType.Linear {

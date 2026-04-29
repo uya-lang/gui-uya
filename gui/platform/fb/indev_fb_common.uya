@@ -21,6 +21,7 @@ export struct FbHostEvent {
     reserved: u16,
 }
 
+/// 构造空的 Framebuffer host 事件。
 export fn fb_host_event_none() FbHostEvent {
     return FbHostEvent{
         kind: FB_EVT_NONE,
@@ -32,6 +33,7 @@ export fn fb_host_event_none() FbHostEvent {
     };
 }
 
+/// 向 Framebuffer host 注入一条原始输入事件。
 export fn fb_feed_host_event(
     touch: &TouchDriver,
     key: &KeyDriver,
@@ -83,6 +85,7 @@ export fn fb_feed_host_event(
     }
 }
 
+/// 返回 Framebuffer hover 状态的默认坐标。
 export fn fb_hover_point_default() Point {
     return POINT_ZERO;
 }

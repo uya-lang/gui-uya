@@ -165,6 +165,7 @@ export struct FbDisplay {
     }
 }
 
+/// 创建 Framebuffer 显示驱动实例。
 export fn fb_display_new() FbDisplay {
     return FbDisplay{
         host: null,
@@ -175,6 +176,7 @@ export fn fb_display_new() FbDisplay {
     };
 }
 
+/// 返回最近一次 Framebuffer 显示驱动错误信息。
 export fn fb_display_last_error() &const byte {
     const err: &byte = uya_gui_sim_fb_last_error();
     if err == null {

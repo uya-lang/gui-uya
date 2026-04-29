@@ -241,6 +241,7 @@ export struct DisplayCtx {
     }
 }
 
+/// 返回指定像素格式的每像素字节数。
 export fn bytes_per_pixel(format: PixelFormat) u8 {
     if format == PixelFormat.RGB565 || format == PixelFormat.ARGB4444 {
         return 2;
@@ -257,6 +258,7 @@ export fn bytes_per_pixel(format: PixelFormat) u8 {
     return 1;
 }
 
+/// 计算指定帧缓冲配置所需的总字节数。
 export fn framebuffer_required_bytes(w: u16, h: u16, format: PixelFormat) usize {
     if format == PixelFormat.I1 {
         return (w as usize + 7usize) / 8usize * h as usize;
@@ -267,10 +269,12 @@ export fn framebuffer_required_bytes(w: u16, h: u16, format: PixelFormat) usize 
     return w as usize * h as usize * bytes_per_pixel(format) as usize;
 }
 
+/// 返回帧缓冲覆盖的完整矩形区域。
 export fn framebuffer_rect(fb: &FrameBuffer) Rect {
     return Rect{ x: 0, y: 0, w: fb.size.w, h: fb.size.h };
 }
 
+/// 复制整个源帧缓冲到目标帧缓冲。
 export fn framebuffer_copy(dst: &FrameBuffer, src: &FrameBuffer) bool {
     if dst == null || src == null || dst.pixels == null || src.pixels == null {
         return false;
@@ -299,6 +303,7 @@ export fn framebuffer_copy(dst: &FrameBuffer, src: &FrameBuffer) bool {
     return true;
 }
 
+/// 复制源帧缓冲的指定矩形区域到目标帧缓冲。
 export fn framebuffer_copy_rect(dst: &FrameBuffer, src: &FrameBuffer, rect: Rect) bool {
     if dst == null || src == null || dst.pixels == null || src.pixels == null || rect.is_empty() {
         return false;
@@ -338,6 +343,7 @@ export fn framebuffer_copy_rect(dst: &FrameBuffer, src: &FrameBuffer, rect: Rect
     return true;
 }
 
+/// 根据像素指针和尺寸信息构造帧缓冲描述符。
 export fn framebuffer_new(pixels: &byte, w: u16, h: u16, stride: u16, format: PixelFormat) FrameBuffer {
     return FrameBuffer{
         pixels: pixels,
@@ -347,6 +353,7 @@ export fn framebuffer_new(pixels: &byte, w: u16, h: u16, stride: u16, format: Pi
     };
 }
 
+/// 返回空的帧缓冲描述符。
 export fn empty_framebuffer() FrameBuffer {
     return FrameBuffer{
         pixels: null,
@@ -356,6 +363,7 @@ export fn empty_framebuffer() FrameBuffer {
     };
 }
 
+/// 创建包含前后缓冲的显示上下文。
 export fn display_ctx_new(front: FrameBuffer, back: FrameBuffer) DisplayCtx {
     return DisplayCtx{
         front: front,
@@ -364,10 +372,12 @@ export fn display_ctx_new(front: FrameBuffer, back: FrameBuffer) DisplayCtx {
     };
 }
 
+/// 判断坐标是否位于帧缓冲范围内。
 export fn framebuffer_inside(fb: &FrameBuffer, x: i32, y: i32) bool {
     return x >= 0 && y >= 0 && x < fb.size.w as i32 && y < fb.size.h as i32;
 }
 
+/// 读取帧缓冲指定坐标的颜色值。
 export fn framebuffer_get_pixel(fb: &FrameBuffer, x: i32, y: i32) Color {
     if fb == null || fb.pixels == null || !framebuffer_inside(fb, x, y) {
         return BLACK;
@@ -426,6 +436,7 @@ export fn framebuffer_get_pixel(fb: &FrameBuffer, x: i32, y: i32) Color {
     return Color{ r: value, g: value, b: value, a: 255 };
 }
 
+/// 向帧缓冲指定坐标写入颜色值。
 export fn framebuffer_set_pixel(fb: &FrameBuffer, x: i32, y: i32, color: &Color) void {
     if fb == null || fb.pixels == null || !framebuffer_inside(fb, x, y) {
         return;
@@ -495,6 +506,7 @@ export fn framebuffer_set_pixel(fb: &FrameBuffer, x: i32, y: i32, color: &Color)
     }
 }
 
+/// 使用指定颜色清空整个帧缓冲。
 export fn framebuffer_clear(fb: &FrameBuffer, color: Color) void {
     if fb == null || fb.pixels == null {
         return;
@@ -540,6 +552,7 @@ export struct DisplayDriverProfile {
     name_ptr: &const byte,
 }
 
+/// 返回指定显示驱动类型的能力画像。
 export fn display_driver_profile(kind: DisplayDriverKind) DisplayDriverProfile {
     if kind == DisplayDriverKind.ILI9341 {
         return DisplayDriverProfile{
@@ -607,11 +620,13 @@ export fn display_driver_profile(kind: DisplayDriverKind) DisplayDriverProfile {
     };
 }
 
+/// 计算指定显示驱动默认缓冲所需的字节数。
 export fn display_driver_required_bytes(kind: DisplayDriverKind) usize {
     const profile: DisplayDriverProfile = display_driver_profile(kind);
     return framebuffer_required_bytes(profile.width, profile.height, profile.format);
 }
 
+/// 按驱动默认画像构造帧缓冲描述符。
 export fn framebuffer_new_for_driver(pixels: &byte, kind: DisplayDriverKind) FrameBuffer {
     const profile: DisplayDriverProfile = display_driver_profile(kind);
     return framebuffer_new(pixels, profile.width, profile.height, profile.stride, profile.format);

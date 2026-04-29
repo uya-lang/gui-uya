@@ -146,6 +146,7 @@ export struct SdlInputSystem {
     }
 }
 
+/// 创建 SDL2 输入系统实例。
 export fn sdl_input_system_new() SdlInputSystem {
     return SdlInputSystem{
         manager: input_manager_new(),

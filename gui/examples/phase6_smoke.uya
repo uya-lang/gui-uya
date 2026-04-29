@@ -10,6 +10,7 @@ use examples.demo_perf.run_demo_perf;
 use examples.demo_settings.run_demo_settings;
 use examples.demo_widgets.run_demo_widgets;
 
+/// 运行 `phase6_smoke` 场景并返回退出码。
 export fn run_phase6_smoke() i32 {
     if run_demo_clock() != 0 {
         return 1;

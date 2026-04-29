@@ -42,6 +42,7 @@ use widget.page.PageNavigator;
 use widget.page.PageTransitionKind;
 use widget.page.page_navigator_new;
 
+/// 运行 `phase4_smoke` 场景并返回退出码。
 export fn run_phase4_smoke() i32 {
     gui_obj_reset_registry();
 

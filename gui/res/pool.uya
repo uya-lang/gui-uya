@@ -131,6 +131,7 @@ export struct TypedPool<T> {
     }
 }
 
+/// 创建固定块大小的内存池。
 export fn mem_pool_new(block_size: u16, block_count: u16) MemPool {
     var actual_block_size: u16 = block_size;
     if actual_block_size == 0 {
@@ -153,6 +154,7 @@ export fn mem_pool_new(block_size: u16, block_count: u16) MemPool {
     };
 }
 
+/// 创建多级内存池管理器。
 export fn pool_manager_new() PoolManager {
     return PoolManager{
         small_pool: mem_pool_new(32, 64),
@@ -161,6 +163,7 @@ export fn pool_manager_new() PoolManager {
     };
 }
 
+/// 将基础内存池包装为指定类型的对象池视图。
 export fn typed_pool<T>(pool: &MemPool) TypedPool<T> {
     return TypedPool<T>{ pool: pool };
 }

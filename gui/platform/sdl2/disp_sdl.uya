@@ -221,6 +221,7 @@ export struct SdlDisplay {
     }
 }
 
+/// 创建 SDL2 显示驱动实例。
 export fn sdl_display_new() SdlDisplay {
     return SdlDisplay{
         host: null,
@@ -234,6 +235,7 @@ export fn sdl_display_new() SdlDisplay {
     };
 }
 
+/// 返回最近一次 SDL2 显示驱动错误信息。
 export fn sdl_display_last_error() &const byte {
     const err: &byte = uya_gui_sim_sdl_last_error();
     if err == null {

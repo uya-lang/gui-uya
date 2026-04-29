@@ -168,6 +168,7 @@ export struct CustomRetained {
     uppercase_mode: bool,
 }
 
+/// 创建默认的 `CustomRetained` 实例。
 export fn custom_retained_new() CustomRetained {
     return CustomRetained{
         tree: obj_tree_new(),
@@ -238,6 +239,7 @@ export fn custom_retained_new() CustomRetained {
     };
 }
 
+/// 初始化 `custom_retained` 的内部状态。
 export fn custom_retained_init(custom: &CustomRetained) void {
     if custom == null || custom.ready {
         return;
@@ -412,6 +414,7 @@ export fn custom_retained_init(custom: &CustomRetained) void {
     custom.ready = true;
 }
 
+/// 将外部状态同步到 `custom_retained`。
 export fn custom_retained_sync(
     custom: &CustomRetained,
     cpu_value: i32,
@@ -476,6 +479,7 @@ export fn custom_retained_sync(
     }
 }
 
+/// 按 retained 状态参数将 `custom` demo 渲染到指定上下文。
 export fn render_demo_custom_retained_state(
     custom: &CustomRetained,
     ctx: &RenderCtx,
@@ -496,6 +500,7 @@ export fn render_demo_custom_retained_state(
     custom.page.render(ctx);
 }
 
+/// 按显式状态参数将 `custom` demo 渲染到指定上下文。
 export fn render_demo_custom_state(
     ctx: &RenderCtx,
     origin_x: i16,
@@ -511,10 +516,12 @@ export fn render_demo_custom_state(
     render_demo_custom_retained_state(&custom, ctx, origin_x, origin_y, cpu_value, mem_value, net_value, keyboard_text_value, uppercase_mode, status_text);
 }
 
+/// 将 `custom` demo 渲染到指定上下文。
 export fn render_demo_custom(ctx: &RenderCtx, origin_x: i16, origin_y: i16) void {
     render_demo_custom_state(ctx, origin_x, origin_y, 32, 68, 91, "HELLO UYAGUI", true, "Custom widgets static preview");
 }
 
+/// 运行 `custom` demo 并返回退出码。
 export fn run_demo_custom() i32 {
     const bytes_len: usize = framebuffer_required_bytes(SIM_DEFAULT_RES_WIDTH, SIM_DEFAULT_RES_HEIGHT, PixelFormat.ARGB8888);
     const bytes: &byte = malloc(bytes_len) as &byte;

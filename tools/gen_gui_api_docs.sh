@@ -3,34 +3,62 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 out_file="${1:-"$repo_root/docs/gui_uya_api_reference.md"}"
-tmp_file="$(mktemp)"
 
-{
-  echo "# UyaGUI API Reference"
-  echo
-  echo "> 该文件由 \`tools/gen_gui_api_docs.sh\` 从 \`gui/**/*.uya\` 自动生成。"
-  echo "> 内容聚焦公开符号索引，详细设计说明请结合 \`docs/gui_uya_*.md\` 系列文档阅读。"
-  echo
+python3 - "$repo_root" "$out_file" <<'PY'
+from pathlib import Path
+import re
+import sys
 
-  while IFS= read -r file; do
-    rel_path="${file#"$repo_root/"}"
-    matches="$(grep -nE '^export (mc|const|enum|struct|interface|fn|@async_fn fn)' "$file" || true)"
-    if [[ -z "$matches" ]]; then
-      continue
-    fi
+repo_root = Path(sys.argv[1])
+out_file = Path(sys.argv[2])
 
-    echo "## \`$rel_path\`"
-    echo
+decl_re = re.compile(r'^export (mc|const|enum|struct|interface|fn|@async_fn fn)')
 
-    while IFS= read -r match; do
-      line_no="${match%%:*}"
-      decl="${match#*:}"
-      decl="$(printf '%s' "$decl" | sed -E 's/[[:space:]]+/ /g; s/[[:space:]]+$//')"
-      echo "- L${line_no}: \`${decl}\`"
-    done <<< "$matches"
+lines_out = [
+    "# UyaGUI API Reference",
+    "",
+    "> 该文件由 `tools/gen_gui_api_docs.sh` 从 `gui/**/*.uya` 自动生成。",
+    "> 内容聚焦公开符号索引，详细设计说明请结合 `docs/gui_uya_*.md` 系列文档阅读。",
+    "",
+]
 
-    echo
-  done < <(find "$repo_root/gui" -type f -name '*.uya' | sort)
-} > "$tmp_file"
+for file in sorted((repo_root / "gui").rglob("*.uya")):
+    source_lines = file.read_text(encoding="utf-8").splitlines()
+    entries: list[tuple[int, str, list[str]]] = []
 
-mv "$tmp_file" "$out_file"
+    for idx, raw_line in enumerate(source_lines):
+        if not decl_re.match(raw_line):
+            continue
+
+        docs: list[str] = []
+        cursor = idx - 1
+        while cursor >= 0:
+            prev = source_lines[cursor].strip()
+            if prev.startswith("///"):
+                docs.append(prev[3:].strip())
+                cursor -= 1
+                continue
+            if prev == "":
+                cursor -= 1
+                continue
+            break
+        docs.reverse()
+
+        decl = re.sub(r"\s+", " ", raw_line.strip()).rstrip()
+        entries.append((idx + 1, decl, docs))
+
+    if not entries:
+        continue
+
+    rel_path = file.relative_to(repo_root).as_posix()
+    lines_out.append(f"## `{rel_path}`")
+    lines_out.append("")
+
+    for line_no, decl, docs in entries:
+        lines_out.append(f"- L{line_no}: `{decl}`")
+        if docs:
+            lines_out.append(f"  说明: {' '.join(docs)}")
+    lines_out.append("")
+
+out_file.write_text("\n".join(lines_out), encoding="utf-8")
+PY

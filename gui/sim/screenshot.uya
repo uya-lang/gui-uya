@@ -48,6 +48,7 @@ struct ScreenshotPngIdatState {
     chunk_crc: u32,
 }
 
+/// 计算原始截图载荷需要的字节数。
 export fn screenshot_payload_bytes(fb: &FrameBuffer) usize {
     return framebuffer_required_bytes(fb.size.w, fb.size.h, fb.format);
 }
@@ -226,6 +227,7 @@ fn screenshot_bmp_row_stride(fb: &FrameBuffer) usize {
     return ((raw_row_bytes + 3usize) / 4usize) * 4usize;
 }
 
+/// 将帧缓冲写出为 PNG 文件。
 export fn screenshot_write_png(path: &const byte, fb: &FrameBuffer) !usize {
     if fb == null || fb.pixels == null {
         return error.ScreenshotIo;
@@ -312,6 +314,7 @@ export fn screenshot_write_png(path: &const byte, fb: &FrameBuffer) !usize {
         + SIM_PNG_CHUNK_OVERHEAD_BYTES;
 }
 
+/// 将帧缓冲写出为 BMP 文件。
 export fn screenshot_write_bmp(path: &const byte, fb: &FrameBuffer) !usize {
     if fb == null || fb.pixels == null {
         return error.ScreenshotIo;
@@ -377,6 +380,7 @@ export fn screenshot_write_bmp(path: &const byte, fb: &FrameBuffer) !usize {
     return total_bytes;
 }
 
+/// 将帧缓冲写出为原始自定义格式文件。
 export fn screenshot_write_raw(path: &const byte, fb: &FrameBuffer) !usize {
     if fb == null || fb.pixels == null {
         return error.ScreenshotIo;
@@ -409,6 +413,7 @@ export fn screenshot_write_raw(path: &const byte, fb: &FrameBuffer) !usize {
     return payload_bytes + @size_of(ScreenshotHeader) as usize;
 }
 
+/// 按输出路径扩展名选择合适的截图写出格式。
 export fn screenshot_write(path: &const byte, fb: &FrameBuffer) !usize {
     if screenshot_ext_eq_ci(path, ".png") {
         return screenshot_write_png(path, fb);

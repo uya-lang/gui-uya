@@ -168,6 +168,7 @@ ThemeManager {
     }
 }
 
+/// 创建主题管理器实例。
 export fn theme_manager_new() ThemeManager {
     return ThemeManager{
         themes: [],
@@ -177,6 +178,7 @@ export fn theme_manager_new() ThemeManager {
     };
 }
 
+/// 返回 Material Light 预设主题。
 export fn material_light_theme() Theme {
     return Theme{
         name_ptr: "Material Light",
@@ -195,6 +197,7 @@ export fn material_light_theme() Theme {
     };
 }
 
+/// 返回 Material Dark 预设主题。
 export fn material_dark_theme() Theme {
     return Theme{
         name_ptr: "Material Dark",
@@ -213,6 +216,7 @@ export fn material_dark_theme() Theme {
     };
 }
 
+/// 返回面向资源受限设备的紧凑主题。
 export fn compact_theme() Theme {
     var theme: Theme = material_light_theme();
     theme.name_ptr = "Compact";

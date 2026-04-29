@@ -193,6 +193,7 @@ export struct FatFileSystem : IFileSystem {
     }
 }
 
+/// 创建内存内只读文件系统实例。
 export fn rom_fs_new() RomFileSystem {
     return RomFileSystem{
         entries: [],
@@ -200,10 +201,12 @@ export fn rom_fs_new() RomFileSystem {
     };
 }
 
+/// 创建基于宿主目录的 FAT 文件系统适配器。
 export fn fat_fs_new(base_dir: &const byte) FatFileSystem {
     return FatFileSystem{ base_dir: base_dir };
 }
 
+/// 计算以 NUL 结尾的文件系统路径长度。
 export fn fs_path_len(path: &const byte) usize {
     return fs_cstr_len(path);
 }

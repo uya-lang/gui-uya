@@ -121,6 +121,7 @@ BitmapAllocator {
     }
 }
 
+/// 按给定容量创建位图分配器。
 export fn bitmap_allocator_new(capacity: i32) BitmapAllocator {
     var capped: i32 = capacity;
     if capped < 0 {

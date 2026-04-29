@@ -519,6 +519,7 @@ export struct ObjTree {
     }
 }
 
+/// 创建空的对象树管理器。
 export fn obj_tree_new() ObjTree {
     return ObjTree{
         root_idx: -1,

@@ -407,6 +407,7 @@ fn bench_animations() !u64 {
     return (try now_ms()) - start_ms;
 }
 
+/// 运行 `core_bench` 并返回退出码。
 export fn run_core_bench() i32 {
     const pool_ms: u64 = bench_obj_pool() catch {
         return 1;

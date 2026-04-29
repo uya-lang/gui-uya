@@ -915,6 +915,7 @@ fn novel_scroll_to(novel: &NovelRetained, value: i32) void {
     novel.scroll_y = novel_clamp_i32(value, 0, novel_scroll_max(novel));
 }
 
+/// 按给定增量滚动 `novel_retained`。
 export fn novel_retained_scroll_by(novel: &NovelRetained, delta: i32) void {
     if novel == null {
         return;
@@ -923,6 +924,7 @@ export fn novel_retained_scroll_by(novel: &NovelRetained, delta: i32) void {
     novel_scroll_to(novel, novel.scroll_y + delta);
 }
 
+/// 将 `novel_retained` 滚动到顶部。
 export fn novel_retained_scroll_to_top(novel: &NovelRetained) void {
     if novel == null {
         return;
@@ -931,6 +933,7 @@ export fn novel_retained_scroll_to_top(novel: &NovelRetained) void {
     novel_scroll_to(novel, 0);
 }
 
+/// 将 `novel_retained` 滚动到底部。
 export fn novel_retained_scroll_to_end(novel: &NovelRetained) void {
     if novel == null {
         return;
@@ -939,6 +942,7 @@ export fn novel_retained_scroll_to_end(novel: &NovelRetained) void {
     novel_scroll_to(novel, novel_scroll_max(novel));
 }
 
+/// 切换 `novel_retained` 的自动滚动状态。
 export fn novel_retained_toggle_auto_scroll(novel: &NovelRetained) void {
     if novel == null {
         return;
@@ -948,6 +952,7 @@ export fn novel_retained_toggle_auto_scroll(novel: &NovelRetained) void {
     novel.last_auto_tick_ms = 0u32;
 }
 
+/// 返回 `novel_retained` 的当前进度百分比。
 export fn novel_retained_progress_percent(novel: &NovelRetained) i32 {
     if novel == null {
         return 0;
@@ -960,6 +965,7 @@ export fn novel_retained_progress_percent(novel: &NovelRetained) i32 {
     return (novel.scroll_y * 100) / max_scroll;
 }
 
+/// 提供 `novel_retained_reset_state` 的公开辅助入口。
 export fn novel_retained_reset_state(novel: &NovelRetained) void {
     if novel == null {
         return;
@@ -971,6 +977,7 @@ export fn novel_retained_reset_state(novel: &NovelRetained) void {
     novel.last_auto_tick_ms = 0u32;
 }
 
+/// 处理 `novel_retained` 的触摸输入。
 export fn novel_retained_handle_touch(novel: &NovelRetained, evt: &Event, local: Point) void {
     if novel == null || evt == null {
         return;
@@ -1021,6 +1028,7 @@ export fn novel_retained_handle_touch(novel: &NovelRetained, evt: &Event, local:
     }
 }
 
+/// 推进 `novel_retained` 的一帧更新。
 export fn novel_retained_update(novel: &NovelRetained, now_ms: u32) void {
     if novel == null {
         return;
@@ -1170,6 +1178,7 @@ fn novel_draw_progress_canvas(canvas: &Canvas, progress_percent: i32) void {
     canvas.end_draw();
 }
 
+/// 创建默认的 `NovelPageRetained` 实例。
 export fn novel_page_retained_new() NovelPageRetained {
     return NovelPageRetained{
         tree: obj_tree_new(),
@@ -1209,6 +1218,7 @@ export fn novel_page_retained_new() NovelPageRetained {
     };
 }
 
+/// 初始化 `novel_page_retained` 的内部状态。
 export fn novel_page_retained_init(page_state: &NovelPageRetained, novel: &NovelRetained) void {
     if page_state == null || page_state.ready {
         return;
@@ -1355,6 +1365,7 @@ export fn novel_page_retained_init(page_state: &NovelPageRetained, novel: &Novel
     page_state.ready = true;
 }
 
+/// 将外部状态同步到 `novel_page_retained`。
 export fn novel_page_retained_sync(page_state: &NovelPageRetained, novel: &NovelRetained) void {
     if page_state == null || novel == null {
         return;
@@ -1399,6 +1410,7 @@ export fn novel_page_retained_sync(page_state: &NovelPageRetained, novel: &Novel
     }
 }
 
+/// 按 retained 状态参数将 `novel` demo 渲染到指定上下文。
 export fn render_demo_novel_retained_state(page_state: &NovelPageRetained, novel: &NovelRetained, ctx: &RenderCtx, origin_x: i16, origin_y: i16) void {
     if page_state == null || novel == null || ctx == null {
         return;
@@ -1408,6 +1420,7 @@ export fn render_demo_novel_retained_state(page_state: &NovelPageRetained, novel
     page_state.page.render(ctx);
 }
 
+/// 初始化 `novel_retained` 的内部状态。
 export fn novel_retained_init(novel: &NovelRetained) void {
     if novel == null || novel.ready {
         return;
@@ -1418,6 +1431,7 @@ export fn novel_retained_init(novel: &NovelRetained) void {
     novel.ready = true;
 }
 
+/// 按显式状态参数将 `novel` demo 渲染到指定上下文。
 export fn render_demo_novel_state(novel: &NovelRetained, ctx: &RenderCtx, origin_x: i16, origin_y: i16) void {
     if novel == null || ctx == null {
         return;
@@ -1605,11 +1619,13 @@ export fn render_demo_novel_state(novel: &NovelRetained, ctx: &RenderCtx, origin
     novel_draw_cstr(ctx, origin_x + sim_layout_x(212), origin_y + sim_layout_y(NOVEL_FOOTER_Y), &footer_buf[0], meta_font, Color{ r: 112, g: 90, b: 68, a: 255 });
 }
 
+/// 将 `novel` demo 渲染到指定上下文。
 export fn render_demo_novel(ctx: &RenderCtx, origin_x: i16, origin_y: i16) void {
     var novel: NovelRetained = novel_retained_new();
     render_demo_novel_state(&novel, ctx, origin_x, origin_y);
 }
 
+/// 运行 `novel` demo 并返回退出码。
 export fn run_demo_novel() i32 {
     const bytes_len: usize = framebuffer_required_bytes(SIM_DEFAULT_RES_WIDTH, SIM_DEFAULT_RES_HEIGHT, PixelFormat.ARGB8888);
     const bytes: &byte = malloc(bytes_len) as &byte;
@@ -1629,6 +1645,7 @@ export fn run_demo_novel() i32 {
     return 0;
 }
 
+/// 创建默认的 `NovelRetained` 实例。
 export fn novel_retained_new() NovelRetained {
     return NovelRetained{
         ready: false,

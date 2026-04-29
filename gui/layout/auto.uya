@@ -40,6 +40,7 @@ export struct AutoLayout {
     }
 }
 
+/// 创建自动布局配置实例。
 export fn auto_layout_new() AutoLayout {
     return AutoLayout{
         flex: flex_layout_row(),

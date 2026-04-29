@@ -190,6 +190,7 @@ export struct SimRecorder {
     }
 }
 
+/// 创建输入录制器实例。
 export fn sim_recorder_new() SimRecorder {
     return SimRecorder{
         events: [],

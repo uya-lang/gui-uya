@@ -6,6 +6,7 @@ use render.ctx.render_ctx_new;
 use widget.btn.Button;
 use widget.grid_view.GridView;
 
+/// 运行 `custom_keyboard_example` 示例并返回退出码。
 export fn run_custom_keyboard_example() i32 {
     var bytes: [byte: 10240] = [];
     var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 64, 40, 256, PixelFormat.ARGB8888));
