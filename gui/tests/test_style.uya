@@ -253,6 +253,17 @@ test "style builder extended dsl covers layout and state helpers" {
     try assert_style_u32(&st, StyleProp.Overflow, 1u32);
 }
 
+test "style builder grid area shorthand maps to grid placement props" {
+    var builder: StyleBuilder = style_builder_new();
+    builder.grid_area(2, 3, 4, 5);
+    const st: Style = builder.build();
+
+    try assert_style_i32(&st, StyleProp.GridColumn, 2);
+    try assert_style_i32(&st, StyleProp.GridRow, 3);
+    try assert_style_i32(&st, StyleProp.GridColumnSpan, 4);
+    try assert_style_i32(&st, StyleProp.GridRowSpan, 5);
+}
+
 test "theme manager switches active variant" {
     var manager: ThemeManager = theme_manager_new();
     manager.register_theme(material_light_theme());

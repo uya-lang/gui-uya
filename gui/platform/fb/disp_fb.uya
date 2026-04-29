@@ -138,13 +138,13 @@ export struct FbDisplay {
         self.ctx.swap_buffers();
         const front: &FrameBuffer = self.ctx.get_front_buffer();
         const view: DirtyRegionView = dirty.get_regions();
-        if view.len <= 0 {
+        if view.is_empty() {
             return true;
         }
 
         var i: i32 = 0;
         while i < view.len {
-            const rect: Rect = view.regions[i];
+            const rect: Rect = view.at(i);
             if uya_gui_sim_fb_present_region(
                 self.host,
                 front.pixels as &const byte,

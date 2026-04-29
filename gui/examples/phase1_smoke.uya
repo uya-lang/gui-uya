@@ -1,6 +1,7 @@
 use std.runtime.entry;
 
 use core.dirty_region.DirtyRegion;
+use core.dirty_region.DirtyRegionView;
 use core.dirty_region.dirty_region_new;
 use core.event_dispatch.EventDispatcher;
 use core.event_dispatch.event_dispatcher_new;
@@ -65,7 +66,8 @@ export fn run_phase1_smoke() i32 {
     dirty.add(left.screen_area());
     dirty.add(right.screen_area());
     dirty.merge();
-    if dirty.get_regions().len <= 0 {
+    const view: DirtyRegionView = dirty.get_regions();
+    if view.is_empty() {
         return 7;
     }
 

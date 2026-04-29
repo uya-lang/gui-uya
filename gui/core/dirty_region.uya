@@ -32,8 +32,45 @@ fn rect_touches(a: Rect, b: Rect) bool {
 }
 
 export struct DirtyRegionView {
-    regions: [Rect: 8],
+    ptr: &Rect,
     len: i32,
+
+    fn is_empty(self: &Self) bool {
+        return self == null || self.ptr == null || self.len <= 0;
+    }
+
+    fn at(self: &Self, idx: i32) Rect {
+        if self == null || self.ptr == null || idx < 0 || idx >= self.len {
+            return RECT_ZERO;
+        }
+        return self.ptr[idx as usize];
+    }
+
+    fn iter(self: &Self) DirtyRegionIter {
+        if self == null {
+            return dirty_region_iter_empty();
+        }
+        return DirtyRegionIter{
+            ptr: self.ptr,
+            len: self.len,
+            index: 0,
+        };
+    }
+}
+
+export struct DirtyRegionIter {
+    ptr: &Rect,
+    len: i32,
+    index: i32,
+
+    fn next(self: &Self, out: &Rect) bool {
+        if out == null || self.ptr == null || self.index < 0 || self.index >= self.len {
+            return false;
+        }
+        out[0] = self.ptr[self.index as usize];
+        self.index = self.index + 1;
+        return true;
+    }
 }
 
 export struct DirtyRegion {
@@ -214,16 +251,13 @@ export struct DirtyRegion {
     }
 
     fn get_regions(self: &Self) DirtyRegionView {
-        var view: DirtyRegionView = DirtyRegionView{
-            regions: [],
+        if self.merged_count <= 0 {
+            return dirty_region_view_empty();
+        }
+        return DirtyRegionView{
+            ptr: &self.merged[0],
             len: self.merged_count,
         };
-        var i: i32 = 0;
-        while i < self.merged_count {
-            view.regions[i] = self.merged[i];
-            i = i + 1;
-        }
-        return view;
     }
 
     fn clear(self: &Self) void {
@@ -243,5 +277,20 @@ export fn dirty_region_new() DirtyRegion {
         full_threshold_percent: 70,
         force_full: false,
         merge_ops: 0u32,
+    };
+}
+
+export fn dirty_region_view_empty() DirtyRegionView {
+    return DirtyRegionView{
+        ptr: null,
+        len: 0,
+    };
+}
+
+export fn dirty_region_iter_empty() DirtyRegionIter {
+    return DirtyRegionIter{
+        ptr: null,
+        len: 0,
+        index: 0,
     };
 }

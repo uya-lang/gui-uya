@@ -80,7 +80,8 @@ export struct ObjTreeDirtyRenderPlan {
         if self.full_refresh || self.request_count > 0 {
             return true;
         }
-        return self.dirty.get_regions().len > 0;
+        const view: DirtyRegionView = self.dirty.get_regions();
+        return !view.is_empty();
     }
 }
 
@@ -360,7 +361,7 @@ export struct ObjTree {
         }
 
         const view: DirtyRegionView = plan.dirty.get_regions();
-        if view.len <= 0 {
+        if view.is_empty() {
             plan.full_refresh = true;
             return plan;
         }
@@ -393,13 +394,13 @@ export struct ObjTree {
         }
 
         const view: DirtyRegionView = plan.dirty.get_regions();
-        if view.len <= 0 {
+        if view.is_empty() {
             return false;
         }
 
         var i: i32 = 0;
         while i < view.len {
-            ctx.push_clip(view.regions[i]);
+            ctx.push_clip(view.at(i));
             self.root.render(ctx);
             ctx.pop_clip();
             i = i + 1;

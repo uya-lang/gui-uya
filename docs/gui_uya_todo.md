@@ -327,7 +327,7 @@
 - [x] 单元测试（基础行布局）
 - [x] `RowReverse` / `ColumnReverse` 真正反向布局逻辑
 - [x] `wrap` / `align_content` 生效逻辑
-- [ ] 扩展各种组合 30+ 用例
+- [x] 扩展各种组合 30+ 用例（`test_layout.uya` 已补到 36 个 Flex 用例）
 
 #### Day 3: Grid 布局
 - [x] `layout/grid.uya` - Grid 布局
@@ -341,7 +341,7 @@
   - [x] Grid 属性
     - [x] `grid_column`, `grid_row`
     - [x] `grid_column_span`, `grid_row_span`
-    - [ ] `grid_area`
+    - [x] `grid_area`（`StyleBuilder.grid_area()` shorthand，映射到 `grid_column/grid_row/grid_*_span`）
 - [x] 单元测试
 
 #### Day 4: 绝对定位与混合布局
@@ -383,7 +383,7 @@
   - [x] 面积启发式
   - [x] 数量限制 (超出则全屏刷新)
 - [x] 单元测试
-- [ ] 收敛到更通用的切片/迭代视图接口
+- [x] 收敛到更通用的切片/迭代视图接口（`DirtyRegionView ptr+len` + `is_empty/at/iter`）
 
 #### Day 3-4: 渲染调度
 - [ ] 渲染流水线

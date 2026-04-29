@@ -1794,7 +1794,7 @@ SimApp {
             const view: DirtyRegionView = plan.dirty.get_regions();
             var i: i32 = 0;
             while i < view.len {
-                ctx.push_clip(view.regions[i]);
+                ctx.push_clip(view.at(i));
                 self.render_home_nav(ctx);
                 ctx.pop_clip();
                 i = i + 1;

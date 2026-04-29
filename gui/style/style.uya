@@ -766,11 +766,15 @@ StyleBuilder {
         self.style.set_i32(StyleProp.FlexBasis, basis);
     }
 
-    fn grid_cell(self: &Self, column: i32, row: i32, col_span: i32, row_span: i32) void {
+    fn grid_area(self: &Self, column: i32, row: i32, col_span: i32, row_span: i32) void {
         self.style.set_i32(StyleProp.GridColumn, column);
         self.style.set_i32(StyleProp.GridRow, row);
         self.style.set_i32(StyleProp.GridColumnSpan, col_span);
         self.style.set_i32(StyleProp.GridRowSpan, row_span);
+    }
+
+    fn grid_cell(self: &Self, column: i32, row: i32, col_span: i32, row_span: i32) void {
+        self.grid_area(column, row, col_span, row_span);
     }
 
     fn overflow(self: &Self, mode: u32) void {
