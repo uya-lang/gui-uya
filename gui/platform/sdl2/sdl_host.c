@@ -587,9 +587,13 @@ static int uya_gui_sim_init_gles2_pipeline(UyaGuiSimDisplay *display) {
     return 1;
 }
 
-static int uya_gui_sim_init_renderer_pipeline(UyaGuiSimDisplay *display) {
+static int uya_gui_sim_init_renderer_pipeline(UyaGuiSimDisplay *display, int vsync_enabled) {
+    uint32_t renderer_flags = SDL_RENDERER_ACCELERATED;
+    if (vsync_enabled != 0) {
+        renderer_flags |= SDL_RENDERER_PRESENTVSYNC;
+    }
     (void)SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");
-    display->renderer = SDL_CreateRenderer(display->window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+    display->renderer = SDL_CreateRenderer(display->window, -1, renderer_flags);
     if (display->renderer == NULL) {
         display->renderer = SDL_CreateRenderer(display->window, -1, SDL_RENDERER_SOFTWARE);
     }
@@ -843,7 +847,7 @@ static void uya_gui_sim_clamp_logical_point(const UyaGuiSimDisplay *display, int
     *out_y = (int16_t)logical_y;
 }
 
-void *uya_gui_sim_sdl_display_open(int32_t width, int32_t height, int32_t scale, int32_t fullscreen, int32_t gpu_mode, const uint8_t *title) {
+void *uya_gui_sim_sdl_display_open(int32_t width, int32_t height, int32_t scale, int32_t fullscreen, int32_t gpu_mode, int32_t vsync_enabled, const uint8_t *title) {
     uya_gui_sim_init_host_allocators();
     if (g_sdl_refcount == 0) {
         if (g_host_malloc_fn == NULL || g_host_calloc_fn == NULL || g_host_realloc_fn == NULL || g_host_free_fn == NULL) {
@@ -898,7 +902,7 @@ void *uya_gui_sim_sdl_display_open(int32_t width, int32_t height, int32_t scale,
         if (display->window != NULL) {
             display->gl_context = SDL_GL_CreateContext(display->window);
             if (display->gl_context != NULL) {
-                (void)SDL_GL_SetSwapInterval(1);
+                (void)SDL_GL_SetSwapInterval(vsync_enabled != 0 ? 1 : 0);
                 if (uya_gui_sim_init_gles2_pipeline(display)) {
                     g_active_display = display;
                     g_last_error[0] = '\0';
@@ -923,7 +927,7 @@ void *uya_gui_sim_sdl_display_open(int32_t width, int32_t height, int32_t scale,
     }
 
     display->window = uya_gui_sim_create_window(width, height, display->scale, fullscreen, title, 0u);
-    if (display->window == NULL || !uya_gui_sim_init_renderer_pipeline(display)) {
+    if (display->window == NULL || !uya_gui_sim_init_renderer_pipeline(display, vsync_enabled)) {
         if (display->window == NULL) {
             uya_gui_sim_set_error(SDL_GetError());
         }

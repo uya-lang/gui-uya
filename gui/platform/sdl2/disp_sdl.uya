@@ -15,7 +15,7 @@ use platform.disp.framebuffer_required_bytes;
 extern fn malloc(size: usize) &void;
 extern fn free(ptr: &void) void;
 
-extern fn uya_gui_sim_sdl_display_open(width: i32, height: i32, scale: i32, fullscreen: i32, gpu_mode: i32, title: &const byte) &void;
+extern fn uya_gui_sim_sdl_display_open(width: i32, height: i32, scale: i32, fullscreen: i32, gpu_mode: i32, vsync: i32, title: &const byte) &void;
 extern fn uya_gui_sim_sdl_display_close(handle: &void) void;
 extern fn uya_gui_sim_sdl_display_present(handle: &void, pixels: &const byte, pitch: i32, width: i32, height: i32, format_tag: i32) i32;
 extern fn uya_gui_sim_sdl_display_present_begin(handle: &void, width: i32, height: i32, format_tag: i32) i32;
@@ -35,10 +35,11 @@ export struct SdlDisplay {
     alloc_bytes: usize,
     scale: u8,
     fullscreen: bool,
+    vsync_enabled: bool,
     ctx: DisplayCtx,
 
-    fn init(self: &Self, width: u16, height: u16, scale: u8, title: &const byte, fullscreen: bool, gpu_mode: i32) bool {
-        self.host = uya_gui_sim_sdl_display_open(width as i32, height as i32, scale as i32, fullscreen as i32, gpu_mode, title);
+    fn init(self: &Self, width: u16, height: u16, scale: u8, title: &const byte, fullscreen: bool, gpu_mode: i32, vsync_enabled: bool) bool {
+        self.host = uya_gui_sim_sdl_display_open(width as i32, height as i32, scale as i32, fullscreen as i32, gpu_mode, vsync_enabled as i32, title);
         if self.host == null {
             return false;
         }
@@ -57,6 +58,7 @@ export struct SdlDisplay {
         self.ctx = display_ctx_new(front, back);
         self.scale = scale;
         self.fullscreen = fullscreen;
+        self.vsync_enabled = vsync_enabled;
         framebuffer_clear(self.ctx.get_front_buffer(), BLACK);
         framebuffer_clear(self.ctx.get_back_buffer(), BLACK);
         return true;
@@ -227,6 +229,7 @@ export fn sdl_display_new() SdlDisplay {
         alloc_bytes: 0usize,
         scale: 1,
         fullscreen: false,
+        vsync_enabled: true,
         ctx: display_ctx_new(empty_framebuffer(), empty_framebuffer()),
     };
 }

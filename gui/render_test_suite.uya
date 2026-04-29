@@ -1,12 +1,14 @@
 use tests.test_render_assets;
 use tests.test_render_ctx;
 use tests.test_render_pipeline;
+use tests.test_render_scheduler;
 use tests.test_text_compare;
 
 test "render suite loads" {
     const sentinel: i32 = TEST_RENDER_ASSETS_MODULE
         + TEST_RENDER_CTX_MODULE
         + TEST_RENDER_PIPELINE_MODULE
+        + TEST_RENDER_SCHEDULER_MODULE
         + TEST_TEXT_COMPARE_MODULE;
     _ = sentinel;
 }

@@ -7,12 +7,9 @@ use core.event_dispatch.event_dispatcher_new;
 use core.obj.gui_obj_register;
 use core.obj.gui_obj_reset_registry;
 use core.obj_tree.ObjTree;
-use core.obj_tree.ObjTreeDirtyRenderPlan;
-use core.obj_tree.ObjTreeRepaintRequest;
 use core.obj_tree.obj_tree_new;
 use core.color.Color;
 use core.color.BLACK;
-use core.dirty_region.DirtyRegionView;
 use core.point.POINT_ZERO;
 use core.point.Point;
 use core.rect.Rect;
@@ -83,6 +80,11 @@ use render.ctx.RenderCtx;
 use render.ctx.render_ctx_new;
 use render.font.Font;
 use render.font.draw_text;
+use render.scheduler.IRenderScheduleFullCallback;
+use render.scheduler.IRenderScheduleOverlayCallback;
+use render.scheduler.RenderFrameResult;
+use render.scheduler.render_frame_result_idle;
+use render.scheduler.render_schedule_tree_frame;
 use render.font.ttf_cache_hit_count;
 use render.font.ttf_cache_miss_count;
 use render.font.ttf_cache_reset;
@@ -273,10 +275,44 @@ export struct SimApp {
 struct AppButtonClickAdapter : IWidgetEventCallback {}
 struct AppSliderValueAdapter : IWidgetValueCallback {}
 struct AppSwitchValueAdapter : IWidgetValueCallback {}
+struct AppRetainedFullAdapter : IRenderScheduleFullCallback {}
+struct AppRetainedOverlayAdapter : IRenderScheduleOverlayCallback {}
 
 var APP_BUTTON_CLICK_ADAPTER: IWidgetEventCallback = AppButtonClickAdapter{};
 var APP_SLIDER_VALUE_ADAPTER: IWidgetValueCallback = AppSliderValueAdapter{};
 var APP_SWITCH_VALUE_ADAPTER: IWidgetValueCallback = AppSwitchValueAdapter{};
+var APP_RETAINED_FULL_ADAPTER: IRenderScheduleFullCallback = AppRetainedFullAdapter{};
+var APP_RETAINED_OVERLAY_ADAPTER: IRenderScheduleOverlayCallback = AppRetainedOverlayAdapter{};
+
+AppRetainedFullAdapter {
+    fn invoke(self: &Self, ctx: &RenderCtx, user_data: &void) void {
+        _ = self;
+        const app: &SimApp = user_data as &SimApp;
+        if app == null {
+            return;
+        }
+        if sim_demo_is_phase(app.config.demo) {
+            app.page.render(ctx);
+            app.render_home_nav(ctx);
+            return;
+        }
+        app.render_selected_demo(ctx);
+        app.render_standalone_back_button(ctx);
+    }
+}
+
+AppRetainedOverlayAdapter {
+    fn invoke(self: &Self, ctx: &RenderCtx, clip: Rect, user_data: &void) void {
+        _ = self;
+        _ = clip;
+        const app: &SimApp = user_data as &SimApp;
+        if app == null {
+            return;
+        }
+        app.render_home_nav(ctx);
+        app.render_standalone_back_button(ctx);
+    }
+}
 
 fn sim_chart_sample(value: i32, taps: i32, wheel: i16) i32 {
     var sample: i32 = value + taps * 3 + wheel as i32 * 4;
@@ -1694,114 +1730,47 @@ SimApp {
             || self.config.demo == SimDemoKind.Custom;
     }
 
-    fn render_retained(self: &Self, ctx: &RenderCtx, force_full: bool) void {
+    fn render_retained(self: &Self, ctx: &RenderCtx, force_full: bool) RenderFrameResult {
         if !self.supports_dirty_render() {
             self.render(ctx);
-            return;
+            return render_frame_result_idle();
         }
         const requested_full: bool = force_full || self.force_full_redraw;
+        const screen: Rect = Rect{ x: 0, y: 0, w: ctx.fb.size.w, h: ctx.fb.size.h };
 
         if !sim_demo_is_phase(self.config.demo) {
             self.sync_current_retained_demo();
             const tree: &ObjTree = self.current_retained_tree();
             if tree == null {
                 self.render(ctx);
-                return;
+                return render_frame_result_idle();
             }
-            if requested_full {
-                ctx.clear(sim_standalone_bg_color(self.config.demo));
-                self.render_selected_demo(ctx);
-                self.render_standalone_back_button(ctx);
-                tree.clear_invalid_regions();
-                self.force_full_redraw = false;
-                return;
-            }
-            if !tree.has_invalid() {
-                return;
-            }
-            const screen: Rect = Rect{ x: 0, y: 0, w: ctx.fb.size.w, h: ctx.fb.size.h };
-            const plan: ObjTreeDirtyRenderPlan = tree.prepare_dirty_render(screen, false);
-            if plan.full_refresh {
-                ctx.clear(sim_standalone_bg_color(self.config.demo));
-                self.render_selected_demo(ctx);
-                self.render_standalone_back_button(ctx);
-                tree.clear_invalid_regions();
-                self.force_full_redraw = false;
-                return;
-            }
-            if !plan.has_work() {
-                return;
-            }
-            _ = tree.render_dirty(ctx, &plan);
-            if plan.request_count > 0 {
-                var j: i32 = 0;
-                while j < plan.request_count {
-                    const request: ObjTreeRepaintRequest = plan.requests[j];
-                    if !request.region.is_empty() {
-                        ctx.push_clip(request.region);
-                        self.render_standalone_back_button(ctx);
-                        ctx.pop_clip();
-                    }
-                    j = j + 1;
-                }
-            }
-            tree.clear_invalid_regions();
+            const result: RenderFrameResult = render_schedule_tree_frame(
+                ctx,
+                tree,
+                screen,
+                requested_full,
+                sim_standalone_bg_color(self.config.demo),
+                &APP_RETAINED_FULL_ADAPTER,
+                &APP_RETAINED_OVERLAY_ADAPTER,
+                self as &void
+            );
             self.force_full_redraw = false;
-            return;
+            return result;
         }
 
-        if requested_full {
-            ctx.clear(sim_phase_bg_color());
-            self.page.render(ctx);
-            self.render_home_nav(ctx);
-            self.tree.clear_invalid_regions();
-            self.force_full_redraw = false;
-            return;
-        }
-
-        if !self.tree.has_invalid() {
-            return;
-        }
-
-        const screen: Rect = Rect{ x: 0, y: 0, w: ctx.fb.size.w, h: ctx.fb.size.h };
-        const plan: ObjTreeDirtyRenderPlan = self.tree.prepare_dirty_render(screen, false);
-        if plan.full_refresh {
-            ctx.clear(sim_phase_bg_color());
-            self.page.render(ctx);
-            self.render_home_nav(ctx);
-            self.tree.clear_invalid_regions();
-            return;
-        }
-
-        if !plan.has_work() {
-            return;
-        }
-
-        _ = self.tree.render_dirty(ctx, &plan);
-
-        if plan.request_count > 0 {
-            var i: i32 = 0;
-            while i < plan.request_count {
-                const request: ObjTreeRepaintRequest = plan.requests[i];
-                if !request.region.is_empty() {
-                    ctx.push_clip(request.region);
-                    self.render_home_nav(ctx);
-                    ctx.pop_clip();
-                }
-                i = i + 1;
-            }
-        } else {
-            const view: DirtyRegionView = plan.dirty.get_regions();
-            var i: i32 = 0;
-            while i < view.len {
-                ctx.push_clip(view.at(i));
-                self.render_home_nav(ctx);
-                ctx.pop_clip();
-                i = i + 1;
-            }
-        }
-        self.tree.clear_invalid_regions();
+        const result: RenderFrameResult = render_schedule_tree_frame(
+            ctx,
+            &self.tree,
+            screen,
+            requested_full,
+            sim_phase_bg_color(),
+            &APP_RETAINED_FULL_ADAPTER,
+            &APP_RETAINED_OVERLAY_ADAPTER,
+            self as &void
+        );
         self.force_full_redraw = false;
+        return result;
     }
 
     fn record_touch_edge(self: &Self, evt: &Event) void {

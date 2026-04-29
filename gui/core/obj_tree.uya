@@ -1,4 +1,5 @@
 use core.obj.GuiObj;
+use core.obj.GUI_OBJ_REGISTRY_CAPACITY;
 use core.obj.gui_obj_get;
 use core.dirty_region.DirtyRegion;
 use core.dirty_region.DirtyRegionView;
@@ -65,6 +66,7 @@ fn obj_tree_pick_repaint_root(node: &GuiObj, region: Rect) &GuiObj {
 export struct ObjTreeRepaintRequest {
     root: &GuiObj,
     region: Rect,
+    z_order: i32,
 }
 
 export struct ObjTreeDirtyRenderPlan {
@@ -109,6 +111,7 @@ fn obj_tree_dirty_render_plan_add(plan: &ObjTreeDirtyRenderPlan, root: &GuiObj, 
     plan.requests[plan.request_count as usize] = ObjTreeRepaintRequest{
         root: root,
         region: obj_tree_rect_copy(region),
+        z_order: -1,
     };
     plan.request_count = plan.request_count + 1;
 }
@@ -126,6 +129,87 @@ fn obj_tree_collect_repaint_requests(plan: &ObjTreeDirtyRenderPlan, node: &GuiOb
     while child != null {
         obj_tree_collect_repaint_requests(plan, child);
         child = child.sibling_next;
+    }
+}
+
+fn obj_tree_find_render_order_recursive(node: &GuiObj, target: &GuiObj, next_order: &i32) i32 {
+    if node == null {
+        return -1;
+    }
+    const current_order: i32 = next_order[0];
+    next_order[0] = next_order[0] + 1;
+    if node == target {
+        return current_order;
+    }
+
+    var child: &GuiObj = node.child_head;
+    while child != null {
+        const found: i32 = obj_tree_find_render_order_recursive(child, target, next_order);
+        if found >= 0 {
+            return found;
+        }
+        child = child.sibling_next;
+    }
+    return -1;
+}
+
+fn obj_tree_find_render_order(root: &GuiObj, target: &GuiObj) i32 {
+    if root == null || target == null {
+        return -1;
+    }
+    var next_order: i32 = 0;
+    return obj_tree_find_render_order_recursive(root, target, &next_order);
+}
+
+fn obj_tree_assign_repaint_z_order(plan: &ObjTreeDirtyRenderPlan, root: &GuiObj) void {
+    if plan == null || root == null || plan.request_count <= 0 {
+        return;
+    }
+
+    var i: i32 = 0;
+    while i < plan.request_count {
+        const request_root: &GuiObj = plan.requests[i].root;
+        if request_root != null && request_root.obj_idx >= 0 && request_root.obj_idx < GUI_OBJ_REGISTRY_CAPACITY {
+            plan.requests[i].z_order = obj_tree_find_render_order(root, request_root);
+        } else {
+            plan.requests[i].z_order = -1;
+        }
+        i = i + 1;
+    }
+}
+
+fn obj_tree_sort_repaint_requests(plan: &ObjTreeDirtyRenderPlan) void {
+    if plan == null || plan.request_count <= 1 {
+        return;
+    }
+
+    var i: i32 = 1;
+    while i < plan.request_count {
+        const current_root: &GuiObj = plan.requests[i].root;
+        const current_region_x: i16 = plan.requests[i].region.x;
+        const current_region_y: i16 = plan.requests[i].region.y;
+        const current_region_w: u16 = plan.requests[i].region.w;
+        const current_region_h: u16 = plan.requests[i].region.h;
+        const current_z: i32 = plan.requests[i].z_order;
+        var j: i32 = i - 1;
+        while j >= 0 {
+            if plan.requests[j].z_order <= current_z {
+                break;
+            }
+            plan.requests[(j + 1) as usize] = plan.requests[j];
+            j = j - 1;
+        }
+        plan.requests[(j + 1) as usize] = ObjTreeRepaintRequest{
+            root: current_root,
+            region: Rect{
+                x: current_region_x,
+                y: current_region_y,
+                w: current_region_w,
+                h: current_region_h,
+            },
+            z_order: current_z,
+        };
+        i = i + 1;
     }
 }
 
@@ -367,6 +451,8 @@ export struct ObjTree {
         }
 
         obj_tree_collect_repaint_requests(&plan, self.root);
+        obj_tree_assign_repaint_z_order(&plan, self.root);
+        obj_tree_sort_repaint_requests(&plan);
         return plan;
     }
 

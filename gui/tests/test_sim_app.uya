@@ -55,6 +55,9 @@ test "sim config defaults to auto gpu and exposes names" {
     try assert_eq_i32(cfg.gpu as i32, SimGpuKind.Auto as i32);
     try assert_eq_i32(cfg.width as i32, SIM_DEFAULT_RES_WIDTH as i32);
     try assert_eq_i32(cfg.height as i32, SIM_DEFAULT_RES_HEIGHT as i32);
+    try assert_eq_i32(cfg.target_fps as i32, 60);
+    try assert_eq_bool(cfg.vsync_enabled, true);
+    try assert_eq_bool(cfg.adaptive_frame_pacing, true);
     try assert_eq_bool(cfg.show_dirty_regions, false);
     try assert_eq_bool(sim_cstr_eq(sim_gpu_name(SimGpuKind.Auto), "auto"), true);
     try assert_eq_bool(sim_cstr_eq(sim_gpu_name(SimGpuKind.Software), "software"), true);
@@ -138,22 +141,22 @@ test "sim app retained render repaints only affected phase widgets" {
 
     app.refresh_status_label("状态 A");
     var frame_a_ctx: RenderCtx = render_ctx_new(framebuffer_new(&frame_a_bytes[0], cfg.width, cfg.height, cfg.width * 4u16, PixelFormat.ARGB8888));
-    app.render_retained(&frame_a_ctx, true);
+    _ = app.render_retained(&frame_a_ctx, true);
 
     var partial_copy_fb: FrameBuffer = framebuffer_new(&partial_bytes[0], cfg.width, cfg.height, cfg.width * 4u16, PixelFormat.ARGB8888);
     try assert_eq_bool(framebuffer_copy(&partial_copy_fb, &frame_a_ctx.fb), true);
     app.refresh_status_label("状态 B");
     var partial_ctx: RenderCtx = render_ctx_new(framebuffer_new(&partial_bytes[0], cfg.width, cfg.height, cfg.width * 4u16, PixelFormat.ARGB8888));
-    app.render_retained(&partial_ctx, false);
+    _ = app.render_retained(&partial_ctx, false);
 
     var expected_app: SimApp = sim_app_new();
     try assert_eq_bool(expected_app.init(cfg), true);
     expected_app.refresh_status_label("状态 A");
     var warm_expected_ctx: RenderCtx = render_ctx_new(framebuffer_new(&frame_a_bytes[0], cfg.width, cfg.height, cfg.width * 4u16, PixelFormat.ARGB8888));
-    expected_app.render_retained(&warm_expected_ctx, true);
+    _ = expected_app.render_retained(&warm_expected_ctx, true);
     expected_app.refresh_status_label("状态 B");
     var expected_ctx: RenderCtx = render_ctx_new(framebuffer_new(&expected_bytes[0], cfg.width, cfg.height, cfg.width * 4u16, PixelFormat.ARGB8888));
-    expected_app.render_retained(&expected_ctx, true);
+    _ = expected_app.render_retained(&expected_ctx, true);
 
     try sim_expect_frame_equal(&partial_bytes[0], &expected_bytes[0], pixels_len);
     try assert_eq_bool(partial_ctx.stats.image_ops == 0u32, true);
@@ -399,7 +402,7 @@ test "widgets retained click matches full redraw for outlined selection" {
     var frame_a_bytes: [byte: 8294400] = [];
 
     var frame_a_ctx: RenderCtx = render_ctx_new(framebuffer_new(&frame_a_bytes[0], cfg.width, cfg.height, cfg.width * 4u16, PixelFormat.ARGB8888));
-    app.render_retained(&frame_a_ctx, true);
+    _ = app.render_retained(&frame_a_ctx, true);
 
     var partial_fb: FrameBuffer = framebuffer_new(&partial_bytes[0], cfg.width, cfg.height, cfg.width * 4u16, PixelFormat.ARGB8888);
     try assert_eq_bool(framebuffer_copy(&partial_fb, &frame_a_ctx.fb), true);
@@ -416,14 +419,14 @@ test "widgets retained click matches full redraw for outlined selection" {
     app.handle_translated_event(&outlined_click);
 
     var partial_ctx: RenderCtx = render_ctx_new(partial_fb);
-    app.render_retained(&partial_ctx, false);
+    _ = app.render_retained(&partial_ctx, false);
 
     var expected_app: SimApp = sim_app_new();
     try assert_eq_bool(expected_app.init(cfg), true);
     expected_app.widgets_control_idx = 1;
     expected_app.refresh_status_label("Outlined 按钮已触发");
     var expected_ctx: RenderCtx = render_ctx_new(framebuffer_new(&expected_bytes[0], cfg.width, cfg.height, cfg.width * 4u16, PixelFormat.ARGB8888));
-    expected_app.render_retained(&expected_ctx, true);
+    _ = expected_app.render_retained(&expected_ctx, true);
 
     try sim_expect_frame_equal(&partial_bytes[0], &expected_bytes[0], pixels_len);
 }
