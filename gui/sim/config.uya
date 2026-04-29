@@ -22,6 +22,7 @@ export enum SimDemoKind {
     Settings,
     Dashboard,
     Game,
+    Animation,
     Perf,
     Novel,
     Widgets,
@@ -84,6 +85,9 @@ export fn sim_demo_name(kind: SimDemoKind) &const byte {
     }
     if kind == SimDemoKind.Game {
         return "2048" as &const byte;
+    }
+    if kind == SimDemoKind.Animation {
+        return "动画" as &const byte;
     }
     if kind == SimDemoKind.Perf {
         return "性能" as &const byte;
@@ -218,6 +222,8 @@ export fn sim_config_from_runtime() SimConfig {
                     cfg.demo = SimDemoKind.Dashboard;
                 } else if sim_cstr_eq(next as &const byte, "game") {
                     cfg.demo = SimDemoKind.Game;
+                } else if sim_cstr_eq(next as &const byte, "animation") {
+                    cfg.demo = SimDemoKind.Animation;
                 } else if sim_cstr_eq(next as &const byte, "perf") {
                     cfg.demo = SimDemoKind.Perf;
                 } else if sim_cstr_eq(next as &const byte, "novel") {

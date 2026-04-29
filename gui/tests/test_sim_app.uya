@@ -13,6 +13,8 @@ use platform.disp.framebuffer_required_bytes;
 use render.ctx.RenderCtx;
 use render.ctx.ctx_pixel;
 use render.ctx.render_ctx_new;
+use examples.demo_animation.animation_demo_replay_rect;
+use examples.demo_animation.animation_demo_toggle_rect;
 use examples.demo_widgets.WidgetsRetained;
 use examples.demo_widgets.render_demo_widgets_retained_state;
 use examples.demo_widgets.widgets_retained_new;
@@ -201,6 +203,67 @@ test "standalone music demo reacts to touch click" {
     var click_evt: Event = event_point(EventType.Click, InputDev.Touch, -1, 40u32, Point{ x: sim_layout_x(64), y: sim_layout_y(260) });
     app.handle_translated_event(&click_evt);
     try assert_eq_bool(app.music_playing, true);
+}
+
+test "standalone animation demo renders and toggles playback" {
+    var app: SimApp = sim_app_new();
+    var cfg: SimConfig = sim_config_default();
+    cfg.demo = SimDemoKind.Animation;
+    cfg.width = SIM_DEFAULT_RES_WIDTH;
+    cfg.height = SIM_DEFAULT_RES_HEIGHT;
+    try assert_eq_bool(app.init(cfg), true);
+    try assert_eq_bool(app.animation_demo.playing, true);
+
+    const pixels_len: usize = framebuffer_required_bytes(cfg.width, cfg.height, PixelFormat.ARGB8888);
+    const pixels: &byte = malloc(pixels_len) as &byte;
+    if pixels == null {
+        try assert_eq_bool(false, true);
+        return;
+    }
+    defer {
+        free(pixels as &void);
+    }
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(pixels, cfg.width, cfg.height, cfg.width * 4u16, PixelFormat.ARGB8888));
+    app.render(&ctx);
+    try assert_eq_bool(ctx.stats.text_ops > 0u32, true);
+    try assert_eq_bool(ctx.stats.rect_ops > 0u32, true);
+
+    const toggle_rect: Rect = animation_demo_toggle_rect();
+    var toggle_click: Event = event_point(
+        EventType.Click,
+        InputDev.Touch,
+        -1,
+        40u32,
+        Point{
+            x: app.current_demo_origin_x() + toggle_rect.x + toggle_rect.w as i16 / 2,
+            y: app.current_demo_origin_y() + toggle_rect.y + toggle_rect.h as i16 / 2,
+        }
+    );
+    app.handle_translated_event(&toggle_click);
+    try assert_eq_bool(app.animation_demo.playing, false);
+
+    const paused_x: i32 = app.animation_demo.linear_pill.widget.base.x as i32;
+    app.update(32u32, 132u32);
+    try assert_eq_i32(app.animation_demo.linear_pill.widget.base.x as i32, paused_x);
+
+    app.handle_translated_event(&toggle_click);
+    try assert_eq_bool(app.animation_demo.playing, true);
+    app.update(32u32, 164u32);
+    try assert_eq_bool(app.animation_demo.linear_pill.widget.base.x as i32 != paused_x, true);
+
+    const replay_rect: Rect = animation_demo_replay_rect();
+    var replay_click: Event = event_point(
+        EventType.Click,
+        InputDev.Touch,
+        -1,
+        196u32,
+        Point{
+            x: app.current_demo_origin_x() + replay_rect.x + replay_rect.w as i16 / 2,
+            y: app.current_demo_origin_y() + replay_rect.y + replay_rect.h as i16 / 2,
+        }
+    );
+    app.handle_translated_event(&replay_click);
+    try assert_eq_i32(app.animation_demo.cycle_count, 1);
 }
 
 test "standalone dashboard and 2048 demos react to touch and playback taps" {

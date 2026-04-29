@@ -13,6 +13,14 @@ use core.color.BLACK;
 use core.point.POINT_ZERO;
 use core.point.Point;
 use core.rect.Rect;
+use examples.demo_animation.AnimationRetained;
+use examples.demo_animation.animation_retained_handle_touch;
+use examples.demo_animation.animation_retained_new;
+use examples.demo_animation.animation_retained_replay;
+use examples.demo_animation.animation_retained_sync;
+use examples.demo_animation.animation_retained_toggle;
+use examples.demo_animation.animation_retained_update;
+use examples.demo_animation.render_demo_animation_retained_state;
 use examples.demo_clock.ClockRetained;
 use examples.demo_clock.clock_retained_new;
 use examples.demo_clock.clock_retained_init;
@@ -185,8 +193,8 @@ const DASHBOARD_BUTTON_Y: i16 = 110;
 const DASHBOARD_BUTTON_W: i16 = 128;
 const DASHBOARD_BUTTON_H: i16 = 56;
 const DASHBOARD_BUTTON_STEP_Y: i16 = 66;
-const HOME_NAV_BUTTON_COUNT: i32 = 9;
-const HOME_NAV_BUTTON_COLS: i32 = 3;
+const HOME_NAV_BUTTON_COUNT: i32 = 10;
+const HOME_NAV_BUTTON_COLS: i32 = 4;
 const HOME_NAV_BUTTON_ROWS: i32 = 3;
 const HOME_NAV_BUTTON_GAP: i32 = 8;
 const HOME_NAV_BUTTON_H: i32 = 34;
@@ -211,6 +219,7 @@ export struct SimApp {
     input_label: Label,
     metrics_label: Label,
     help_label: Label,
+    animation_demo: AnimationRetained,
     clock_demo: ClockRetained,
     music_demo: MusicRetained,
     settings_demo: SettingsRetained,
@@ -573,12 +582,15 @@ SimApp {
             return SimDemoKind.Game;
         }
         if index == 5 {
-            return SimDemoKind.Perf;
+            return SimDemoKind.Animation;
         }
         if index == 6 {
-            return SimDemoKind.Novel;
+            return SimDemoKind.Perf;
         }
         if index == 7 {
+            return SimDemoKind.Novel;
+        }
+        if index == 8 {
             return SimDemoKind.Widgets;
         }
         return SimDemoKind.Custom;
@@ -602,12 +614,15 @@ SimApp {
             return "2048";
         }
         if index == 5 {
-            return "性能";
+            return "动画";
         }
         if index == 6 {
-            return "小说";
+            return "性能";
         }
         if index == 7 {
+            return "小说";
+        }
+        if index == 8 {
             return "控件";
         }
         return "自定义";
@@ -629,6 +644,9 @@ SimApp {
     }
         if demo == SimDemoKind.Game {
             return "已切到 2048 demo";
+        }
+        if demo == SimDemoKind.Animation {
+            return "已切到动画 demo";
         }
         if demo == SimDemoKind.Perf {
             return "已切到性能 demo";
@@ -950,6 +968,9 @@ SimApp {
         if self.config.demo == SimDemoKind.Clock {
             return &self.clock_demo.tree;
         }
+        if self.config.demo == SimDemoKind.Animation {
+            return &self.animation_demo.tree;
+        }
         if self.config.demo == SimDemoKind.Music {
             return &self.music_demo.tree;
         }
@@ -980,6 +1001,10 @@ SimApp {
     fn sync_current_retained_demo(self: &Self) void {
         if self.config.demo == SimDemoKind.Clock {
             clock_retained_init(&self.clock_demo);
+            return;
+        }
+        if self.config.demo == SimDemoKind.Animation {
+            animation_retained_sync(&self.animation_demo);
             return;
         }
         if self.config.demo == SimDemoKind.Perf {
@@ -1037,6 +1062,10 @@ SimApp {
         const origin_y: i16 = self.current_demo_origin_y();
         if self.config.demo == SimDemoKind.Clock {
             render_demo_clock_retained(&self.clock_demo, ctx, origin_x, origin_y);
+            return;
+        }
+        if self.config.demo == SimDemoKind.Animation {
+            render_demo_animation_retained_state(&self.animation_demo, ctx, origin_x, origin_y);
             return;
         }
         if self.config.demo == SimDemoKind.Music {
@@ -1099,6 +1128,7 @@ SimApp {
         self.music_track_idx = 1;
         self.music_playing = false;
         self.music_progress = 42;
+        self.animation_demo = animation_retained_new();
         self.settings_wifi = true;
         self.settings_alerts = false;
         self.settings_brightness = 68;
@@ -1543,6 +1573,12 @@ SimApp {
             return;
         }
         const local: Point = self.standalone_local_point(evt.point());
+        if self.config.demo == SimDemoKind.Animation {
+            if animation_retained_handle_touch(&self.animation_demo, evt, local) {
+                self.standalone_anim_tick_ms = 0u32;
+            }
+            return;
+        }
         if self.config.demo == SimDemoKind.Music {
             self.handle_music_demo_touch(evt, local);
             return;
@@ -1649,6 +1685,16 @@ SimApp {
 
     fn update(self: &Self, delta_ms: u32, now_ms: u32) void {
         _ = delta_ms;
+        if self.config.demo == SimDemoKind.Animation && self.animation_demo.playing {
+            if self.standalone_anim_tick_ms == 0u32 || now_ms - self.standalone_anim_tick_ms >= 16u32 {
+                var anim_dt: u32 = 16u32;
+                if self.standalone_anim_tick_ms != 0u32 {
+                    anim_dt = now_ms - self.standalone_anim_tick_ms;
+                }
+                self.standalone_anim_tick_ms = now_ms;
+                animation_retained_update(&self.animation_demo, anim_dt);
+            }
+        }
         if self.config.demo == SimDemoKind.Music && self.music_playing {
             if self.standalone_anim_tick_ms == 0u32 || now_ms - self.standalone_anim_tick_ms >= 120u32 {
                 self.standalone_anim_tick_ms = now_ms;
@@ -1693,6 +1739,9 @@ SimApp {
         if sim_demo_is_phase(self.config.demo) && self.toggle.checked {
             next_delay = sim_min_positive_delay(next_delay, sim_next_due_delay(now_ms, self.last_chart_tick_ms, 140u32));
         }
+        if self.config.demo == SimDemoKind.Animation && self.animation_demo.playing {
+            next_delay = sim_min_positive_delay(next_delay, sim_next_due_delay(now_ms, self.standalone_anim_tick_ms, 16u32));
+        }
         if self.config.demo == SimDemoKind.Music && self.music_playing {
             next_delay = sim_min_positive_delay(next_delay, sim_next_due_delay(now_ms, self.standalone_anim_tick_ms, 120u32));
         }
@@ -1720,6 +1769,7 @@ SimApp {
             return true;
         }
         return self.config.demo == SimDemoKind.Clock
+            || self.config.demo == SimDemoKind.Animation
             || self.config.demo == SimDemoKind.Music
             || self.config.demo == SimDemoKind.Settings
             || self.config.demo == SimDemoKind.Dashboard
@@ -1966,6 +2016,23 @@ SimApp {
         return false;
     }
 
+    fn handle_animation_key_event(self: &Self, key_code: u16) bool {
+        if self.config.demo != SimDemoKind.Animation {
+            return false;
+        }
+        if key_code == SIM_KEY_SPACE {
+            animation_retained_toggle(&self.animation_demo);
+            self.standalone_anim_tick_ms = 0u32;
+            return true;
+        }
+        if key_code == SIM_KEY_ENTER {
+            animation_retained_replay(&self.animation_demo);
+            self.standalone_anim_tick_ms = 0u32;
+            return true;
+        }
+        return false;
+    }
+
     fn handle_key_event(self: &Self, key_code: u16, pressed: bool, now_ms: u32, record: bool) void {
         self.last_key = key_code;
         if record {
@@ -2015,6 +2082,8 @@ SimApp {
                 self.switch_demo(SimDemoKind.Dashboard, "已切到看板 demo");
             } else if key_code == 'g' as u16 || key_code == 'G' as u16 {
                 self.switch_demo(SimDemoKind.Game, "已切到 2048 demo");
+            } else if key_code == 'a' as u16 || key_code == 'A' as u16 {
+                self.switch_demo(SimDemoKind.Animation, "已切到动画 demo");
             } else if key_code == 'b' as u16 || key_code == 'B' as u16 {
                 self.switch_demo(SimDemoKind.Perf, "已切到性能 demo");
             } else if key_code == 'n' as u16 || key_code == 'N' as u16 {
@@ -2023,6 +2092,7 @@ SimApp {
                 self.switch_demo(SimDemoKind.Widgets, "已切到控件总览 demo");
             } else if key_code == 'k' as u16 || key_code == 'K' as u16 {
                 self.switch_demo(SimDemoKind.Custom, "已切到自定义控件 demo");
+            } else if self.handle_animation_key_event(key_code) {
             } else if self.handle_game_key_event(key_code) {
             } else if self.handle_novel_key_event(key_code) {
             } else if key_code == SIM_KEY_LEFT || key_code == SIM_KEY_DOWN {
@@ -2170,6 +2240,7 @@ export fn sim_app_new() SimApp {
         input_label: Label.new("输入"),
         metrics_label: Label.new("指标"),
         help_label: Label.new("帮助"),
+        animation_demo: animation_retained_new(),
         clock_demo: clock_retained_new(),
         music_demo: music_retained_new(),
         settings_demo: settings_retained_new(),

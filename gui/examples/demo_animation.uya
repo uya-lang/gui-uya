@@ -1,0 +1,650 @@
+use anim.easing.EasingType;
+use anim.timeline.AnimManager;
+use anim.timeline.anim_manager_new;
+use anim.tween.AnimProp;
+use anim.tween.Tween;
+use anim.tween.anim_value_color;
+use anim.tween.anim_value_i32;
+use core.color.Color;
+use core.event.Event;
+use core.event.EventType;
+use core.obj.gui_obj_register;
+use core.obj_tree.ObjTree;
+use core.obj_tree.obj_tree_new;
+use core.point.Point;
+use core.rect.Rect;
+use libc.snprintf;
+use platform.disp.PixelFormat;
+use platform.disp.framebuffer_new;
+use platform.disp.framebuffer_required_bytes;
+use render.ctx.RenderCtx;
+use render.ctx.render_ctx_new;
+use sim.common.sim_layout_font;
+use sim.common.sim_layout_h;
+use sim.common.sim_layout_rect;
+use sim.common.sim_layout_w;
+use sim.common.sim_layout_x;
+use sim.common.sim_layout_y;
+use sim.common.SIM_DEFAULT_RES_HEIGHT;
+use sim.common.SIM_DEFAULT_RES_WIDTH;
+use style.StyleProp;
+use widget.btn.Button;
+use widget.lbl.Label;
+use widget.lbl.TextAlign;
+use widget.lbl.TextOverflow;
+use widget.page.Page;
+use widget.panel.Panel;
+
+extern fn malloc(size: usize) &void;
+extern fn free(ptr: &void) void;
+
+const ANIM_ID_LINEAR_PILL: i32 = 120;
+const ANIM_ID_CUBIC_PILL: i32 = 121;
+const ANIM_ID_BOUNCE_PILL: i32 = 122;
+const ANIM_ID_METER_FILL: i32 = 123;
+const ANIM_ID_MORPH_TILE: i32 = 124;
+
+fn animation_track_start_x() i32 {
+    return sim_layout_x(8) as i32;
+}
+
+fn animation_track_end_x() i32 {
+    return sim_layout_x(330) as i32;
+}
+
+fn animation_meter_start_w() i32 {
+    return sim_layout_w(44u16) as i32;
+}
+
+fn animation_meter_end_w() i32 {
+    return sim_layout_w(252u16) as i32;
+}
+
+fn animation_morph_start_x() i32 {
+    return sim_layout_x(20) as i32;
+}
+
+fn animation_morph_end_x() i32 {
+    return sim_layout_x(178) as i32;
+}
+
+fn animation_replay_rect_local() Rect {
+    return sim_layout_rect(38, 434, 112u16, 28u16);
+}
+
+fn animation_toggle_rect_local() Rect {
+    return sim_layout_rect(178, 434, 112u16, 28u16);
+}
+
+fn animation_style_chip(panel: &Panel, bg: Color, border: Color) void {
+    if panel == null {
+        return;
+    }
+    panel.widget.base.style.set_color(StyleProp.BgColor, bg);
+    panel.widget.base.style.set_color(StyleProp.BorderColor, border);
+    panel.widget.base.style.set_color(StyleProp.ShadowColor, Color{ r: 15, g: 23, b: 42, a: 18 });
+    panel.widget.base.style.set_i32(StyleProp.ShadowOffsetY, 1);
+    panel.widget.base.style.set_u32(StyleProp.BorderWidth, 1u32);
+    panel.widget.base.style.set_u32(StyleProp.Radius, 12u32);
+    panel.widget.base.style.set_u32(StyleProp.PaddingLeft, 0u32);
+    panel.widget.base.style.set_u32(StyleProp.PaddingRight, 0u32);
+    panel.widget.base.style.set_u32(StyleProp.PaddingTop, 0u32);
+    panel.widget.base.style.set_u32(StyleProp.PaddingBottom, 0u32);
+}
+
+fn animation_style_track(panel: &Panel) void {
+    if panel == null {
+        return;
+    }
+    panel.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 241, g: 245, b: 249, a: 255 });
+    panel.widget.base.style.set_color(StyleProp.BorderColor, Color{ r: 203, g: 213, b: 225, a: 255 });
+    panel.widget.base.style.set_color(StyleProp.ShadowColor, Color{ r: 0, g: 0, b: 0, a: 0 });
+    panel.widget.base.style.set_u32(StyleProp.BorderWidth, 1u32);
+    panel.widget.base.style.set_u32(StyleProp.Radius, 14u32);
+    panel.widget.base.style.set_u32(StyleProp.PaddingLeft, 0u32);
+    panel.widget.base.style.set_u32(StyleProp.PaddingRight, 0u32);
+    panel.widget.base.style.set_u32(StyleProp.PaddingTop, 0u32);
+    panel.widget.base.style.set_u32(StyleProp.PaddingBottom, 0u32);
+}
+
+fn animation_style_meter_fill(panel: &Panel) void {
+    if panel == null {
+        return;
+    }
+    panel.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 16, g: 185, b: 129, a: 255 });
+    panel.widget.base.style.set_color(StyleProp.BorderColor, Color{ r: 5, g: 150, b: 105, a: 255 });
+    panel.widget.base.style.set_color(StyleProp.ShadowColor, Color{ r: 0, g: 0, b: 0, a: 0 });
+    panel.widget.base.style.set_u32(StyleProp.BorderWidth, 0u32);
+    panel.widget.base.style.set_u32(StyleProp.Radius, 8u32);
+    panel.widget.base.style.set_u32(StyleProp.PaddingLeft, 0u32);
+    panel.widget.base.style.set_u32(StyleProp.PaddingRight, 0u32);
+    panel.widget.base.style.set_u32(StyleProp.PaddingTop, 0u32);
+    panel.widget.base.style.set_u32(StyleProp.PaddingBottom, 0u32);
+}
+
+fn animation_style_button(button: &Button) void {
+    if button == null {
+        return;
+    }
+    button.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(12u8) as u32);
+}
+
+fn animation_refresh_status(anim: &AnimationRetained) void {
+    if anim == null {
+        return;
+    }
+    var state_text: &const byte = "Playing" as &const byte;
+    var toggle_text: &const byte = "Pause" as &const byte;
+    if !anim.playing {
+        state_text = "Paused" as &const byte;
+        toggle_text = "Play" as &const byte;
+    }
+    _ = snprintf(
+        &anim.status_text[0],
+        96usize,
+        "%s | cycle %d" as &const byte,
+        state_text,
+        anim.cycle_count
+    );
+    anim.status_label.set_text(&anim.status_text[0]);
+    _ = anim.toggle_btn.set_label(toggle_text);
+}
+
+fn animation_start_cycle(anim: &AnimationRetained) void {
+    if anim == null {
+        return;
+    }
+    anim.manager.stop_all();
+
+    var linear_move: Tween = Tween.new(ANIM_ID_LINEAR_PILL, AnimProp.X, anim_value_i32(animation_track_end_x()), 1400u32);
+    linear_move.with_from_i32(animation_track_start_x());
+    linear_move.with_easing(EasingType.Linear);
+    linear_move.repeat(1);
+    linear_move.yoyo(true);
+    _ = anim.manager.start_tween(&linear_move) catch {};
+
+    var cubic_move: Tween = Tween.new(ANIM_ID_CUBIC_PILL, AnimProp.X, anim_value_i32(animation_track_end_x()), 1400u32);
+    cubic_move.with_from_i32(animation_track_start_x());
+    cubic_move.with_easing(EasingType.EaseInOutCubic);
+    cubic_move.repeat(1);
+    cubic_move.yoyo(true);
+    _ = anim.manager.start_tween(&cubic_move) catch {};
+
+    var bounce_move: Tween = Tween.new(ANIM_ID_BOUNCE_PILL, AnimProp.X, anim_value_i32(animation_track_end_x()), 1400u32);
+    bounce_move.with_from_i32(animation_track_start_x());
+    bounce_move.with_easing(EasingType.EaseOutBounce);
+    bounce_move.repeat(1);
+    bounce_move.yoyo(true);
+    _ = anim.manager.start_tween(&bounce_move) catch {};
+
+    var meter_width: Tween = Tween.new(ANIM_ID_METER_FILL, AnimProp.Width, anim_value_i32(animation_meter_end_w()), 1100u32);
+    meter_width.with_from_i32(animation_meter_start_w());
+    meter_width.with_easing(EasingType.EaseOutCubic);
+    meter_width.repeat(1);
+    meter_width.yoyo(true);
+    _ = anim.manager.start_tween(&meter_width) catch {};
+
+    var meter_color: Tween = Tween.new(
+        ANIM_ID_METER_FILL,
+        AnimProp.BgColor,
+        anim_value_color(Color{ r: 59, g: 130, b: 246, a: 255 }),
+        1100u32
+    );
+    meter_color.with_from_color(Color{ r: 16, g: 185, b: 129, a: 255 });
+    meter_color.with_easing(EasingType.EaseInOutSine);
+    meter_color.repeat(1);
+    meter_color.yoyo(true);
+    _ = anim.manager.start_tween(&meter_color) catch {};
+
+    var morph_x: Tween = Tween.new(ANIM_ID_MORPH_TILE, AnimProp.X, anim_value_i32(animation_morph_end_x()), 1400u32);
+    morph_x.with_from_i32(animation_morph_start_x());
+    morph_x.with_easing(EasingType.EaseInOutSine);
+    morph_x.repeat(1);
+    morph_x.yoyo(true);
+    _ = anim.manager.start_tween(&morph_x) catch {};
+
+    var morph_radius: Tween = Tween.new(ANIM_ID_MORPH_TILE, AnimProp.Radius, anim_value_i32(24), 1400u32);
+    morph_radius.with_from_i32(12);
+    morph_radius.with_easing(EasingType.EaseInOutSine);
+    morph_radius.repeat(1);
+    morph_radius.yoyo(true);
+    _ = anim.manager.start_tween(&morph_radius) catch {};
+
+    var morph_opacity: Tween = Tween.new(ANIM_ID_MORPH_TILE, AnimProp.Opacity, anim_value_i32(255), 1400u32);
+    morph_opacity.with_from_i32(132);
+    morph_opacity.with_easing(EasingType.EaseOutCubic);
+    morph_opacity.repeat(1);
+    morph_opacity.yoyo(true);
+    _ = anim.manager.start_tween(&morph_opacity) catch {};
+
+    var morph_color: Tween = Tween.new(
+        ANIM_ID_MORPH_TILE,
+        AnimProp.BgColor,
+        anim_value_color(Color{ r: 236, g: 72, b: 153, a: 255 }),
+        1400u32
+    );
+    morph_color.with_from_color(Color{ r: 251, g: 146, b: 60, a: 255 });
+    morph_color.with_easing(EasingType.EaseInOutSine);
+    morph_color.repeat(1);
+    morph_color.yoyo(true);
+    _ = anim.manager.start_tween(&morph_color) catch {};
+}
+
+export struct AnimationRetained {
+    tree: ObjTree,
+    page: Page,
+    hero: Panel,
+    hero_title: Label,
+    hero_subtitle: Label,
+    stage: Panel,
+    stage_title: Label,
+    stage_note: Label,
+    linear_name: Label,
+    cubic_name: Label,
+    bounce_name: Label,
+    linear_track: Panel,
+    linear_pill: Panel,
+    cubic_track: Panel,
+    cubic_pill: Panel,
+    bounce_track: Panel,
+    bounce_pill: Panel,
+    control_panel: Panel,
+    control_title: Label,
+    control_note: Label,
+    meter_track: Panel,
+    meter_fill: Panel,
+    status_label: Label,
+    replay_btn: Button,
+    toggle_btn: Button,
+    morph_panel: Panel,
+    morph_title: Label,
+    morph_note: Label,
+    morph_tile: Panel,
+    morph_caption: Label,
+    status_text: [byte: 96],
+    ready: bool,
+    manager: AnimManager,
+    playing: bool,
+    cycle_count: i32,
+}
+
+/// 创建默认的 `AnimationRetained` 实例。
+export fn animation_retained_new() AnimationRetained {
+    return AnimationRetained{
+        tree: obj_tree_new(),
+        page: Page.new("Animation"),
+        hero: Panel.new(),
+        hero_title: Label.new("Animation Lab"),
+        hero_subtitle: Label.new("AnimManager drives X, width, opacity, radius and color in one looping scene."),
+        stage: Panel.new(),
+        stage_title: Label.new("Same distance, different easing"),
+        stage_note: Label.new("Linear keeps a constant pace, cubic eases in and out, bounce lands with extra personality."),
+        linear_name: Label.new("Linear"),
+        cubic_name: Label.new("EaseInOutCubic"),
+        bounce_name: Label.new("EaseOutBounce"),
+        linear_track: Panel.new(),
+        linear_pill: Panel.new(),
+        cubic_track: Panel.new(),
+        cubic_pill: Panel.new(),
+        bounce_track: Panel.new(),
+        bounce_pill: Panel.new(),
+        control_panel: Panel.new(),
+        control_title: Label.new("Width Tween"),
+        control_note: Label.new("Replay restarts tweens. Pause freezes the frame."),
+        meter_track: Panel.new(),
+        meter_fill: Panel.new(),
+        status_label: Label.new("Playing | cycle 1"),
+        replay_btn: Button.outlined("Replay"),
+        toggle_btn: Button.filled("Pause"),
+        morph_panel: Panel.new(),
+        morph_title: Label.new("Morph Card"),
+        morph_note: Label.new("Tile glides while changing radius, opacity and color."),
+        morph_tile: Panel.new(),
+        morph_caption: Label.new("Radius + opacity + bg color"),
+        status_text: [],
+        ready: false,
+        manager: anim_manager_new(),
+        playing: true,
+        cycle_count: 1,
+    };
+}
+
+/// 返回 `Replay` 按钮在 demo 本地坐标系中的区域。
+export fn animation_demo_replay_rect() Rect {
+    return animation_replay_rect_local();
+}
+
+/// 返回 `Play/Pause` 按钮在 demo 本地坐标系中的区域。
+export fn animation_demo_toggle_rect() Rect {
+    return animation_toggle_rect_local();
+}
+
+/// 初始化 `animation_retained` 的内部状态。
+export fn animation_retained_init(anim: &AnimationRetained) void {
+    if anim == null || anim.ready {
+        return;
+    }
+
+    anim.page.widget.at(0, 0);
+    anim.page.widget.size(SIM_DEFAULT_RES_WIDTH, SIM_DEFAULT_RES_HEIGHT);
+    anim.page.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 244, g: 247, b: 252, a: 255 });
+
+    anim.hero.widget.at(sim_layout_x(20), sim_layout_y(16));
+    anim.hero.widget.size(sim_layout_w(600u16), sim_layout_h(72u16));
+    anim.hero.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 255, g: 255, b: 255, a: 255 });
+
+    anim.hero_title.widget.at(sim_layout_x(20), sim_layout_y(14));
+    anim.hero_title.widget.size(sim_layout_w(560u16), sim_layout_h(28u16));
+    anim.hero_title.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(26u8) as u32);
+    _ = anim.hero_title.set_align(TextAlign.Center);
+
+    anim.hero_subtitle.widget.at(sim_layout_x(20), sim_layout_y(44));
+    anim.hero_subtitle.widget.size(sim_layout_w(560u16), sim_layout_h(16u16));
+    anim.hero_subtitle.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(12u8) as u32);
+    anim.hero_subtitle.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 100, g: 116, b: 139, a: 255 });
+    _ = anim.hero_subtitle.set_align(TextAlign.Center);
+
+    anim.stage.widget.at(sim_layout_x(20), sim_layout_y(100));
+    anim.stage.widget.size(sim_layout_w(600u16), sim_layout_h(194u16));
+    anim.stage.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 255, g: 255, b: 255, a: 255 });
+
+    anim.stage_title.widget.at(sim_layout_x(18), sim_layout_y(16));
+    anim.stage_title.widget.size(sim_layout_w(260u16), sim_layout_h(18u16));
+    anim.stage_title.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(18u8) as u32);
+
+    anim.stage_note.widget.at(sim_layout_x(18), sim_layout_y(36));
+    anim.stage_note.widget.size(sim_layout_w(564u16), sim_layout_h(18u16));
+    anim.stage_note.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(12u8) as u32);
+    anim.stage_note.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 100, g: 116, b: 139, a: 255 });
+    anim.stage_note.overflow = TextOverflow.Wrap;
+
+    anim.linear_name.widget.at(sim_layout_x(18), sim_layout_y(74));
+    anim.linear_name.widget.size(sim_layout_w(116u16), sim_layout_h(16u16));
+    anim.linear_name.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(12u8) as u32);
+    anim.linear_name.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 51, g: 65, b: 85, a: 255 });
+
+    anim.cubic_name.widget.at(sim_layout_x(18), sim_layout_y(116));
+    anim.cubic_name.widget.size(sim_layout_w(116u16), sim_layout_h(16u16));
+    anim.cubic_name.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(12u8) as u32);
+    anim.cubic_name.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 51, g: 65, b: 85, a: 255 });
+
+    anim.bounce_name.widget.at(sim_layout_x(18), sim_layout_y(158));
+    anim.bounce_name.widget.size(sim_layout_w(116u16), sim_layout_h(16u16));
+    anim.bounce_name.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(12u8) as u32);
+    anim.bounce_name.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 51, g: 65, b: 85, a: 255 });
+
+    animation_style_track(&anim.linear_track);
+    anim.linear_track.widget.at(sim_layout_x(148), sim_layout_y(68));
+    anim.linear_track.widget.size(sim_layout_w(420u16), sim_layout_h(28u16));
+
+    animation_style_track(&anim.cubic_track);
+    anim.cubic_track.widget.at(sim_layout_x(148), sim_layout_y(110));
+    anim.cubic_track.widget.size(sim_layout_w(420u16), sim_layout_h(28u16));
+
+    animation_style_track(&anim.bounce_track);
+    anim.bounce_track.widget.at(sim_layout_x(148), sim_layout_y(152));
+    anim.bounce_track.widget.size(sim_layout_w(420u16), sim_layout_h(28u16));
+
+    animation_style_chip(
+        &anim.linear_pill,
+        Color{ r: 14, g: 165, b: 233, a: 255 },
+        Color{ r: 2, g: 132, b: 199, a: 255 }
+    );
+    anim.linear_pill.widget.at(sim_layout_x(8), sim_layout_y(2));
+    anim.linear_pill.widget.size(sim_layout_w(82u16), sim_layout_h(24u16));
+
+    animation_style_chip(
+        &anim.cubic_pill,
+        Color{ r: 99, g: 102, b: 241, a: 255 },
+        Color{ r: 79, g: 70, b: 229, a: 255 }
+    );
+    anim.cubic_pill.widget.at(sim_layout_x(8), sim_layout_y(2));
+    anim.cubic_pill.widget.size(sim_layout_w(82u16), sim_layout_h(24u16));
+
+    animation_style_chip(
+        &anim.bounce_pill,
+        Color{ r: 249, g: 115, b: 22, a: 255 },
+        Color{ r: 234, g: 88, b: 12, a: 255 }
+    );
+    anim.bounce_pill.widget.at(sim_layout_x(8), sim_layout_y(2));
+    anim.bounce_pill.widget.size(sim_layout_w(82u16), sim_layout_h(24u16));
+
+    anim.control_panel.widget.at(sim_layout_x(20), sim_layout_y(322));
+    anim.control_panel.widget.size(sim_layout_w(288u16), sim_layout_h(148u16));
+    anim.control_panel.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 240, g: 253, b: 250, a: 255 });
+
+    anim.control_title.widget.at(sim_layout_x(18), sim_layout_y(16));
+    anim.control_title.widget.size(sim_layout_w(160u16), sim_layout_h(18u16));
+    anim.control_title.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(18u8) as u32);
+
+    anim.control_note.widget.at(sim_layout_x(18), sim_layout_y(38));
+    anim.control_note.widget.size(sim_layout_w(260u16), sim_layout_h(34u16));
+    anim.control_note.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(12u8) as u32);
+    anim.control_note.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 71, g: 85, b: 105, a: 255 });
+    anim.control_note.overflow = TextOverflow.Wrap;
+
+    animation_style_track(&anim.meter_track);
+    anim.meter_track.widget.at(sim_layout_x(18), sim_layout_y(76));
+    anim.meter_track.widget.size(sim_layout_w(252u16), sim_layout_h(16u16));
+    anim.meter_track.widget.base.style.set_u32(StyleProp.Radius, 8u32);
+
+    animation_style_meter_fill(&anim.meter_fill);
+    anim.meter_fill.widget.at(0, 0);
+    anim.meter_fill.widget.size(sim_layout_w(44u16), sim_layout_h(16u16));
+
+    anim.status_label.widget.at(sim_layout_x(18), sim_layout_y(98));
+    anim.status_label.widget.size(sim_layout_w(252u16), sim_layout_h(16u16));
+    anim.status_label.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(12u8) as u32);
+    anim.status_label.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 15, g: 23, b: 42, a: 255 });
+
+    animation_style_button(&anim.replay_btn);
+    anim.replay_btn.widget.at(sim_layout_x(18), sim_layout_y(112));
+    anim.replay_btn.widget.size(sim_layout_w(112u16), sim_layout_h(28u16));
+
+    animation_style_button(&anim.toggle_btn);
+    anim.toggle_btn.widget.at(sim_layout_x(158), sim_layout_y(112));
+    anim.toggle_btn.widget.size(sim_layout_w(112u16), sim_layout_h(28u16));
+
+    anim.morph_panel.widget.at(sim_layout_x(324), sim_layout_y(322));
+    anim.morph_panel.widget.size(sim_layout_w(296u16), sim_layout_h(148u16));
+    anim.morph_panel.widget.base.style.set_color(StyleProp.BgColor, Color{ r: 255, g: 247, b: 237, a: 255 });
+
+    anim.morph_title.widget.at(sim_layout_x(18), sim_layout_y(16));
+    anim.morph_title.widget.size(sim_layout_w(160u16), sim_layout_h(18u16));
+    anim.morph_title.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(18u8) as u32);
+
+    anim.morph_note.widget.at(sim_layout_x(18), sim_layout_y(38));
+    anim.morph_note.widget.size(sim_layout_w(260u16), sim_layout_h(34u16));
+    anim.morph_note.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(12u8) as u32);
+    anim.morph_note.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 120, g: 53, b: 15, a: 255 });
+    anim.morph_note.overflow = TextOverflow.Wrap;
+
+    animation_style_chip(
+        &anim.morph_tile,
+        Color{ r: 251, g: 146, b: 60, a: 255 },
+        Color{ r: 249, g: 115, b: 22, a: 255 }
+    );
+    anim.morph_tile.widget.at(sim_layout_x(20), sim_layout_y(74));
+    anim.morph_tile.widget.size(sim_layout_w(88u16), sim_layout_h(48u16));
+    anim.morph_tile.widget.base.style.set_u32(StyleProp.Opacity, 132u32);
+
+    anim.morph_caption.widget.at(sim_layout_x(18), sim_layout_y(124));
+    anim.morph_caption.widget.size(sim_layout_w(252u16), sim_layout_h(20u16));
+    anim.morph_caption.widget.base.style.set_u32(StyleProp.FontSize, sim_layout_font(12u8) as u32);
+    anim.morph_caption.widget.base.style.set_color(StyleProp.FgColor, Color{ r: 120, g: 53, b: 15, a: 255 });
+    _ = anim.morph_caption.set_align(TextAlign.Center);
+    anim.morph_caption.overflow = TextOverflow.Wrap;
+
+    anim.page.add(anim.hero.obj());
+    anim.page.add(anim.stage.obj());
+    anim.page.add(anim.control_panel.obj());
+    anim.page.add(anim.morph_panel.obj());
+
+    anim.hero.add(anim.hero_title.obj());
+    anim.hero.add(anim.hero_subtitle.obj());
+
+    anim.stage.add(anim.stage_title.obj());
+    anim.stage.add(anim.stage_note.obj());
+    anim.stage.add(anim.linear_name.obj());
+    anim.stage.add(anim.cubic_name.obj());
+    anim.stage.add(anim.bounce_name.obj());
+    anim.stage.add(anim.linear_track.obj());
+    anim.stage.add(anim.cubic_track.obj());
+    anim.stage.add(anim.bounce_track.obj());
+    anim.linear_track.add(anim.linear_pill.obj());
+    anim.cubic_track.add(anim.cubic_pill.obj());
+    anim.bounce_track.add(anim.bounce_pill.obj());
+
+    anim.control_panel.add(anim.control_title.obj());
+    anim.control_panel.add(anim.control_note.obj());
+    anim.control_panel.add(anim.meter_track.obj());
+    anim.control_panel.add(anim.status_label.obj());
+    anim.control_panel.add(anim.replay_btn.obj());
+    anim.control_panel.add(anim.toggle_btn.obj());
+    anim.meter_track.add(anim.meter_fill.obj());
+
+    anim.morph_panel.add(anim.morph_title.obj());
+    anim.morph_panel.add(anim.morph_note.obj());
+    anim.morph_panel.add(anim.morph_tile.obj());
+    anim.morph_panel.add(anim.morph_caption.obj());
+
+    _ = gui_obj_register(ANIM_ID_LINEAR_PILL, anim.linear_pill.obj());
+    _ = gui_obj_register(ANIM_ID_CUBIC_PILL, anim.cubic_pill.obj());
+    _ = gui_obj_register(ANIM_ID_BOUNCE_PILL, anim.bounce_pill.obj());
+    _ = gui_obj_register(ANIM_ID_METER_FILL, anim.meter_fill.obj());
+    _ = gui_obj_register(ANIM_ID_MORPH_TILE, anim.morph_tile.obj());
+
+    anim.tree.set_root(0, anim.page.obj());
+    anim.playing = true;
+    anim.cycle_count = 1;
+    animation_start_cycle(anim);
+    animation_refresh_status(anim);
+    anim.ready = true;
+}
+
+/// 将外部状态同步到 `animation_retained`。
+export fn animation_retained_sync(anim: &AnimationRetained) void {
+    if anim == null {
+        return;
+    }
+    animation_retained_init(anim);
+    animation_refresh_status(anim);
+}
+
+/// 重播整段动画序列。
+export fn animation_retained_replay(anim: &AnimationRetained) void {
+    if anim == null {
+        return;
+    }
+    animation_retained_init(anim);
+    anim.playing = true;
+    anim.cycle_count = 1;
+    animation_start_cycle(anim);
+    animation_refresh_status(anim);
+}
+
+/// 切换动画播放状态。
+export fn animation_retained_toggle(anim: &AnimationRetained) void {
+    if anim == null {
+        return;
+    }
+    animation_retained_init(anim);
+    if anim.playing {
+        anim.playing = false;
+    } else {
+        anim.playing = true;
+        if !anim.manager.is_animating() {
+            animation_start_cycle(anim);
+        }
+    }
+    animation_refresh_status(anim);
+}
+
+/// 处理动画 demo 的本地触摸事件。
+export fn animation_retained_handle_touch(anim: &AnimationRetained, evt: &Event, local: Point) bool {
+    if anim == null || evt == null {
+        return false;
+    }
+    animation_retained_init(anim);
+    if evt.event_type != EventType.Click {
+        return false;
+    }
+    const replay_rect: Rect = animation_replay_rect_local();
+    const replay_point: Point = Point{ x: local.x, y: local.y };
+    if replay_rect.contains(replay_point) {
+        animation_retained_replay(anim);
+        return true;
+    }
+    const toggle_rect: Rect = animation_toggle_rect_local();
+    const toggle_point: Point = Point{ x: local.x, y: local.y };
+    if toggle_rect.contains(toggle_point) {
+        animation_retained_toggle(anim);
+        return true;
+    }
+    return false;
+}
+
+/// 推进动画 demo 的时间轴。
+export fn animation_retained_update(anim: &AnimationRetained, dt_ms: u32) void {
+    if anim == null {
+        return;
+    }
+    animation_retained_init(anim);
+    if !anim.playing {
+        return;
+    }
+    if !anim.manager.is_animating() {
+        animation_start_cycle(anim);
+    }
+    anim.manager.update_all(dt_ms);
+    if !anim.manager.is_animating() {
+        anim.cycle_count = anim.cycle_count + 1;
+        animation_start_cycle(anim);
+    }
+    animation_refresh_status(anim);
+}
+
+/// 使用 retained 状态将 `animation` demo 渲染到指定上下文。
+export fn render_demo_animation_retained_state(anim: &AnimationRetained, ctx: &RenderCtx, origin_x: i16, origin_y: i16) void {
+    if anim == null {
+        return;
+    }
+    animation_retained_sync(anim);
+    anim.page.widget.at(origin_x, origin_y);
+    anim.page.render(ctx);
+}
+
+/// 将 `animation` demo 渲染到指定上下文。
+export fn render_demo_animation(ctx: &RenderCtx, origin_x: i16, origin_y: i16) void {
+    var anim: AnimationRetained = animation_retained_new();
+    render_demo_animation_retained_state(&anim, ctx, origin_x, origin_y);
+}
+
+/// 运行 `animation` demo 并返回退出码。
+export fn run_demo_animation() i32 {
+    const bytes_len: usize = framebuffer_required_bytes(SIM_DEFAULT_RES_WIDTH, SIM_DEFAULT_RES_HEIGHT, PixelFormat.ARGB8888);
+    const bytes: &byte = malloc(bytes_len) as &byte;
+    if bytes == null {
+        return 2;
+    }
+    defer {
+        free(bytes as &void);
+    }
+
+    var anim: AnimationRetained = animation_retained_new();
+    animation_retained_sync(&anim);
+    const before_x: i32 = anim.linear_pill.widget.base.x as i32;
+    animation_retained_update(&anim, 220u32);
+    const after_x: i32 = anim.linear_pill.widget.base.x as i32;
+
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(bytes, SIM_DEFAULT_RES_WIDTH, SIM_DEFAULT_RES_HEIGHT, SIM_DEFAULT_RES_WIDTH * 4u16, PixelFormat.ARGB8888));
+    ctx.clear(Color{ r: 244, g: 247, b: 252, a: 255 });
+    render_demo_animation_retained_state(&anim, &ctx, 0, 0);
+    if after_x <= before_x {
+        return 1;
+    }
+    if ctx.stats.text_ops == 0u32 || ctx.stats.rect_ops == 0u32 {
+        return 3;
+    }
+    return 0;
+}
