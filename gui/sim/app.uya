@@ -16,6 +16,8 @@ use core.rect.Rect;
 use examples.demo_animation.AnimationRetained;
 use examples.demo_animation.animation_retained_handle_touch;
 use examples.demo_animation.animation_retained_new;
+use examples.demo_animation.animation_retained_next_view;
+use examples.demo_animation.animation_retained_prev_view;
 use examples.demo_animation.animation_retained_replay;
 use examples.demo_animation.animation_retained_sync;
 use examples.demo_animation.animation_retained_toggle;
@@ -2019,6 +2021,14 @@ SimApp {
     fn handle_animation_key_event(self: &Self, key_code: u16) bool {
         if self.config.demo != SimDemoKind.Animation {
             return false;
+        }
+        if key_code == SIM_KEY_LEFT || key_code == SIM_KEY_UP {
+            animation_retained_prev_view(&self.animation_demo);
+            return true;
+        }
+        if key_code == SIM_KEY_RIGHT || key_code == SIM_KEY_DOWN {
+            animation_retained_next_view(&self.animation_demo);
+            return true;
         }
         if key_code == SIM_KEY_SPACE {
             animation_retained_toggle(&self.animation_demo);

@@ -14,6 +14,7 @@ use render.ctx.RenderCtx;
 use render.ctx.ctx_pixel;
 use render.ctx.render_ctx_new;
 use examples.demo_animation.animation_demo_replay_rect;
+use examples.demo_animation.animation_demo_section_rect;
 use examples.demo_animation.animation_demo_toggle_rect;
 use examples.demo_widgets.WidgetsRetained;
 use examples.demo_widgets.render_demo_widgets_retained_state;
@@ -228,6 +229,20 @@ test "standalone animation demo renders and toggles playback" {
     try assert_eq_bool(ctx.stats.text_ops > 0u32, true);
     try assert_eq_bool(ctx.stats.rect_ops > 0u32, true);
 
+    const transition_rect: Rect = animation_demo_section_rect(2);
+    var transition_click: Event = event_point(
+        EventType.Click,
+        InputDev.Touch,
+        -1,
+        32u32,
+        Point{
+            x: app.current_demo_origin_x() + transition_rect.x + transition_rect.w as i16 / 2,
+            y: app.current_demo_origin_y() + transition_rect.y + transition_rect.h as i16 / 2,
+        }
+    );
+    app.handle_translated_event(&transition_click);
+    try assert_eq_i32(app.animation_demo.current_view, 2);
+
     const toggle_rect: Rect = animation_demo_toggle_rect();
     var toggle_click: Event = event_point(
         EventType.Click,
@@ -242,14 +257,14 @@ test "standalone animation demo renders and toggles playback" {
     app.handle_translated_event(&toggle_click);
     try assert_eq_bool(app.animation_demo.playing, false);
 
-    const paused_x: i32 = app.animation_demo.linear_pill.widget.base.x as i32;
+    const paused_x: i32 = app.animation_demo.easing_pills[0].widget.base.x as i32;
     app.update(32u32, 132u32);
-    try assert_eq_i32(app.animation_demo.linear_pill.widget.base.x as i32, paused_x);
+    try assert_eq_i32(app.animation_demo.easing_pills[0].widget.base.x as i32, paused_x);
 
     app.handle_translated_event(&toggle_click);
     try assert_eq_bool(app.animation_demo.playing, true);
     app.update(32u32, 164u32);
-    try assert_eq_bool(app.animation_demo.linear_pill.widget.base.x as i32 != paused_x, true);
+    try assert_eq_bool(app.animation_demo.easing_pills[0].widget.base.x as i32 != paused_x, true);
 
     const replay_rect: Rect = animation_demo_replay_rect();
     var replay_click: Event = event_point(
@@ -264,6 +279,20 @@ test "standalone animation demo renders and toggles playback" {
     );
     app.handle_translated_event(&replay_click);
     try assert_eq_i32(app.animation_demo.cycle_count, 1);
+
+    const easing_rect: Rect = animation_demo_section_rect(0);
+    var easing_click: Event = event_point(
+        EventType.Click,
+        InputDev.Touch,
+        -1,
+        212u32,
+        Point{
+            x: app.current_demo_origin_x() + easing_rect.x + easing_rect.w as i16 / 2,
+            y: app.current_demo_origin_y() + easing_rect.y + easing_rect.h as i16 / 2,
+        }
+    );
+    app.handle_translated_event(&easing_click);
+    try assert_eq_i32(app.animation_demo.current_view, 0);
 }
 
 test "standalone dashboard and 2048 demos react to touch and playback taps" {
