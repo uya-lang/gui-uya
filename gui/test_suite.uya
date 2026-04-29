@@ -5,6 +5,7 @@ use tests.test_core_types;
 use tests.test_event;
 use tests.test_event_dispatch;
 use tests.test_input_dev;
+use tests.test_integration;
 use tests.test_layout;
 use tests.test_obj_tree;
 use tests.test_phase4_io;
@@ -26,6 +27,7 @@ test "phase4 suite loads" {
         + TEST_EVENT_MODULE
         + TEST_EVENT_DISPATCH_MODULE
         + TEST_INPUT_DEV_MODULE
+        + TEST_INTEGRATION_MODULE
         + TEST_LAYOUT_MODULE
         + TEST_OBJ_TREE_MODULE
         + TEST_PHASE4_IO_MODULE

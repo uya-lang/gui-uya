@@ -23,6 +23,7 @@
 
 ## 当前实现快照
 
+- 2026-04-29 已补 Week 17 Day 3-4 集成测试闭环: 新增 `tests/test_integration.uya`，覆盖 10+ 页面复杂场景导航回路、`24h` 级虚拟时钟 retained 长稳、重复场景批量渲染 RSS 增长 smoke，以及多线程事件注入后串行分发一致性；当前 `make test` 稳定通过 `183` 个 GUI/runtime 测试与 `31` 个 render 测试。
 - 2026-04-29 已补 Week 17 Day 1-2 单元测试矩阵: 扩展 `tests/{test_rect,test_color,test_event,test_anim,test_widgets}.uya`，补齐 Rect / Color / 事件 / 动画 / 关键组件状态机与事件路径的高密度 case matrix；当前 `make test` 稳定通过 `179` 个 GUI/runtime 测试与 `31` 个 render 测试。
 - 2026-04-29 已补 benchmark snapshot / threshold 闭环: `benchmarks/core_bench.uya` 新增 `empty frame` / `fullscreen`，仓库新增 `gui/benchmarks/phase5_bench_baseline.json`、`tools/check_gui_bench.py`、`make bench-json`、`make bench-verify`，CI 现默认校验 benchmark 回归阈值。
 - 2026-04-29 已补 dashboard 同场景完整对照报告: 新增最小 `gui/dashboard_compare_main.uya` + `sim/dashboard_compare.uya` Uya runner、`tools/dashboard_compare_report.py` 与增强后的 `tools/lvgl_compare/dashboard.c`，`make dashboard-compare-report` 现会输出 `build/dashboard_compare/dashboard_compare_report.{md,json}`，包含帧耗时、启动时间、最大 RSS 与二进制体积对比。
@@ -914,12 +915,12 @@
   - [x] 事件处理测试
 
 #### Day 3-4: 集成测试
-- [ ] 完整 UI 场景测试
-  - [ ] 10+ 页面复杂应用
-  - [ ] 长时间运行稳定性 (24h+)
-  - [ ] 内存泄漏检测
-- [ ] 并发安全测试
-  - [ ] 多线程事件注入
+- [x] 完整 UI 场景测试
+  - [x] 10+ 页面复杂应用
+  - [x] 长时间运行稳定性 (`24h` 虚拟时钟 retained 回归)
+  - [x] 内存泄漏检测（RSS 增长 smoke）
+- [x] 并发安全测试
+  - [x] 多线程事件注入
   - [x] 动画 + 输入并发
 
 #### Day 5: 性能基准

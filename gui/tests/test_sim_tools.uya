@@ -79,8 +79,8 @@ test "sim screenshot writes tagged framebuffer dump" {
     _ = unlink(shot_path as &const byte);
 
     var pixels: [byte: 16] = [1, 2, 3, 4,   5, 6, 7, 8,   9, 10, 11, 12,   13, 14, 15, 16];
-    const fb: FrameBuffer = framebuffer_new(&pixels[0], 2, 2, 8, PixelFormat.ARGB8888);
-    const written: usize = try screenshot_write(shot_path as &const byte, &fb);
+    var fb_slot: [FrameBuffer: 1] = [framebuffer_new(&pixels[0], 2, 2, 8, PixelFormat.ARGB8888)];
+    const written: usize = try screenshot_write(shot_path as &const byte, &fb_slot[0]);
     try assert_eq_bool(written > 16usize, true);
 
     const fd: i32 = try sys_open(shot_path, O_RDONLY as i32, 0);
@@ -102,8 +102,8 @@ test "sim screenshot writes bmp when path ends with bmp" {
     _ = unlink(shot_path as &const byte);
 
     var pixels: [byte: 16] = [1, 2, 3, 4,   5, 6, 7, 8,   9, 10, 11, 12,   13, 14, 15, 16];
-    const fb: FrameBuffer = framebuffer_new(&pixels[0], 2, 2, 8, PixelFormat.ARGB8888);
-    const written: usize = try screenshot_write(shot_path as &const byte, &fb);
+    var fb_slot: [FrameBuffer: 1] = [framebuffer_new(&pixels[0], 2, 2, 8, PixelFormat.ARGB8888)];
+    const written: usize = try screenshot_write(shot_path as &const byte, &fb_slot[0]);
     try assert_eq_i32(written as i32, 70);
 
     const fd: i32 = try sys_open(shot_path, O_RDONLY as i32, 0);
@@ -133,8 +133,8 @@ test "sim screenshot writes png when path ends with png" {
     _ = unlink(shot_path as &const byte);
 
     var pixels: [byte: 16] = [1, 2, 3, 4,   5, 6, 7, 8,   9, 10, 11, 12,   13, 14, 15, 16];
-    const fb: FrameBuffer = framebuffer_new(&pixels[0], 2, 2, 8, PixelFormat.ARGB8888);
-    const written: usize = try screenshot_write(shot_path as &const byte, &fb);
+    var fb_slot: [FrameBuffer: 1] = [framebuffer_new(&pixels[0], 2, 2, 8, PixelFormat.ARGB8888)];
+    const written: usize = try screenshot_write(shot_path as &const byte, &fb_slot[0]);
     try assert_eq_i32(written as i32, 86);
 
     const fd: i32 = try sys_open(shot_path, O_RDONLY as i32, 0);
