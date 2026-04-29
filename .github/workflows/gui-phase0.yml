@@ -32,13 +32,16 @@ jobs:
         run: make build
       - name: Run GUI tests
         run: make test
-      - name: Run GUI benchmark
-        run: make bench
+      - name: Verify GUI benchmark thresholds
+        run: make bench-verify
       - name: Install SDL2 headers
         run: sudo apt-get update && sudo apt-get install -y libsdl2-dev
       - name: Build Linux simulator
         run: make sim-build
       - name: Smoke-run Linux simulator in headless mode
         run: make sim-headless SIM_HEADLESS_ARGS="--max-frames 2 --screenshot build/sim/ci.bmp"
+      - name: Generate dashboard compare report
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        run: make dashboard-compare-report DASHBOARD_COMPARE_FRAMES=30
       - name: Generate API docs
         run: make docs-api

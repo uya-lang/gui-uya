@@ -17,8 +17,13 @@ DASHBOARD_COMPARE_MODE ?= release
 LVGL_DASHBOARD_FRAMES ?= $(DASHBOARD_COMPARE_FRAMES)
 LVGL_DASHBOARD_REBUILD ?= 0
 FONT_BACKEND_COMPARE_FRAMES ?= 120
+BENCH_JSON ?= $(BUILD_DIR)/phase5_bench.json
+BENCH_BASELINE ?= gui/benchmarks/phase5_bench_baseline.json
+UYA_DASHBOARD_COMPARE_DIR ?= $(BUILD_DIR)/dashboard_compare
+UYA_DASHBOARD_COMPARE_BIN ?= $(UYA_DASHBOARD_COMPARE_DIR)/uya_dashboard_compare
+DASHBOARD_COMPARE_REPORT ?= $(BUILD_DIR)/dashboard_compare/dashboard_compare_report.md
 
-.PHONY: build test bench bench-report docs-api ci clean hooks build-arm build-riscv build-esp32 sim-build sim-run sim-debug sim-headless text-compare lvgl-text-compare lvgl-dashboard-compare dashboard-compare font-backend-compare
+.PHONY: build test bench bench-report bench-json bench-snapshot bench-verify docs-api ci clean hooks build-arm build-riscv build-esp32 sim-build sim-run sim-debug sim-headless text-compare lvgl-text-compare uya-dashboard-compare-build uya-dashboard-compare lvgl-dashboard-compare-build lvgl-dashboard-compare dashboard-compare dashboard-compare-report font-backend-compare
 
 SIM_BUILD_DIR ?= $(BUILD_DIR)/sim
 SIM_BIN ?= $(SIM_BUILD_DIR)/gui_uya_sim
@@ -45,6 +50,14 @@ bench-report:
 	$(UYA) run $(BENCH_APP) -O3 2>&1 | sed -n '/^Phase5 benchmark\/report/,$$p' > $(BENCH_REPORT)
 	@sed -n '1,240p' $(BENCH_REPORT)
 
+bench-json: bench-report
+	python3 tools/check_gui_bench.py --report $(BENCH_REPORT) --json-out $(BENCH_JSON)
+
+bench-snapshot: bench-json
+
+bench-verify: bench-report
+	python3 tools/check_gui_bench.py --report $(BENCH_REPORT) --baseline $(BENCH_BASELINE) --json-out $(BENCH_JSON) --verify
+
 text-compare:
 	@mkdir -p $(BUILD_DIR)/text_compare
 	$(UYA) run $(TEXT_COMPARE_APP) $(UYA_OPT)
@@ -55,17 +68,35 @@ lvgl-text-compare:
 	cmake --build $(LVGL_COMPARE_BUILD_DIR) -j
 	SDL_VIDEODRIVER=dummy $(LVGL_COMPARE_BUILD_DIR)/lvgl_text_compare
 
-lvgl-dashboard-compare:
+uya-dashboard-compare-build:
+	@mkdir -p $(UYA_DASHBOARD_COMPARE_DIR)
+	@APP=$(abspath gui/dashboard_compare_main.uya) OUT_NAME=uya_dashboard_compare MODE=$(DASHBOARD_COMPARE_MODE) BUILD_DIR=$(abspath $(UYA_DASHBOARD_COMPARE_DIR)) bash tools/build_gui_sim.sh
+
+uya-dashboard-compare:
+	@mkdir -p $(BUILD_DIR)/dashboard_compare
+	$(MAKE) uya-dashboard-compare-build MODE=$(DASHBOARD_COMPARE_MODE)
+	SDL_VIDEODRIVER=dummy UYA_DASHBOARD_FRAMES=$(DASHBOARD_COMPARE_FRAMES) UYA_DASHBOARD_OUT=$(BUILD_DIR)/dashboard_compare/uya_dashboard.bmp $(UYA_DASHBOARD_COMPARE_BIN)
+
+lvgl-dashboard-compare-build:
 	@mkdir -p $(LVGL_COMPARE_BUILD_DIR) $(BUILD_DIR)/dashboard_compare
 	cmake -S $(LVGL_COMPARE_DIR) -B $(LVGL_COMPARE_BUILD_DIR)
 	cmake --build $(LVGL_COMPARE_BUILD_DIR) -j --target lvgl_dashboard_compare
+
+lvgl-dashboard-compare:
+	@mkdir -p $(LVGL_COMPARE_BUILD_DIR) $(BUILD_DIR)/dashboard_compare
+	$(MAKE) lvgl-dashboard-compare-build
 	SDL_VIDEODRIVER=dummy LVGL_DASHBOARD_FRAMES=$(LVGL_DASHBOARD_FRAMES) LVGL_DASHBOARD_REBUILD=$(LVGL_DASHBOARD_REBUILD) $(LVGL_COMPARE_BUILD_DIR)/lvgl_dashboard_compare
 
 dashboard-compare:
 	@mkdir -p $(BUILD_DIR)/dashboard_compare
-	$(MAKE) sim-build MODE=$(DASHBOARD_COMPARE_MODE)
-	SDL_VIDEODRIVER=dummy $(SIM_BIN) --demo dashboard --max-frames $(DASHBOARD_COMPARE_FRAMES) --screenshot $(BUILD_DIR)/dashboard_compare/uya_dashboard.bmp
+	$(MAKE) uya-dashboard-compare MODE=$(DASHBOARD_COMPARE_MODE) DASHBOARD_COMPARE_FRAMES=$(DASHBOARD_COMPARE_FRAMES)
 	$(MAKE) lvgl-dashboard-compare LVGL_DASHBOARD_FRAMES=$(DASHBOARD_COMPARE_FRAMES) LVGL_DASHBOARD_REBUILD=$(LVGL_DASHBOARD_REBUILD)
+
+dashboard-compare-report:
+	@mkdir -p $(BUILD_DIR)/dashboard_compare
+	$(MAKE) uya-dashboard-compare-build MODE=$(DASHBOARD_COMPARE_MODE)
+	$(MAKE) lvgl-dashboard-compare-build
+	python3 tools/dashboard_compare_report.py --uya-bin $(UYA_DASHBOARD_COMPARE_BIN) --lvgl-bin $(LVGL_COMPARE_BUILD_DIR)/lvgl_dashboard_compare --out-dir $(BUILD_DIR)/dashboard_compare --frames $(DASHBOARD_COMPARE_FRAMES) --lvgl-rebuild $(LVGL_DASHBOARD_REBUILD)
 
 font-backend-compare:
 	@mkdir -p $(BUILD_DIR)/dashboard_compare
@@ -79,7 +110,7 @@ docs-api:
 ci:
 	$(MAKE) build
 	$(MAKE) test
-	$(MAKE) bench
+	$(MAKE) bench-verify
 	$(MAKE) docs-api
 
 clean:

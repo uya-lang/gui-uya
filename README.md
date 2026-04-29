@@ -6,9 +6,10 @@
 
 ## 当前状态
 
-- 截至 `2026-04-26`，Phase 0 到 Phase 5 的仓库内基线已具备，Phase 6 的文档与示例基线已补齐。
+- 截至 `2026-04-29`，Phase 0 到 Phase 5 的仓库内基线已具备，Phase 6 的文档与示例基线已补齐。
 - 当前默认 smoke 入口为 `gui/phase6_smoke.uya`，`make build` 会生成 `build/phase6_smoke`。
 - Linux 模拟器首版 SDL2 MVP 已落地，入口为 `gui/sim_main.uya`，可通过 `make sim-build`、`make sim-run`、`make sim-headless` 使用。
+- `make bench-verify` 现会基于 `gui/benchmarks/phase5_bench_baseline.json` 校验 benchmark 回归阈值，`make dashboard-compare-report` 会生成 UyaGUI / LVGL dashboard 同场景对照报告。
 - 默认文本渲染已从“占位方框”切换为内置 `5x7` 位图字形，英文、数字和常见标点可正常显示。
 - 目标板实机验证、正式发布打包、真实字体/图片解码链路仍在后续范围内。
 
@@ -49,6 +50,9 @@ make build
 make test
 make bench
 make bench-report
+make bench-json
+make bench-verify
+make dashboard-compare-report
 make docs-api
 ```
 
@@ -58,6 +62,9 @@ make docs-api
 - `make test`：运行 GUI 主测试集和 render 测试集
 - `make bench`：执行 benchmark
 - `make bench-report`：生成 `build/phase5_bench.txt`
+- `make bench-json`：把 `build/phase5_bench.txt` 解析为 `build/phase5_bench.json`
+- `make bench-verify`：按 `gui/benchmarks/phase5_bench_baseline.json` 校验 benchmark 阈值
+- `make dashboard-compare-report`：生成 `build/dashboard_compare/dashboard_compare_report.{md,json}`
 - `make docs-api`：生成 API 索引文档 `docs/gui_uya_api_reference.md`
 
 ### 3. 启用仓库 hooks
@@ -102,21 +109,25 @@ make sim-run SIM_ARGS="--demo widgets --scale 1"
 make sim-run SIM_ARGS="--demo custom --scale 1"
 make sim-run SIM_ARGS="--max-frames 3 --screenshot build/sim/manual.bmp"
 make sim-headless SIM_HEADLESS_ARGS="--max-frames 5 --screenshot build/sim/headless.bmp"
+make uya-dashboard-compare
 make lvgl-dashboard-compare
 make dashboard-compare
+make dashboard-compare-report
 ```
 
-`make dashboard-compare` 会生成 `build/dashboard_compare/uya_dashboard.bmp` 和
-`build/dashboard_compare/lvgl_dashboard.bmp`，并在终端输出两个 dashboard 场景的帧耗时。
-该目标默认用 `DASHBOARD_COMPARE_MODE=release` 构建 Uya，避免 debug 数字误导；可用
-`DASHBOARD_COMPARE_FRAMES=300` 调整采样帧数。Uya dashboard 现在默认使用 retained
-对象树，`dashboard-compare` 默认也让 LVGL 走 retained 刷新路径；如需查看 LVGL 每帧重建
-dashboard 的成本，可运行 `make dashboard-compare LVGL_DASHBOARD_REBUILD=1`。
+`make dashboard-compare` 会生成 `build/dashboard_compare/uya_dashboard.bmp`、
+`build/dashboard_compare/lvgl_dashboard.bmp`，并分别输出 UyaGUI / LVGL 在同一 `640x480`
+dashboard 场景下的启动与帧耗时。`make dashboard-compare-report` 会进一步补齐
+`build/dashboard_compare/dashboard_compare_report.md`，把帧耗时、启动时间、最大 RSS 和
+二进制体积汇总成一份对照报告。该目标默认用 `DASHBOARD_COMPARE_MODE=release` 构建 Uya，
+避免 debug 数字误导；可用 `DASHBOARD_COMPARE_FRAMES=300` 调整采样帧数。如需查看 LVGL
+每帧重建 dashboard 的成本，可运行
+`make dashboard-compare-report LVGL_DASHBOARD_REBUILD=1`。
 
 可用运行参数：
 
 - `--demo phase4|phase6|clock|music|settings|dashboard|game|perf|novel|widgets|custom`
-- `--width N --height N --scale N`（默认 `640x480`，`scale=3`）
+- `--width N --height N --scale N`（模拟器默认 `1920x1080`，`scale=1`）
 - `--fullscreen | --windowed`
 - `--root PATH`
 - `--title TEXT`

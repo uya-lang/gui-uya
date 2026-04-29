@@ -59,12 +59,23 @@
 ```bash
 make bench
 make bench-report
+make bench-json
+make bench-verify
+make dashboard-compare-report
 ```
 
 产物：
 
-- [phase5_bench.txt](/home/winger/uya/gui-uya/build/phase5_bench.txt:1)
+- [phase5_bench.txt](/home/winger/gui-uya/build/phase5_bench.txt:1)
+- [phase5_bench.json](/home/winger/gui-uya/build/phase5_bench.json:1)
 - [gui_uya_phase5_report.md](./gui_uya_phase5_report.md)
+- `build/dashboard_compare/dashboard_compare_report.md`
+- `gui/benchmarks/phase5_bench_baseline.json`
+
+说明：
+
+- `bench-verify` 会把 `build/phase5_bench.txt` 和仓库内阈值基线做比对，适合 CI 或本机回归检查。
+- `dashboard-compare-report` 会在同一 `640x480` dashboard 场景下输出 UyaGUI / LVGL 的帧耗时、启动时间、最大 RSS 和二进制体积对照。
 
 ## 优化顺序建议
 

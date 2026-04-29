@@ -24,6 +24,8 @@ make build
 make test
 make bench
 make bench-report
+make bench-verify
+make dashboard-compare-report
 make docs-api
 ```
 
@@ -43,7 +45,7 @@ make docs-api
 
 ## 最小页面
 
-下面这个思路与 [phase6_smoke.uya](/home/winger/uya/gui-uya/gui/examples/phase6_smoke.uya:1) 中的 demo 一致：
+下面这个思路与 [phase6_smoke.uya](/home/winger/gui-uya/gui/examples/phase6_smoke.uya:1) 中的 demo 一致：
 
 ```uya
 var page: Page = Page.new("Demo");

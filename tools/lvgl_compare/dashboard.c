@@ -482,7 +482,12 @@ int main(void)
     uint32_t metric = env_u32("LVGL_DASHBOARD_METRIC", 0u, 2u);
     uint32_t frames = env_u32("LVGL_DASHBOARD_FRAMES", LVGL_DASHBOARD_DEFAULT_FRAMES, 1000000u);
     bool rebuild_each_frame = env_bool("LVGL_DASHBOARD_REBUILD", false);
+    bool capture = env_bool("LVGL_DASHBOARD_CAPTURE", true);
     render_profile_t profile;
+    uint64_t startup_begin;
+    uint64_t startup_end;
+    uint64_t startup_freq;
+    uint64_t startup_us = 0u;
 
     if(getenv("SDL_VIDEODRIVER") == NULL) {
         setenv("SDL_VIDEODRIVER", "dummy", 0);
@@ -502,6 +507,7 @@ int main(void)
         return 1;
     }
 
+    startup_begin = SDL_GetPerformanceCounter();
     lv_init();
     disp = lv_sdl_window_create(LVGL_DASHBOARD_W, LVGL_DASHBOARD_H);
     if(disp == NULL) {
@@ -518,25 +524,39 @@ int main(void)
     }
 
     draw_dashboard_screen(dashboard_font, metric);
+    lv_obj_update_layout(lv_screen_active());
+    lv_obj_invalidate(lv_screen_active());
+    lv_refr_now(disp);
+    lv_timer_handler();
+    startup_end = SDL_GetPerformanceCounter();
+    startup_freq = SDL_GetPerformanceFrequency();
+    if(startup_freq != 0u) {
+        startup_us = ((startup_end - startup_begin) * 1000000u) / startup_freq;
+    }
+
     profile = benchmark_refresh(disp, dashboard_font, metric, frames, rebuild_each_frame);
 
-    if(!capture_display(disp, out_path)) {
-        unload_tiny_ttf_font(&font_asset);
-        fprintf(stderr, "failed to write bmp: %s\n", SDL_GetError());
-        return 3;
+    if(capture) {
+        if(!capture_display(disp, out_path)) {
+            unload_tiny_ttf_font(&font_asset);
+            fprintf(stderr, "failed to write bmp: %s\n", SDL_GetError());
+            return 3;
+        }
+        printf("[lvgl-dashboard-compare] wrote %s\n", out_path);
     }
 
     printf(
-        "[lvgl-dashboard-compare] wrote %s\n"
-        "[lvgl-dashboard-compare] display=%dx%d font=%s px=%d metric=%u mode=%s\n"
+        "[lvgl-dashboard-compare] display=%dx%d font=%s px=%d metric=%u mode=%s capture=%s\n"
+        "[lvgl-dashboard-compare] startup=%llu us\n"
         "[lvgl profiler] frames=%u frame(avg/max)=%u/%u ms update=0 ms render=%u ms present=0 ms\n",
-        out_path,
         LVGL_DASHBOARD_W,
         LVGL_DASHBOARD_H,
         font_path ? font_path : "lv_font_montserrat_14",
         LVGL_DASHBOARD_FONT_PX,
         metric,
         rebuild_each_frame ? "rebuild" : "retained",
+        capture ? "on" : "off",
+        (unsigned long long)startup_us,
         frames,
         us_to_ms_rounded(profile.avg_us),
         us_to_ms_rounded(profile.max_us),

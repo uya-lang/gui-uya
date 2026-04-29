@@ -67,7 +67,7 @@ make sim-fb-run
 
 - `--demo phase4|phase6|clock|music|settings|dashboard|game|perf|novel`
 - `--gpu auto|software|gles2`（默认 `auto`，`auto` 会在 GLES2 不可用时回退到 software）
-- `--width N --height N --scale N`（默认 `640x480`，`scale=3`）
+- `--width N --height N --scale N`（默认 `1920x1080`，`scale=1`）
 - `--fullscreen | --windowed`
 - `--root PATH`
 - `--title TEXT`

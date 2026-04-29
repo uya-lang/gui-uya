@@ -1,0 +1,7 @@
+use std.runtime.entry;
+
+use sim.dashboard_compare.run_dashboard_compare;
+
+export fn main() i32 {
+    return run_dashboard_compare();
+}
