@@ -17,6 +17,7 @@ use widget.base.Widget;
 use widget.base.WIDGET_TYPE_CANVAS;
 use widget.base.widget_bind_callbacks;
 use widget.base.widget_draw_surface;
+use widget.base.widget_inner_rect;
 use widget.base.widget_new;
 
 struct CanvasRenderAdapter : IGuiRenderCallback {}
@@ -83,6 +84,32 @@ Canvas {
     fn end_draw(self: &Self) void {
         self.dirty = true;
         self.widget.base.invalidate();
+    }
+
+    fn end_draw_rect(self: &Self, local_rect: Rect) void {
+        self.dirty = true;
+        if self.draw_buffer.pixels == null || local_rect.is_empty() {
+            self.widget.base.invalidate();
+            return;
+        }
+
+        const inner: Rect = widget_inner_rect(&self.widget);
+        if inner.w != self.draw_buffer.size.w || inner.h != self.draw_buffer.size.h {
+            self.widget.base.invalidate();
+            return;
+        }
+
+        const clipped: Rect = Rect{ x: 0, y: 0, w: self.draw_buffer.size.w, h: self.draw_buffer.size.h }.intersect(local_rect);
+        if clipped.is_empty() {
+            return;
+        }
+
+        self.widget.base.invalidate_region(Rect{
+            x: inner.x + clipped.x,
+            y: inner.y + clipped.y,
+            w: clipped.w,
+            h: clipped.h,
+        });
     }
 
     fn clear(self: &Self, color: Color) void {

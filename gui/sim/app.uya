@@ -26,6 +26,7 @@ use examples.demo_animation.render_demo_animation_retained_state;
 use examples.demo_clock.ClockRetained;
 use examples.demo_clock.clock_retained_new;
 use examples.demo_clock.clock_retained_init;
+use examples.demo_clock.clock_retained_sync;
 use examples.demo_clock.render_demo_clock;
 use examples.demo_clock.render_demo_clock_retained;
 use examples.demo_custom.CustomRetained;
@@ -1003,6 +1004,7 @@ SimApp {
     fn sync_current_retained_demo(self: &Self) void {
         if self.config.demo == SimDemoKind.Clock {
             clock_retained_init(&self.clock_demo);
+            clock_retained_sync(&self.clock_demo);
             return;
         }
         if self.config.demo == SimDemoKind.Animation {
@@ -1738,6 +1740,9 @@ SimApp {
         }
 
         var next_delay: i32 = -1;
+        if self.config.demo == SimDemoKind.Clock {
+            next_delay = sim_min_positive_delay(next_delay, 1000);
+        }
         if sim_demo_is_phase(self.config.demo) && self.toggle.checked {
             next_delay = sim_min_positive_delay(next_delay, sim_next_due_delay(now_ms, self.last_chart_tick_ms, 140u32));
         }

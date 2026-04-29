@@ -198,6 +198,63 @@ fn pixel_byte_offset(fb: &FrameBuffer, x: i32, y: i32) usize {
     return row + ((x as! usize).value / 2usize);
 }
 
+fn framebuffer_write_pixel_raw(fb: &FrameBuffer, x: i32, y: i32, color: &Color) void {
+    const offset: usize = pixel_byte_offset(fb, x, y);
+    if fb.format == PixelFormat.RGB565 {
+        const bits: u16 = color.to_rgb565();
+        fb.pixels[offset] = ((bits & 0x00FFu16) as! u8).value;
+        fb.pixels[offset + 1usize] = ((bits >> 8) as! u8).value;
+        return;
+    }
+    if fb.format == PixelFormat.RGB888 {
+        fb.pixels[offset] = color.r;
+        fb.pixels[offset + 1usize] = color.g;
+        fb.pixels[offset + 2usize] = color.b;
+        return;
+    }
+    if fb.format == PixelFormat.ARGB8888 {
+        fb.pixels[offset] = color.a;
+        fb.pixels[offset + 1usize] = color.r;
+        fb.pixels[offset + 2usize] = color.g;
+        fb.pixels[offset + 3usize] = color.b;
+        return;
+    }
+    if fb.format == PixelFormat.ARGB4444 {
+        const bits: u16 = pack_argb4444(color);
+        fb.pixels[offset] = ((bits & 0x00FFu16) as! u8).value;
+        fb.pixels[offset + 1usize] = ((bits >> 8) as! u8).value;
+        return;
+    }
+    if fb.format == PixelFormat.L8 {
+        fb.pixels[offset] = grayscale(color);
+        return;
+    }
+    if fb.format == PixelFormat.A8 {
+        fb.pixels[offset] = color.a;
+        return;
+    }
+    if fb.format == PixelFormat.I1 {
+        const bit: i32 = 7 - (x % 8);
+        const mask: u8 = 1u8 << bit;
+        const gray: u8 = grayscale(color);
+        const current: u8 = fb.pixels[offset];
+        if gray >= 128 {
+            fb.pixels[offset] = current | mask;
+        } else {
+            fb.pixels[offset] = current & (0xFFu8 ^ mask);
+        }
+        return;
+    }
+
+    const gray4: u8 = grayscale(color) >> 4;
+    const current: u8 = fb.pixels[offset];
+    if (x % 2) == 0 {
+        fb.pixels[offset] = (current & 0x0Fu8) | (gray4 << 4);
+    } else {
+        fb.pixels[offset] = (current & 0xF0u8) | gray4;
+    }
+}
+
 export enum PixelFormat {
     RGB565,
     RGB888,
@@ -449,61 +506,7 @@ export fn framebuffer_set_pixel(fb: &FrameBuffer, x: i32, y: i32, color: &Color)
         const src_copy: Color = copy_color(color);
         write = dst.blend(src_copy);
     }
-
-    const offset: usize = pixel_byte_offset(fb, x, y);
-    if fb.format == PixelFormat.RGB565 {
-        const bits: u16 = write.to_rgb565();
-        fb.pixels[offset] = ((bits & 0x00FFu16) as! u8).value;
-        fb.pixels[offset + 1usize] = ((bits >> 8) as! u8).value;
-        return;
-    }
-    if fb.format == PixelFormat.RGB888 {
-        fb.pixels[offset] = write.r;
-        fb.pixels[offset + 1usize] = write.g;
-        fb.pixels[offset + 2usize] = write.b;
-        return;
-    }
-    if fb.format == PixelFormat.ARGB8888 {
-        fb.pixels[offset] = write.a;
-        fb.pixels[offset + 1usize] = write.r;
-        fb.pixels[offset + 2usize] = write.g;
-        fb.pixels[offset + 3usize] = write.b;
-        return;
-    }
-    if fb.format == PixelFormat.ARGB4444 {
-        const bits: u16 = pack_argb4444(&write);
-        fb.pixels[offset] = ((bits & 0x00FFu16) as! u8).value;
-        fb.pixels[offset + 1usize] = ((bits >> 8) as! u8).value;
-        return;
-    }
-    if fb.format == PixelFormat.L8 {
-        fb.pixels[offset] = grayscale(&write);
-        return;
-    }
-    if fb.format == PixelFormat.A8 {
-        fb.pixels[offset] = write.a;
-        return;
-    }
-    if fb.format == PixelFormat.I1 {
-        const bit: i32 = 7 - (x % 8);
-        const mask: u8 = 1u8 << bit;
-        const gray: u8 = grayscale(&write);
-        const current: u8 = fb.pixels[offset];
-        if gray >= 128 {
-            fb.pixels[offset] = current | mask;
-        } else {
-            fb.pixels[offset] = current & (0xFFu8 ^ mask);
-        }
-        return;
-    }
-
-    const gray4: u8 = grayscale(&write) >> 4;
-    const current: u8 = fb.pixels[offset];
-    if (x % 2) == 0 {
-        fb.pixels[offset] = (current & 0x0Fu8) | (gray4 << 4);
-    } else {
-        fb.pixels[offset] = (current & 0xF0u8) | gray4;
-    }
+    framebuffer_write_pixel_raw(fb, x, y, &write);
 }
 
 /// 使用指定颜色清空整个帧缓冲。
@@ -526,7 +529,7 @@ export fn framebuffer_clear(fb: &FrameBuffer, color: Color) void {
         }
         var x: i32 = 0;
         while x < fb.size.w as i32 {
-            framebuffer_set_pixel(&target, x, y, &color);
+            framebuffer_write_pixel_raw(&target, x, y, &color);
             x = x + 1;
         }
         y = y + 1;

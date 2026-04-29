@@ -5,8 +5,7 @@ use core.dirty_region.DirtyRegion;
 use core.dirty_region.dirty_region_new;
 use core.rect.RECT_ZERO;
 use core.rect.Rect;
-use libc.cos;
-use libc.sin;
+use libc.atan2;
 use libc.sqrt;
 use platform.disp.FrameBuffer;
 use platform.disp.PixelFormat;
@@ -17,13 +16,11 @@ use platform.disp.framebuffer_rect;
 use platform.disp.framebuffer_set_pixel;
 
 export const MAX_CLIP_STACK: i32 = 16;
-const TRIG_LUT_SCALE: i32 = 4096;
+const CIRCLE_AA_GRID: i32 = 4;
+const CIRCLE_AA_STEP: f64 = 0.25;
+const CIRCLE_AA_FIRST_OFFSET: f64 = 0.125;
 
 type RenderByteVec16 = @vector(u8, 16);
-
-var _sin_deg_lut: [i16: 360] = [];
-var _cos_deg_lut: [i16: 360] = [];
-var _trig_lut_ready: bool = false;
 
 fn render_full_rect(fb: &FrameBuffer) Rect {
     return framebuffer_rect(fb);
@@ -82,13 +79,6 @@ fn alpha_from_unit(v: f64) u8 {
     return ((clamped * 255.0 + 0.5) as! u8).value;
 }
 
-fn ctx_round_to_i32(v: f64) i32 {
-    if v < 0.0 {
-        return (v - 0.5) as i32;
-    }
-    return (v + 0.5) as i32;
-}
-
 fn ctx_grayscale(color: &Color) u8 {
     return (((color.r as u32) * 30u32 + (color.g as u32) * 59u32 + (color.b as u32) * 11u32) / 100u32) as u8;
 }
@@ -99,10 +89,6 @@ fn ctx_pack_argb4444(color: &Color) u16 {
     const g: u16 = ((color.g as u32 >> 4) as! u16).value;
     const b: u16 = ((color.b as u32 >> 4) as! u16).value;
     return (a << 12) | (r << 8) | (g << 4) | b;
-}
-
-fn degrees_to_radians(deg: i16) f64 {
-    return (deg as f64) * 3.141592653589793 / 180.0;
 }
 
 fn smoothstep01(v: f64) f64 {
@@ -145,8 +131,83 @@ fn signed_distance_round_rect(rect: Rect, radius: u8, px: f64, py: f64) f64 {
     return sqrt(ox * ox + oy * oy) + inner - rr as f64;
 }
 
+fn signed_distance_circle(cx: i16, cy: i16, radius: i16, px: f64, py: f64) f64 {
+    const dx: f64 = px - cx as f64;
+    const dy: f64 = py - cy as f64;
+    return sqrt(dx * dx + dy * dy) - radius as f64;
+}
+
+fn circle_row_limit(radius: f64, dy: i32) i32 {
+    if radius < 0.0 {
+        return -1;
+    }
+    const dy_f: f64 = dy as f64;
+    const remain: f64 = radius * radius - dy_f * dy_f;
+    if remain < 0.0 {
+        return -1;
+    }
+    return sqrt(remain) as i32;
+}
+
 fn coverage_from_signed_distance(sd: f64) u8 {
     return alpha_from_unit(0.5 - sd);
+}
+
+fn coverage_from_hits(hits: i32, samples: i32) u8 {
+    if hits <= 0 || samples <= 0 {
+        return 0u8;
+    }
+    if hits >= samples {
+        return 255u8;
+    }
+    return ((((hits * 255) + samples / 2) / samples) as! u8).value;
+}
+
+fn circle_fill_coverage_sampled(cx: i16, cy: i16, radius: i16, x: i32, y: i32) u8 {
+    var hits: i32 = 0;
+    var sy: i32 = 0;
+    while sy < CIRCLE_AA_GRID {
+        const py: f64 = y as f64 + CIRCLE_AA_FIRST_OFFSET + sy as f64 * CIRCLE_AA_STEP;
+        var sx: i32 = 0;
+        while sx < CIRCLE_AA_GRID {
+            const px: f64 = x as f64 + CIRCLE_AA_FIRST_OFFSET + sx as f64 * CIRCLE_AA_STEP;
+            if signed_distance_circle(cx, cy, radius, px, py) <= 0.0 {
+                hits = hits + 1;
+            }
+            sx = sx + 1;
+        }
+        sy = sy + 1;
+    }
+    return coverage_from_hits(hits, CIRCLE_AA_GRID * CIRCLE_AA_GRID);
+}
+
+fn circle_stroke_coverage_sampled(cx: i16, cy: i16, radius: i16, width: f64, x: i32, y: i32) u8 {
+    if width <= 0.0 {
+        return 0u8;
+    }
+    const half_width: f64 = width * 0.5;
+    var hits: i32 = 0;
+    var sy: i32 = 0;
+    while sy < CIRCLE_AA_GRID {
+        const py: f64 = y as f64 + CIRCLE_AA_FIRST_OFFSET + sy as f64 * CIRCLE_AA_STEP;
+        var sx: i32 = 0;
+        while sx < CIRCLE_AA_GRID {
+            const px: f64 = x as f64 + CIRCLE_AA_FIRST_OFFSET + sx as f64 * CIRCLE_AA_STEP;
+            if abs_f64(signed_distance_circle(cx, cy, radius, px, py)) <= half_width {
+                hits = hits + 1;
+            }
+            sx = sx + 1;
+        }
+        sy = sy + 1;
+    }
+    return coverage_from_hits(hits, CIRCLE_AA_GRID * CIRCLE_AA_GRID);
+}
+
+fn stroke_coverage_from_signed_distance(sd: f64, width: f64) u8 {
+    if width <= 0.0 {
+        return 0u8;
+    }
+    return coverage_from_signed_distance(abs_f64(sd) - width * 0.5);
 }
 
 fn shadow_coverage_from_signed_distance(sd: f64, blur: u8) u8 {
@@ -289,38 +350,12 @@ fn ctx_fill_rect_opaque(fb: &FrameBuffer, rect: Rect, color: Color) bool {
     return true;
 }
 
-fn trig_lut_init() void {
-    if _trig_lut_ready {
-        return;
-    }
-
-    var angle: i32 = 0;
-    while angle < 360 {
-        const deg: i16 = (angle as! i16).value;
-        const rad: f64 = degrees_to_radians(deg);
-        _sin_deg_lut[angle as usize] = (ctx_round_to_i32(sin(rad) * TRIG_LUT_SCALE as f64) as! i16).value;
-        _cos_deg_lut[angle as usize] = (ctx_round_to_i32(cos(rad) * TRIG_LUT_SCALE as f64) as! i16).value;
-        angle = angle + 1;
-    }
-    _trig_lut_ready = true;
-}
-
 fn normalize_angle(angle: i16) i32 {
     var normalized: i32 = angle as i32 % 360;
     if normalized < 0 {
         normalized = normalized + 360;
     }
     return normalized;
-}
-
-fn trig_sin_scaled(angle: i16) i32 {
-    trig_lut_init();
-    return _sin_deg_lut[normalize_angle(angle) as usize] as i32;
-}
-
-fn trig_cos_scaled(angle: i16) i32 {
-    trig_lut_init();
-    return _cos_deg_lut[normalize_angle(angle) as usize] as i32;
 }
 
 export enum RenderMode {
@@ -543,76 +578,117 @@ export struct RenderCtx {
     }
 
     fn draw_circle(self: &Self, cx: i16, cy: i16, r: i16, color: Color) void {
-        if r <= 0 {
+        if r <= 0 || color.a == 0u8 {
             return;
         }
         const clip: Rect = self.current_clip();
         if clip.is_empty() {
             return;
         }
-        var x: i32 = r as i32;
-        var y: i32 = 0;
-        var err: i32 = 1 - x;
-        while x >= y {
-            _ = self.draw_pixel_no_dirty(cx as i32 + x, cy as i32 + y, color);
-            _ = self.draw_pixel_no_dirty(cx as i32 + y, cy as i32 + x, color);
-            _ = self.draw_pixel_no_dirty(cx as i32 - y, cy as i32 + x, color);
-            _ = self.draw_pixel_no_dirty(cx as i32 - x, cy as i32 + y, color);
-            _ = self.draw_pixel_no_dirty(cx as i32 - x, cy as i32 - y, color);
-            _ = self.draw_pixel_no_dirty(cx as i32 - y, cy as i32 - x, color);
-            _ = self.draw_pixel_no_dirty(cx as i32 + y, cy as i32 - x, color);
-            _ = self.draw_pixel_no_dirty(cx as i32 + x, cy as i32 - y, color);
-            y = y + 1;
-            if err < 0 {
-                err = err + 2 * y + 1;
-            } else {
-                x = x - 1;
-                err = err + 2 * (y - x) + 1;
-            }
-        }
-        const dirty_rect: Rect = clip.intersect(Rect{
+        const draw_rect: Rect = clip.intersect(Rect{
             x: (cx as i32 - r as i32) as i16,
             y: (cy as i32 - r as i32) as i16,
             w: (r as i32 * 2 + 1) as u16,
             h: (r as i32 * 2 + 1) as u16,
         });
-        if !dirty_rect.is_empty() {
-            self.dirty.add(dirty_rect);
+        if draw_rect.is_empty() {
+            return;
         }
+
+        // The AA ramp extends half a pixel beyond the ideal stroke band.
+        const outer_radius: f64 = r as f64 + 1.0;
+        const inner_radius: f64 = r as f64 - 1.0;
+        var y: i32 = draw_rect.y as i32;
+        while y < draw_rect.y as i32 + draw_rect.h as i32 {
+            var dy: i32 = y - cy as i32;
+            if dy < 0 {
+                dy = 0 - dy;
+            }
+            const outer_limit: i32 = circle_row_limit(outer_radius, dy);
+            if outer_limit >= 0 {
+                var inner_limit: i32 = 0;
+                if inner_radius >= 0.0 {
+                    inner_limit = circle_row_limit(inner_radius, dy);
+                }
+
+                var xoff: i32 = inner_limit;
+                while xoff <= outer_limit {
+                    const coverage: u8 = circle_stroke_coverage_sampled(cx, cy, r, 1.0, cx as i32 + xoff, y);
+                    if coverage != 0u8 {
+                        self.draw_pixel_coverage(cx as i32 + xoff, y, color, coverage);
+                        if xoff != 0 {
+                            self.draw_pixel_coverage(cx as i32 - xoff, y, color, coverage);
+                        }
+                    }
+                    xoff = xoff + 1;
+                }
+            }
+            y = y + 1;
+        }
+        self.dirty.add(draw_rect);
         self.stats.circle_ops = self.stats.circle_ops + 1u32;
     }
 
     fn fill_circle(self: &Self, cx: i16, cy: i16, r: i16, color: Color) void {
-        if r <= 0 {
+        if r <= 0 || color.a == 0u8 {
             return;
         }
         const clip: Rect = self.current_clip();
         if clip.is_empty() {
             return;
         }
-        var y: i32 = 0 - r as i32;
-        while y <= r as i32 {
-            const row_radius: i32 = clamp_i32(sqrt((r as i32 * r as i32 - y * y) as f64) as i32, 0, r as i32);
-            _ = self.fill_rect_no_dirty(
-                Rect{
-                    x: (cx as i32 - row_radius) as i16,
-                    y: (cy as i32 + y) as i16,
-                    w: (row_radius * 2 + 1) as u16,
-                    h: 1,
-                },
-                color
-            );
-            y = y + 1;
-        }
-        const dirty_rect: Rect = clip.intersect(Rect{
+        const draw_rect: Rect = clip.intersect(Rect{
             x: (cx as i32 - r as i32) as i16,
             y: (cy as i32 - r as i32) as i16,
             w: (r as i32 * 2 + 1) as u16,
             h: (r as i32 * 2 + 1) as u16,
         });
-        if !dirty_rect.is_empty() {
-            self.dirty.add(dirty_rect);
+        if draw_rect.is_empty() {
+            return;
         }
+
+        const solid_radius: f64 = r as f64 - 0.5;
+        const outer_radius: f64 = r as f64 + 0.5;
+        var y: i32 = draw_rect.y as i32;
+        while y < draw_rect.y as i32 + draw_rect.h as i32 {
+            var dy: i32 = y - cy as i32;
+            if dy < 0 {
+                dy = 0 - dy;
+            }
+
+            var solid_limit: i32 = -1;
+            if solid_radius >= 0.0 {
+                solid_limit = circle_row_limit(solid_radius, dy);
+            }
+            if solid_limit >= 0 {
+                _ = self.fill_rect_no_dirty(
+                    Rect{
+                        x: (cx as i32 - solid_limit) as i16,
+                        y: y as i16,
+                        w: (solid_limit * 2 + 1) as u16,
+                        h: 1,
+                    },
+                    color
+                );
+            }
+
+            const outer_limit: i32 = circle_row_limit(outer_radius, dy);
+            if outer_limit > solid_limit {
+                var xoff: i32 = solid_limit + 1;
+                while xoff <= outer_limit {
+                    const coverage: u8 = circle_fill_coverage_sampled(cx, cy, r, cx as i32 + xoff, y);
+                    if coverage != 0u8 {
+                        self.draw_pixel_coverage(cx as i32 + xoff, y, color, coverage);
+                        if xoff != 0 {
+                            self.draw_pixel_coverage(cx as i32 - xoff, y, color, coverage);
+                        }
+                    }
+                    xoff = xoff + 1;
+                }
+            }
+            y = y + 1;
+        }
+        self.dirty.add(draw_rect);
         self.stats.circle_ops = self.stats.circle_ops + 1u32;
     }
 
@@ -903,23 +979,83 @@ export struct RenderCtx {
     }
 
     fn draw_arc(self: &Self, cx: i16, cy: i16, r: i16, start_deg: i16, end_deg: i16, width: u8, color: Color) void {
-        var angle: i16 = start_deg;
-        while angle <= end_deg {
-            const px: i16 = (cx as i32 + (trig_cos_scaled(angle) * r as i32) / TRIG_LUT_SCALE) as i16;
-            const py: i16 = (cy as i32 + (trig_sin_scaled(angle) * r as i32) / TRIG_LUT_SCALE) as i16;
-            self.fill_rect(Rect{ x: px - width as i16 / 2, y: py - width as i16 / 2, w: width as u16, h: width as u16 }, color);
-            angle = angle + 2;
+        if r <= 0 || width == 0u8 || color.a == 0u8 {
+            return;
         }
+        const clip: Rect = self.current_clip();
+        const draw_rect: Rect = clip.intersect(Rect{
+            x: (cx as i32 - r as i32 - width as i32) as i16,
+            y: (cy as i32 - r as i32 - width as i32) as i16,
+            w: (r as i32 * 2 + width as i32 * 2 + 1) as u16,
+            h: (r as i32 * 2 + width as i32 * 2 + 1) as u16,
+        });
+        if draw_rect.is_empty() {
+            return;
+        }
+
+        const start_norm: f64 = normalize_angle(start_deg) as f64;
+        const end_norm: f64 = normalize_angle(end_deg) as f64;
+        var y: i32 = draw_rect.y as i32;
+        while y < draw_rect.y as i32 + draw_rect.h as i32 {
+            var x: i32 = draw_rect.x as i32;
+            while x < draw_rect.x as i32 + draw_rect.w as i32 {
+                const coverage: u8 = circle_stroke_coverage_sampled(cx, cy, r, width as f64, x, y);
+                if coverage != 0u8 {
+                    var angle: f64 = atan2(y as f64 - cy as f64, x as f64 - cx as f64) * 180.0 / 3.141592653589793;
+                    if angle < 0.0 {
+                        angle = angle + 360.0;
+                    }
+                    if (start_norm <= end_norm && angle >= start_norm && angle <= end_norm)
+                        || (start_norm > end_norm && (angle >= start_norm || angle <= end_norm)) {
+                        self.draw_pixel_coverage(x, y, color, coverage);
+                    }
+                }
+                x = x + 1;
+            }
+            y = y + 1;
+        }
+        self.stats.circle_ops = self.stats.circle_ops + 1u32;
+        self.dirty.add(draw_rect);
     }
 
     fn fill_arc(self: &Self, cx: i16, cy: i16, r: i16, start_deg: i16, end_deg: i16, color: Color) void {
-        var angle: i16 = start_deg;
-        while angle <= end_deg {
-            const px: i16 = (cx as i32 + (trig_cos_scaled(angle) * r as i32) / TRIG_LUT_SCALE) as i16;
-            const py: i16 = (cy as i32 + (trig_sin_scaled(angle) * r as i32) / TRIG_LUT_SCALE) as i16;
-            self.draw_line(cx, cy, px, py, color, 1);
-            angle = angle + 3;
+        if r <= 0 || color.a == 0u8 {
+            return;
         }
+        const clip: Rect = self.current_clip();
+        const draw_rect: Rect = clip.intersect(Rect{
+            x: (cx as i32 - r as i32) as i16,
+            y: (cy as i32 - r as i32) as i16,
+            w: (r as i32 * 2 + 1) as u16,
+            h: (r as i32 * 2 + 1) as u16,
+        });
+        if draw_rect.is_empty() {
+            return;
+        }
+
+        const start_norm: f64 = normalize_angle(start_deg) as f64;
+        const end_norm: f64 = normalize_angle(end_deg) as f64;
+        var y: i32 = draw_rect.y as i32;
+        while y < draw_rect.y as i32 + draw_rect.h as i32 {
+            var x: i32 = draw_rect.x as i32;
+            while x < draw_rect.x as i32 + draw_rect.w as i32 {
+                const coverage: u8 = circle_fill_coverage_sampled(cx, cy, r, x, y);
+                if coverage != 0u8 {
+                    var angle: f64 = atan2(y as f64 - cy as f64, x as f64 - cx as f64) * 180.0 / 3.141592653589793;
+                    if angle < 0.0 {
+                        angle = angle + 360.0;
+                    }
+                    if (start_norm <= end_norm && angle >= start_norm && angle <= end_norm)
+                        || (start_norm > end_norm && (angle >= start_norm || angle <= end_norm)) {
+                        self.draw_pixel_coverage(x, y, color, coverage);
+                    }
+                }
+                x = x + 1;
+            }
+            y = y + 1;
+        }
+        self.stats.circle_ops = self.stats.circle_ops + 1u32;
+        self.dirty.add(draw_rect);
     }
 }
 

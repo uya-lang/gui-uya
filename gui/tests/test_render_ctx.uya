@@ -34,6 +34,18 @@ test "render ctx draws pixels and clips rects" {
     try assert_eq_bool(ctx_pixel(&ctx, 3, 3) == Color{ r: 0, g: 0, b: 0, a: 255 }, true);
 }
 
+test "render ctx clear to transparent replaces previous pixels" {
+    var bytes: [byte: 64] = [];
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 4, 4, 16, PixelFormat.ARGB8888));
+    const red_fill: Color = Color{ r: 255, g: 0, b: 0, a: 255 };
+    const transparent_expect: Color = Color{ r: 0, g: 0, b: 0, a: 0 };
+
+    ctx.clear(red_fill);
+    ctx.clear(Color{ r: 0, g: 0, b: 0, a: 0 });
+
+    try assert_eq_bool(ctx_pixel(&ctx, 1, 1) == transparent_expect, true);
+}
+
 test "render ctx draws line circle and arc" {
     var bytes: [byte: 256] = [];
     const fb: FrameBuffer = framebuffer_new(&bytes[0], 8, 8, 32, PixelFormat.ARGB8888);
@@ -47,6 +59,50 @@ test "render ctx draws line circle and arc" {
     try assert_eq_bool(ctx_pixel(&ctx, 0, 0) == blue1, true);
     try assert_eq_bool(ctx.stats.line_ops >= 1u32, true);
     try assert_eq_bool(ctx.stats.circle_ops >= 1u32, true);
+}
+
+test "draw circle antialiases outline" {
+    var bytes: [byte: 1600] = [];
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 20, 20, 80, PixelFormat.ARGB8888));
+    const circle_aa_clear: Color = Color{ r: 0, g: 0, b: 0, a: 255 };
+    const circle_aa_black_expect: Color = Color{ r: 0, g: 0, b: 0, a: 255 };
+    const circle_aa_white_draw: Color = Color{ r: 255, g: 255, b: 255, a: 255 };
+    const circle_aa_white_expect: Color = Color{ r: 255, g: 255, b: 255, a: 255 };
+
+    ctx.clear(circle_aa_clear);
+    ctx.draw_circle(8, 8, 5, circle_aa_white_draw);
+
+    const edge_axis: Color = ctx_pixel(&ctx, 13, 8);
+    const edge_diag: Color = ctx_pixel(&ctx, 13, 9);
+    const inner_edge: Color = ctx_pixel(&ctx, 12, 10);
+    try assert_eq_bool(ctx_pixel(&ctx, 8, 8) == circle_aa_black_expect, true);
+    try assert_eq_bool(edge_axis.r > 0u8, true);
+    try assert_eq_bool(edge_axis.r < 255u8, true);
+    try assert_eq_bool(edge_diag.r > 0u8, true);
+    try assert_eq_bool(edge_diag.r < 255u8, true);
+    try assert_eq_bool(inner_edge.r > 0u8, true);
+    try assert_eq_bool(inner_edge.r < 255u8, true);
+    try assert_eq_bool(ctx_pixel(&ctx, 14, 8) == circle_aa_black_expect, true);
+}
+
+test "fill circle antialiases edge" {
+    var bytes: [byte: 1600] = [];
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 20, 20, 80, PixelFormat.ARGB8888));
+    const fill_circle_clear: Color = Color{ r: 0, g: 0, b: 0, a: 255 };
+    const fill_circle_black_expect: Color = Color{ r: 0, g: 0, b: 0, a: 255 };
+    const fill_circle_white_fill: Color = Color{ r: 255, g: 255, b: 255, a: 255 };
+    const fill_circle_white_expect: Color = Color{ r: 255, g: 255, b: 255, a: 255 };
+
+    ctx.clear(fill_circle_clear);
+    ctx.fill_circle(8, 8, 4, fill_circle_white_fill);
+
+    const solid_edge: Color = ctx_pixel(&ctx, 11, 8);
+    const edge: Color = ctx_pixel(&ctx, 11, 10);
+    try assert_eq_bool(ctx_pixel(&ctx, 8, 8) == fill_circle_white_expect, true);
+    try assert_eq_bool(solid_edge == fill_circle_white_expect, true);
+    try assert_eq_bool(edge.r > 0u8, true);
+    try assert_eq_bool(edge.r < 255u8, true);
+    try assert_eq_bool(ctx_pixel(&ctx, 12, 8) == fill_circle_black_expect, true);
 }
 
 test "draw round rect clips corner arcs to quadrants" {

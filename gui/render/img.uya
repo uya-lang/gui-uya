@@ -13,12 +13,91 @@ use render.ctx.RenderCtx;
 
 type ImageByteVec16 = @vector(u8, 16);
 
+fn img_clamp_i32(v: i32, min: i32, max: i32) i32 {
+    if v < min {
+        return min;
+    }
+    if v > max {
+        return max;
+    }
+    return v;
+}
+
+fn img_clamp_channel(v: f64) u8 {
+    if v <= 0.0 {
+        return 0u8;
+    }
+    if v >= 255.0 {
+        return 255u8;
+    }
+    return (v + 0.5) as u8;
+}
+
 fn image_framebuffer(img: &ImageData) FrameBuffer {
     return framebuffer_new(img.pixels, img.size.w, img.size.h, img.stride, img.format);
 }
 
 fn image_sample(fb: &FrameBuffer, x: i32, y: i32) Color {
     return framebuffer_get_pixel(fb, x, y);
+}
+
+fn image_sample_bilinear(fb: &FrameBuffer, fx: f64, fy: f64) Color {
+    if fb == null || fb.pixels == null || fb.size.w == 0u16 || fb.size.h == 0u16 {
+        return Color{ r: 0, g: 0, b: 0, a: 255 };
+    }
+
+    var clamped_x: f64 = fx;
+    var clamped_y: f64 = fy;
+    const max_x: f64 = fb.size.w as f64 - 1.0;
+    const max_y: f64 = fb.size.h as f64 - 1.0;
+    if clamped_x < 0.0 {
+        clamped_x = 0.0;
+    } else if clamped_x > max_x {
+        clamped_x = max_x;
+    }
+    if clamped_y < 0.0 {
+        clamped_y = 0.0;
+    } else if clamped_y > max_y {
+        clamped_y = max_y;
+    }
+
+    const x0: i32 = clamped_x as i32;
+    const y0: i32 = clamped_y as i32;
+    const x1: i32 = img_clamp_i32(x0 + 1, 0, fb.size.w as i32 - 1);
+    const y1: i32 = img_clamp_i32(y0 + 1, 0, fb.size.h as i32 - 1);
+    const tx: f64 = clamped_x - x0 as f64;
+    const ty: f64 = clamped_y - y0 as f64;
+
+    const c00: Color = image_sample(fb, x0, y0);
+    const c10: Color = image_sample(fb, x1, y0);
+    const c01: Color = image_sample(fb, x0, y1);
+    const c11: Color = image_sample(fb, x1, y1);
+
+    const p00: Color = c00.premultiply();
+    const p10: Color = c10.premultiply();
+    const p01: Color = c01.premultiply();
+    const p11: Color = c11.premultiply();
+
+    const w00: f64 = (1.0 - tx) * (1.0 - ty);
+    const w10: f64 = tx * (1.0 - ty);
+    const w01: f64 = (1.0 - tx) * ty;
+    const w11: f64 = tx * ty;
+
+    const out_a: f64 = p00.a as f64 * w00 + p10.a as f64 * w10 + p01.a as f64 * w01 + p11.a as f64 * w11;
+    const out_r_pm: f64 = p00.r as f64 * w00 + p10.r as f64 * w10 + p01.r as f64 * w01 + p11.r as f64 * w11;
+    const out_g_pm: f64 = p00.g as f64 * w00 + p10.g as f64 * w10 + p01.g as f64 * w01 + p11.g as f64 * w11;
+    const out_b_pm: f64 = p00.b as f64 * w00 + p10.b as f64 * w10 + p01.b as f64 * w01 + p11.b as f64 * w11;
+
+    if out_a <= 0.0 {
+        return Color{ r: 0, g: 0, b: 0, a: 0 };
+    }
+
+    return Color{
+        r: img_clamp_channel(out_r_pm * 255.0 / out_a),
+        g: img_clamp_channel(out_g_pm * 255.0 / out_a),
+        b: img_clamp_channel(out_b_pm * 255.0 / out_a),
+        a: img_clamp_channel(out_a),
+    };
 }
 
 fn radians_from_degrees(deg: i16) f64 {
@@ -200,21 +279,39 @@ export fn draw_image_scaled(ctx: &RenderCtx, rect: Rect, img: &ImageData) void {
     if rect.is_empty() || img == null || img.pixels == null {
         return;
     }
+    if rect.w == img.size.w && rect.h == img.size.h {
+        draw_image(ctx, rect.x, rect.y, img);
+        return;
+    }
+    const rect_x: i32 = rect.x as i32;
+    const rect_y: i32 = rect.y as i32;
+    const rect_w: i32 = rect.w as i32;
+    const rect_h: i32 = rect.h as i32;
     const clip: Rect = ctx.current_clip();
     const draw_rect: Rect = clip.intersect(rect);
     if draw_rect.is_empty() {
         return;
     }
     const src_fb: FrameBuffer = image_framebuffer(img);
+    const use_bilinear: bool = rect_w != img.size.w as i32 || rect_h != img.size.h as i32;
     var py: i32 = draw_rect.y as i32;
     while py < draw_rect.y as i32 + draw_rect.h as i32 {
         var px: i32 = draw_rect.x as i32;
         while px < draw_rect.x as i32 + draw_rect.w as i32 {
-            const dx: i32 = px - rect.x as i32;
-            const dy: i32 = py - rect.y as i32;
-            const sx: i32 = (dx * img.size.w as i32) / rect.w as i32;
-            const sy: i32 = (dy * img.size.h as i32) / rect.h as i32;
-            const sample: Color = image_sample(&src_fb, sx, sy);
+            var sample: Color = Color{ r: 0, g: 0, b: 0, a: 0 };
+            if use_bilinear {
+                const dx_center: f64 = px as f64 - rect_x as f64 + 0.5;
+                const dy_center: f64 = py as f64 - rect_y as f64 + 0.5;
+                const sx_f: f64 = dx_center * img.size.w as f64 / rect_w as f64 - 0.5;
+                const sy_f: f64 = dy_center * img.size.h as f64 / rect_h as f64 - 0.5;
+                sample = image_sample_bilinear(&src_fb, sx_f, sy_f);
+            } else {
+                const dx: i32 = px - rect_x;
+                const dy: i32 = py - rect_y;
+                const sx: i32 = (dx * img.size.w as i32) / rect_w;
+                const sy: i32 = (dy * img.size.h as i32) / rect_h;
+                sample = image_sample(&src_fb, sx, sy);
+            }
             framebuffer_set_pixel(&ctx.fb, px, py, &sample);
             ctx.stats.pixel_ops = ctx.stats.pixel_ops + 1u32;
             px = px + 1;
