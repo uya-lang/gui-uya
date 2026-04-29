@@ -20,7 +20,10 @@ use std.testing.assert_eq_i32;
 use widget.base.IWidgetEventCallback;
 use widget.base.IWidgetValueCallback;
 use widget.base.Widget;
+use widget.base.WidgetOrientation;
+use widget.base.WidgetState;
 use widget.btn.Button;
+use widget.btn.BtnVariant;
 use widget.canvas.Canvas;
 use widget.chart.Chart;
 use widget.chart.ChartType;
@@ -29,6 +32,8 @@ use widget.grid_view.GridContentAlign;
 use widget.grid_view.GridView;
 use widget.img.Image;
 use widget.lbl.Label;
+use widget.lbl.TextAlign;
+use widget.lbl.TextOverflow;
 use widget.list.ListView;
 use widget.page.Page;
 use widget.page.PageNavigator;
@@ -438,4 +443,176 @@ test "widget surface applies blurred style shadows" {
     try assert_eq_bool(shadow.r > 0u8, true);
     try assert_eq_bool(shadow.r < 255u8, true);
     try assert_eq_bool(ctx_pixel(&ctx, 1, 1) == black_expect, true);
+}
+
+test "button variant label and pressed click state transitions update style" {
+    var button: Button = Button.filled("Apply");
+    try assert_eq_i32(button.label_len as i32, 5);
+
+    button.set_label("Go");
+    try assert_eq_i32(button.label_len as i32, 2);
+
+    button.set_variant(BtnVariant.Text, 0u32);
+    try assert_eq_i32(button.widget.base.style.get_u32_or(StyleProp.BorderWidth, 99u32) as i32, 0);
+    try assert_eq_bool(button.variant == BtnVariant.Text, true);
+
+    button.set_variant(BtnVariant.Icon, 7u32);
+    try assert_eq_bool(button.variant == BtnVariant.Icon, true);
+    try assert_eq_i32(button.widget.base.w as i32, 44);
+    try assert_eq_i32(button.icon as i32, 7);
+
+    var press_evt: Event = event_point(EventType.Press, InputDev.Touch, 1, 10u32, Point{ x: 2, y: 2 });
+    var click_evt: Event = event_point(EventType.Click, InputDev.Touch, 1, 20u32, Point{ x: 2, y: 2 });
+    _ = button.handle_event(&press_evt);
+    try assert_eq_bool(button.widget.state == WidgetState.Pressed, true);
+    _ = button.handle_event(&click_evt);
+    try assert_eq_bool(button.widget.state == WidgetState.Focused, true);
+}
+
+test "widget state machine handles hover focus and enable toggles" {
+    var button: Button = Button.filled("State");
+    var hover_evt: Event = event_point(EventType.HoverEnter, InputDev.Mouse, 1, 1u32, Point{ x: 1, y: 1 });
+    var leave_evt: Event = event_point(EventType.HoverLeave, InputDev.Mouse, 1, 2u32, Point{ x: 1, y: 1 });
+    var focus_evt: Event = event_point(EventType.FocusIn, InputDev.Keypad, 1, 3u32, Point{ x: 0, y: 0 });
+    var blur_evt: Event = event_point(EventType.FocusOut, InputDev.Keypad, 1, 4u32, Point{ x: 0, y: 0 });
+
+    try assert_eq_bool(button.widget.handle_input(&hover_evt), true);
+    try assert_eq_bool(button.widget.state == WidgetState.Hovered, true);
+    try assert_eq_bool(button.widget.handle_input(&leave_evt), true);
+    try assert_eq_bool(button.widget.state == WidgetState.Normal, true);
+    try assert_eq_bool(button.widget.handle_input(&focus_evt), true);
+    try assert_eq_bool(button.widget.state == WidgetState.Focused, true);
+    try assert_eq_bool(button.widget.handle_input(&blur_evt), true);
+    try assert_eq_bool(button.widget.state == WidgetState.Normal, true);
+
+    button.widget.set_enabled(false);
+    try assert_eq_bool(button.widget.state == WidgetState.Disabled, true);
+    try assert_eq_bool(button.widget.handle_input(&hover_evt), false);
+    button.widget.set_enabled(true);
+    try assert_eq_bool(button.widget.state == WidgetState.Normal, true);
+}
+
+test "slider vertical orientation clamps and respects step size" {
+    var slider: Slider = Slider.new(0, 100, 0);
+    slider.orientation = WidgetOrientation.Vertical;
+    slider.step = 10;
+    slider.widget.at(0, 0);
+    slider.widget.size(24, 100);
+
+    var press_evt: Event = event_point(EventType.Press, InputDev.Touch, 1, 10u32, Point{ x: 12, y: 95 });
+    var drag_evt: Event = event_point(EventType.Drag, InputDev.Touch, 1, 20u32, Point{ x: 12, y: 5 });
+    _ = slider.handle_event(&press_evt);
+    try assert_eq_i32(slider.get_value(), 0);
+    _ = slider.handle_event(&drag_evt);
+    try assert_eq_i32(slider.get_value(), 100);
+
+    slider.set_value(57);
+    try assert_eq_i32(slider.get_value(), 50);
+    slider.set_value(-20);
+    try assert_eq_i32(slider.get_value(), 0);
+}
+
+test "switch set_checked and toggle keep state and callback in sync" {
+    var sw: Switch = Switch.new(true);
+    var value: i32 = -1;
+    var cb_impl: CountingWidgetValue = CountingWidgetValue{ value_ref: &value };
+    var cb: IWidgetValueCallback = cb_impl;
+    sw.on_change(&cb, null);
+
+    sw.set_checked(false);
+    try assert_eq_bool(sw.checked, false);
+    try assert_eq_bool(sw.widget.state == WidgetState.Normal, true);
+
+    sw.toggle();
+    try assert_eq_bool(sw.checked, true);
+    try assert_eq_bool(sw.widget.state == WidgetState.Checked, true);
+    try assert_eq_i32(value, 1);
+}
+
+test "list view remove clear and scroll clamp work" {
+    var list: ListView = ListView.new();
+    list.widget.size(80, 40);
+    list.add_item("One");
+    list.add_item("Two");
+    list.add_item("Three");
+    list.add_item("Four");
+    list.select(2);
+    try assert_eq_i32(list.selected(), 2);
+
+    list.scroll_to(0, 999);
+    try assert_eq_i32(list.scroll_y as i32, 56);
+    list.remove_item(1);
+    try assert_eq_i32(list.item_count as i32, 3);
+    try assert_eq_i32(list.content_h as i32, 72);
+
+    list.clear();
+    try assert_eq_i32(list.item_count as i32, 0);
+    try assert_eq_i32(list.selected(), -1);
+    try assert_eq_i32(list.scroll_y as i32, 0);
+}
+
+test "grid view remove child and end alignment reflows items" {
+    var bytes: [byte: 36864] = [];
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 96, 96, 384, PixelFormat.ARGB8888));
+    var grid: GridView = GridView.new();
+    var a: Button = Button.outlined("A");
+    var b: Button = Button.outlined("B");
+
+    grid.widget.at(0, 0);
+    grid.widget.size(80, 80);
+    grid.columns = 1;
+    grid.item_size.w = 20;
+    grid.item_size.h = 12;
+    grid.row_gap = 4u8;
+    grid.content_align_x = GridContentAlign.End;
+    grid.content_align_y = GridContentAlign.End;
+    grid.add_child(a.obj());
+    grid.add_child(b.obj());
+    grid.render(&ctx);
+
+    try assert_eq_i32(a.widget.base.x as i32, 52);
+    try assert_eq_i32(b.widget.base.y as i32, 60);
+    grid.remove_child(a.obj());
+    grid.render(&ctx);
+    try assert_eq_i32(grid.child_count(), 1);
+    try assert_eq_bool(grid.child_at(0) == b.obj(), true);
+}
+
+test "label wrap layout and alignment recalc across multiple lines" {
+    var bytes: [byte: 8192] = [];
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 48, 48, 192, PixelFormat.ARGB8888));
+    var label: Label = Label.new("HELLO WORLD");
+    label.widget.at(0, 0);
+    label.widget.size(32, 40);
+    label.overflow = TextOverflow.Wrap;
+    _ = label.set_align(TextAlign.Center);
+    label.render(&ctx);
+
+    try assert_eq_bool(label.line_count > 1u8, true);
+    try assert_eq_bool(label.text_h > 0u16, true);
+    try assert_eq_bool(label.layout_dirty, false);
+
+    _ = label.set_text("BYE");
+    try assert_eq_bool(label.layout_dirty, true);
+}
+
+test "page scroll clamps to content bounds and remove updates content size" {
+    var page: Page = Page.new("Scroll");
+    var panel: Panel = Panel.new();
+    page.scrollable = true;
+    page.widget.size(100, 100);
+    page.widget.base.style.set_u32(StyleProp.PaddingLeft, 0u32);
+    page.widget.base.style.set_u32(StyleProp.PaddingRight, 0u32);
+    page.widget.base.style.set_u32(StyleProp.PaddingTop, 0u32);
+    page.widget.base.style.set_u32(StyleProp.PaddingBottom, 0u32);
+
+    panel.widget.at(0, 120);
+    panel.widget.size(20, 20);
+    page.add(panel.obj());
+    try assert_eq_i32(page.content_size.h as i32, 140);
+
+    page.scroll_to(0, 999);
+    try assert_eq_i32(page.scroll_y as i32, 40);
+    page.remove(panel.obj());
+    try assert_eq_i32(page.content_size.h as i32, 0);
 }

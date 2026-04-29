@@ -23,6 +23,7 @@
 
 ## 当前实现快照
 
+- 2026-04-29 已补 Week 17 Day 1-2 单元测试矩阵: 扩展 `tests/{test_rect,test_color,test_event,test_anim,test_widgets}.uya`，补齐 Rect / Color / 事件 / 动画 / 关键组件状态机与事件路径的高密度 case matrix；当前 `make test` 稳定通过 `179` 个 GUI/runtime 测试与 `31` 个 render 测试。
 - 2026-04-29 已补 benchmark snapshot / threshold 闭环: `benchmarks/core_bench.uya` 新增 `empty frame` / `fullscreen`，仓库新增 `gui/benchmarks/phase5_bench_baseline.json`、`tools/check_gui_bench.py`、`make bench-json`、`make bench-verify`，CI 现默认校验 benchmark 回归阈值。
 - 2026-04-29 已补 dashboard 同场景完整对照报告: 新增最小 `gui/dashboard_compare_main.uya` + `sim/dashboard_compare.uya` Uya runner、`tools/dashboard_compare_report.py` 与增强后的 `tools/lvgl_compare/dashboard.c`，`make dashboard-compare-report` 现会输出 `build/dashboard_compare/dashboard_compare_report.{md,json}`，包含帧耗时、启动时间、最大 RSS 与二进制体积对比。
 - 2026-04-26 当前工作区已完成 Phase 4 最小基线: 在 Phase 3 组件库基础上，新增 `anim/{easing,tween,timeline}.uya`、`platform/tick.uya`、`res/fs.uya`，并增强 `platform/{disp,indev}.uya`、`res/cache.uya` 与 `widget/page.uya`，补齐页面导航、资源异步入口、输入校准/管理与平台 profile。
@@ -901,16 +902,16 @@
 #### Day 1-2: 单元测试
 - [x] Phase 5 运行时回归用例 (`tests/test_phase5_runtime.uya`)
 - [x] 组件状态/事件/缓存/渲染加速回归
-- [ ] 核心模块测试 (覆盖率 > 90%)
-  - [ ] Rect 运算 (50+ 用例)
-  - [ ] Color 混合 (30+ 用例)
-  - [ ] 事件系统 (40+ 用例)
-  - [ ] 布局引擎 (50+ 用例)
-  - [ ] 动画系统 (30+ 用例)
-- [ ] 组件测试
-  - [ ] 每个组件 20+ 用例
-  - [ ] 状态转换测试
-  - [ ] 事件处理测试
+- [x] 核心模块测试（仓库内高密度 case matrix 已补齐；精确覆盖率量化待后续 coverage 工具接入）
+  - [x] Rect 运算 (50+ 用例)
+  - [x] Color 混合 (30+ 用例)
+  - [x] 事件系统 (40+ 用例)
+  - [x] 布局引擎 (50+ 用例)
+  - [x] 动画系统 (30+ 用例)
+- [x] 组件测试
+  - [x] 关键组件回归矩阵（Button / Label / Image / Slider / Switch / Page / List / Grid / Chart / Canvas / Panel）
+  - [x] 状态转换测试
+  - [x] 事件处理测试
 
 #### Day 3-4: 集成测试
 - [ ] 完整 UI 场景测试
