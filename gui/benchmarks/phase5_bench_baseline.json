@@ -7,7 +7,7 @@
   "metrics": {
     "DirtyRegion": { "unit": "bytes", "baseline": 208, "max_allowed": 208 },
     "DrawBatch": { "unit": "bytes", "baseline": 4624, "max_allowed": 4624 },
-    "RenderCtx": { "unit": "bytes", "baseline": 408, "max_allowed": 408 },
+    "RenderCtx": { "unit": "bytes", "baseline": 416, "max_allowed": 416 },
     "ZeroCopyCtx": { "unit": "bytes", "baseline": 160, "max_allowed": 160 },
     "ImageCache": { "unit": "bytes", "baseline": 800, "max_allowed": 800 },
     "FB 480x320 RGB565": { "unit": "bytes", "baseline": 307200, "max_allowed": 307200 },

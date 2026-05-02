@@ -8,6 +8,7 @@ use core.obj_tree.ObjTreeRepaintRequest;
 use core.rect.Rect;
 use platform.tick.sleep_ms;
 use render.ctx.RenderCtx;
+use render.ctx.render_ctx_flush;
 
 export enum RenderPresentMode {
     None,
@@ -165,6 +166,7 @@ export fn render_schedule_tree_frame(
 
     if force_full {
         render_schedule_full_frame(ctx, tree, screen, clear_color, full_cb, overlay_cb, user_data);
+        render_ctx_flush(ctx);
         tree.clear_invalid_regions();
         return render_frame_result_with_plan(
             ObjTreeDirtyRenderPlan{
@@ -187,6 +189,7 @@ export fn render_schedule_tree_frame(
     const plan: ObjTreeDirtyRenderPlan = tree.prepare_dirty_render(scheduler_rect_copy(screen), false);
     if plan.full_refresh {
         render_schedule_full_frame(ctx, tree, scheduler_rect_copy(screen), scheduler_color_copy(clear_color), full_cb, overlay_cb, user_data);
+        render_ctx_flush(ctx);
         tree.clear_invalid_regions();
         return render_frame_result_with_plan(plan, RenderPresentMode.Full, true, 1, 1);
     }
@@ -198,6 +201,7 @@ export fn render_schedule_tree_frame(
 
     const dirty_view: DirtyRegionView = plan.dirty.get_regions();
     const pass_count: i32 = render_schedule_dirty_requests(ctx, &plan, tree, overlay_cb, user_data);
+    render_ctx_flush(ctx);
     tree.clear_invalid_regions();
     return render_frame_result_with_plan(plan, RenderPresentMode.Dirty, pass_count > 0, pass_count, dirty_view.len);
 }

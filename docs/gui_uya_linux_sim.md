@@ -13,7 +13,8 @@
 - 已有命令：`make sim-build`、`make sim-run`、`make sim-debug`、`make sim-fb-run`
 - 已有 headless 命令：`make sim-headless`
 - 已有 SDL2 后端：`gui/platform/sdl2/{disp_sdl.uya, indev_sdl.uya, sdl_host.c}`
-- 已有 SDL2 OpenGL ES 2.0 present 后端：支持 `--gpu auto|software|gles2`
+- 已有 SDL2 OpenGL ES 2.0 绘制/显示后端：支持 `--gpu auto|software|gles2`
+- 已有 CPU 渲染后端选择：支持 `--cpu-render immediate|batch`
 - 已有调试工具：`gui/sim/{screenshot,profiler,recorder}.uya`
 - 已有无 SDL2 单测：`gui/tests/test_sim_app.uya`、`gui/tests/test_sim_tools.uya`
 - 已有 CI smoke：`.github/workflows/gui-phase0.yml` 会安装 `libsdl2-dev`，并在 dummy video 下跑 `make sim-headless SIM_HEADLESS_ARGS="--max-frames 2 --screenshot build/sim/ci.bmp"`
@@ -35,8 +36,14 @@ make sim-build
 # 默认运行（phase4 场景）
 make sim-run
 
-# 强制使用 OpenGL ES 2.0 present 后端
+# 强制使用 OpenGL ES 2.0 绘制/显示后端
 make sim-run SIM_ARGS="--gpu gles2 --max-frames 120"
+
+# 切换 CPU 渲染后端
+make sim-run SIM_ARGS="--cpu-render batch --demo dashboard --max-frames 120"
+
+# 显式启用 GLES2 batch 绘制
+make sim-run SIM_ARGS="--gpu gles2 --cpu-render batch --demo dashboard --max-frames 120"
 
 # 运行 phase6 并限定帧数，适合 CI / smoke
 make sim-run SIM_ARGS="--demo phase6 --max-frames 120"
@@ -67,6 +74,7 @@ make sim-fb-run
 
 - `--demo phase4|phase6|clock|music|settings|dashboard|game|perf|novel`
 - `--gpu auto|software|gles2`（默认 `auto`，`auto` 会在 GLES2 不可用时回退到 software）
+- `--cpu-render immediate|batch`（默认 `immediate`，`batch` 会把基础几何命令汇总后再提交）
 - `--width N --height N --scale N`（默认 `1920x1080`，`scale=1`）
 - `--fullscreen | --windowed`
 - `--root PATH`
@@ -90,6 +98,7 @@ make sim-fb-run
 - 可覆盖参数：`SIM_HEADLESS_ARGS="--max-frames 5 --screenshot build/sim/custom.bmp"`
 - 实现方式：通过 `SDL_VIDEODRIVER=dummy` 复用 SDL2 主线，不额外分叉一套 headless runtime
 - 说明：`--gpu auto` 在 dummy video / 无 GLES2 context 的环境下会自动回退到 software；`--gpu gles2` 会严格要求成功创建 GLES2 context
+- 说明：当 `--gpu gles2 --cpu-render batch` 同时启用时，batch 内的矩形 / 描边矩形 / 线段 / 图像会直接走 GLES2 绘制；文本与复杂 AA 图元仍保留 CPU fallback
 
 ### Framebuffer 专用入口
 

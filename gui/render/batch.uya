@@ -2,10 +2,7 @@ use core.color.BLACK;
 use core.color.Color;
 use core.rect.RECT_ZERO;
 use core.rect.Rect;
-use render.ctx.RenderCtx;
 use render.img.ImageData;
-use render.img.draw_image;
-use render.img.draw_image_clipped;
 use render.img.empty_image;
 
 export const DRAW_BATCH_CAPACITY: i32 = 64;
@@ -373,27 +370,6 @@ export struct DrawBatch {
         self.count = self.count - 1;
     }
 
-    fn execute(self: &Self, ctx: &RenderCtx) void {
-        var i: i32 = 0;
-        while i < self.count as i32 {
-            const cmd: DrawCmd = self.cmds[i];
-            if cmd.kind == DrawCmdKind.FillRect {
-                ctx.fill_rect(cmd.rect, cmd.color);
-            } else if cmd.kind == DrawCmdKind.DrawRect {
-                ctx.draw_rect(cmd.rect, cmd.color, cmd.width);
-            } else if cmd.kind == DrawCmdKind.Line {
-                ctx.draw_line(cmd.x1, cmd.y1, cmd.x2, cmd.y2, cmd.color, cmd.width);
-            } else if cmd.kind == DrawCmdKind.Image {
-                if cmd.has_src {
-                    draw_image_clipped(ctx, cmd.rect, &cmd.image, cmd.src_rect);
-                } else {
-                    draw_image(ctx, cmd.rect.x, cmd.rect.y, &cmd.image);
-                }
-            }
-            i = i + 1;
-        }
-        ctx.stats.batch_flushes = ctx.stats.batch_flushes + 1u32;
-    }
 }
 
 /// 创建空的绘制批处理缓冲区。

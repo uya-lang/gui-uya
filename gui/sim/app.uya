@@ -88,6 +88,7 @@ use platform.disp.FrameBuffer;
 use platform.disp.PixelFormat;
 use platform.disp.framebuffer_new;
 use render.ctx.RenderCtx;
+use render.ctx.render_ctx_flush;
 use render.ctx.render_ctx_new;
 use render.font.Font;
 use render.font.draw_text;
@@ -1764,11 +1765,13 @@ SimApp {
             ctx.clear(sim_standalone_bg_color(self.config.demo));
             self.render_selected_demo(ctx);
             self.render_standalone_back_button(ctx);
+            render_ctx_flush(ctx);
             return;
         }
         ctx.clear(sim_phase_bg_color());
         self.page.render(ctx);
         self.render_home_nav(ctx);
+        render_ctx_flush(ctx);
     }
 
     fn supports_dirty_render(self: &Self) bool {

@@ -14,12 +14,22 @@ use platform.fb.indev_fb.fb_input_system_new;
 use platform.sdl2.disp_sdl.SdlDisplay;
 use platform.sdl2.disp_sdl.sdl_display_last_error;
 use platform.sdl2.disp_sdl.sdl_display_new;
+use platform.sdl2.gpu_sdl.SdlGles2GpuCtx;
+use platform.sdl2.gpu_sdl.sdl_gles2_gpu_new;
 use platform.sdl2.indev_sdl.SdlInputSystem;
 use platform.sdl2.indev_sdl.sdl_input_system_new;
 use platform.tick.get_tick_ms;
+use render.cpu_backend.CpuRenderBackendKind;
+use render.batch.DrawBatch;
+use render.batch.draw_batch_new;
 use render.ctx.RenderCtx;
+use render.ctx.RenderMode;
+use render.ctx.render_ctx_attach_batch;
+use render.ctx.render_ctx_attach_gpu;
 use render.ctx.render_ctx_new;
+use render.ctx.render_ctx_set_mode;
 use render.font.ttf_font_set_default_native_backend_c;
+use render.gpu.IGpuCtx;
 use render.scheduler.RenderFramePacer;
 use render.scheduler.RenderFrameResult;
 use render.scheduler.RenderPresentMode;
@@ -31,6 +41,7 @@ use sim.config.SimBackendKind;
 use sim.config.SimConfig;
 use sim.config.sim_backend_name;
 use sim.config.sim_config_from_runtime;
+use sim.config.sim_cpu_backend_name;
 use sim.config.sim_gpu_name;
 
 fn sim_print_usage() void {
@@ -38,6 +49,7 @@ fn sim_print_usage() void {
         "UyaGUI Linux Simulator\n"
         "  --backend sdl2|fb\n"
         "  --gpu auto|software|gles2\n"
+        "  --cpu-render immediate|batch\n"
         "  --demo phase4|phase6|clock|music|settings|dashboard|game(2048)|perf|novel|widgets|custom\n"
         "  --width N --height N --scale N\n"
         "  --fullscreen | --windowed\n"
@@ -53,8 +65,22 @@ fn sim_ensure_default_font_backend() void {
     ttf_font_set_default_native_backend_c(true);
 }
 
+fn sim_configure_render_ctx(ctx: &RenderCtx, cfg: &SimConfig, batch: &DrawBatch, gpu: &IGpuCtx) void {
+    if ctx == null {
+        return;
+    }
+    render_ctx_attach_gpu(ctx, gpu);
+    if cfg.cpu_backend == CpuRenderBackendKind.Batch {
+        render_ctx_attach_batch(ctx, batch);
+        render_ctx_set_mode(ctx, RenderMode.Batch);
+        return;
+    }
+    render_ctx_attach_batch(ctx, null as &DrawBatch);
+    render_ctx_set_mode(ctx, RenderMode.Immediate);
+}
+
 fn run_simulator_sdl(cfg: SimConfig) i32 {
-    _ = printf("[sim] backend=%s gpu=%s\n" as *byte, sim_backend_name(cfg.backend), sim_gpu_name(cfg.gpu));
+    _ = printf("[sim] backend=%s gpu=%s cpu=%s\n" as *byte, sim_backend_name(cfg.backend), sim_gpu_name(cfg.gpu), sim_cpu_backend_name(cfg.cpu_backend));
     sim_ensure_default_font_backend();
  
     var display: SdlDisplay = sdl_display_new();
@@ -67,6 +93,7 @@ fn run_simulator_sdl(cfg: SimConfig) i32 {
     }
     _ = display.set_dirty_overlay(cfg.show_dirty_regions);
     _ = printf("[sim] sdl gpu active=%s\n" as *byte, display.active_gpu_name());
+    const direct_gles2: bool = display.gles2_direct_active();
 
     var input: SdlInputSystem = sdl_input_system_new();
     input.init();
@@ -84,7 +111,17 @@ fn run_simulator_sdl(cfg: SimConfig) i32 {
     if app.supports_dirty_render() {
         const seed_back: &FrameBuffer = display.get_back_buffer();
         var seed_ctx: RenderCtx = render_ctx_new(framebuffer_new(seed_back.pixels, seed_back.size.w, seed_back.size.h, seed_back.stride, seed_back.format));
-        _ = app.render_retained(&seed_ctx, true);
+        var seed_batch: DrawBatch = draw_batch_new();
+        if direct_gles2 {
+            var seed_mirror: RenderCtx = render_ctx_new(framebuffer_new(seed_back.pixels, seed_back.size.w, seed_back.size.h, seed_back.stride, seed_back.format));
+            var seed_gpu: SdlGles2GpuCtx = sdl_gles2_gpu_new(&display, &seed_mirror);
+            var seed_gpu_iface: IGpuCtx = seed_gpu;
+            sim_configure_render_ctx(&seed_ctx, &cfg, &seed_batch, &seed_gpu_iface);
+            _ = app.render_retained(&seed_ctx, true);
+        } else {
+            sim_configure_render_ctx(&seed_ctx, &cfg, &seed_batch, null as &IGpuCtx);
+            _ = app.render_retained(&seed_ctx, true);
+        }
         _ = framebuffer_copy(display.get_front_buffer(), seed_back);
         first_frame = false;
         last_dirty_render = true;
@@ -133,11 +170,25 @@ fn run_simulator_sdl(cfg: SimConfig) i32 {
             _ = framebuffer_copy(back_ref, display.get_front_buffer());
         }
         var ctx: RenderCtx = render_ctx_new(framebuffer_new(back_ref.pixels, back_ref.size.w, back_ref.size.h, back_ref.stride, back_ref.format));
+        var frame_batch: DrawBatch = draw_batch_new();
         var retained_result: RenderFrameResult = render_frame_result_idle();
-        if dirty_render {
-            retained_result = app.render_retained(&ctx, force_full);
+        if direct_gles2 {
+            var mirror_ctx: RenderCtx = render_ctx_new(framebuffer_new(back_ref.pixels, back_ref.size.w, back_ref.size.h, back_ref.stride, back_ref.format));
+            var frame_gpu: SdlGles2GpuCtx = sdl_gles2_gpu_new(&display, &mirror_ctx);
+            var frame_gpu_iface: IGpuCtx = frame_gpu;
+            sim_configure_render_ctx(&ctx, &cfg, &frame_batch, &frame_gpu_iface);
+            if dirty_render {
+                retained_result = app.render_retained(&ctx, force_full);
+            } else {
+                app.render(&ctx);
+            }
         } else {
-            app.render(&ctx);
+            sim_configure_render_ctx(&ctx, &cfg, &frame_batch, null as &IGpuCtx);
+            if dirty_render {
+                retained_result = app.render_retained(&ctx, force_full);
+            } else {
+                app.render(&ctx);
+            }
         }
         ctx.dirty.merge();
         const after_render_ms: u32 = get_tick_ms();
@@ -149,7 +200,22 @@ fn run_simulator_sdl(cfg: SimConfig) i32 {
             _ = display.toggle_fullscreen();
         }
 
-        if dirty_render {
+        if direct_gles2 {
+            const dirty_view: DirtyRegionView = ctx.dirty.get_regions();
+            if !dirty_render || retained_result.rendered || !dirty_view.is_empty() {
+                if !display.present_gpu_frame(&ctx.dirty) {
+                    _ = printf("[sim] present failed: %s\n" as *byte, sdl_display_last_error());
+                    break;
+                }
+                pending_seed_present = false;
+            } else if pending_seed_present || display.consume_refresh_request() {
+                if !display.refresh_front() {
+                    _ = printf("[sim] present failed: %s\n" as *byte, sdl_display_last_error());
+                    break;
+                }
+                pending_seed_present = false;
+            }
+        } else if dirty_render {
             const dirty_view: DirtyRegionView = ctx.dirty.get_regions();
             if retained_result.present_mode == RenderPresentMode.Full {
                 if !display.present() {
@@ -200,7 +266,7 @@ fn run_simulator_sdl(cfg: SimConfig) i32 {
 
 fn run_simulator_fb(cfg_in: SimConfig) i32 {
     var cfg: SimConfig = cfg_in;
-    _ = printf("[sim] backend=%s\n" as *byte, sim_backend_name(cfg.backend));
+    _ = printf("[sim] backend=%s cpu=%s\n" as *byte, sim_backend_name(cfg.backend), sim_cpu_backend_name(cfg.cpu_backend));
     sim_ensure_default_font_backend();
 
     var display: FbDisplay = fb_display_new();
@@ -241,6 +307,8 @@ fn run_simulator_fb(cfg_in: SimConfig) i32 {
     if app.supports_dirty_render() {
         const seed_back: &FrameBuffer = display.get_back_buffer();
         var seed_ctx: RenderCtx = render_ctx_new(framebuffer_new(seed_back.pixels, seed_back.size.w, seed_back.size.h, seed_back.stride, seed_back.format));
+        var seed_batch: DrawBatch = draw_batch_new();
+        sim_configure_render_ctx(&seed_ctx, &cfg, &seed_batch, null as &IGpuCtx);
         _ = app.render_retained(&seed_ctx, true);
         _ = framebuffer_copy(display.get_front_buffer(), seed_back);
         first_frame = false;
@@ -282,6 +350,8 @@ fn run_simulator_fb(cfg_in: SimConfig) i32 {
             _ = framebuffer_copy(back_ref, display.get_front_buffer());
         }
         var ctx: RenderCtx = render_ctx_new(framebuffer_new(back_ref.pixels, back_ref.size.w, back_ref.size.h, back_ref.stride, back_ref.format));
+        var frame_batch: DrawBatch = draw_batch_new();
+        sim_configure_render_ctx(&ctx, &cfg, &frame_batch, null as &IGpuCtx);
         var retained_result: RenderFrameResult = render_frame_result_idle();
         if dirty_render {
             retained_result = app.render_retained(&ctx, force_full);

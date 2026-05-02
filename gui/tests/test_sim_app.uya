@@ -10,8 +10,14 @@ use platform.disp.PixelFormat;
 use platform.disp.framebuffer_copy;
 use platform.disp.framebuffer_new;
 use platform.disp.framebuffer_required_bytes;
+use render.batch.DrawBatch;
+use render.batch.draw_batch_new;
+use render.cpu_backend.CpuRenderBackendKind;
 use render.ctx.RenderCtx;
+use render.ctx.RenderMode;
+use render.ctx.render_ctx_attach_batch;
 use render.ctx.ctx_pixel;
+use render.ctx.render_ctx_set_mode;
 use render.ctx.render_ctx_new;
 use examples.demo_animation.animation_demo_replay_rect;
 use examples.demo_animation.animation_demo_section_rect;
@@ -33,6 +39,7 @@ use sim.common.SIM_KEY_SPACE;
 use sim.config.SimConfig;
 use sim.config.SimDemoKind;
 use sim.config.SimGpuKind;
+use sim.config.sim_cpu_backend_name;
 use sim.config.sim_config_default;
 use sim.config.sim_gpu_name;
 use sim.recorder.RecordedEvent;
@@ -56,6 +63,7 @@ fn sim_expect_frame_equal(lhs: &byte, rhs: &byte, len: usize) !void {
 test "sim config defaults to auto gpu and exposes names" {
     const cfg: SimConfig = sim_config_default();
     try assert_eq_i32(cfg.gpu as i32, SimGpuKind.Auto as i32);
+    try assert_eq_i32(cfg.cpu_backend as i32, CpuRenderBackendKind.Immediate as i32);
     try assert_eq_i32(cfg.width as i32, SIM_DEFAULT_RES_WIDTH as i32);
     try assert_eq_i32(cfg.height as i32, SIM_DEFAULT_RES_HEIGHT as i32);
     try assert_eq_i32(cfg.target_fps as i32, 60);
@@ -65,6 +73,37 @@ test "sim config defaults to auto gpu and exposes names" {
     try assert_eq_bool(sim_cstr_eq(sim_gpu_name(SimGpuKind.Auto), "auto"), true);
     try assert_eq_bool(sim_cstr_eq(sim_gpu_name(SimGpuKind.Software), "software"), true);
     try assert_eq_bool(sim_cstr_eq(sim_gpu_name(SimGpuKind.Gles2), "gles2"), true);
+    try assert_eq_bool(sim_cstr_eq(sim_cpu_backend_name(CpuRenderBackendKind.Immediate), "immediate"), true);
+    try assert_eq_bool(sim_cstr_eq(sim_cpu_backend_name(CpuRenderBackendKind.Batch), "batch"), true);
+}
+
+test "sim app batch cpu backend can render direct frame" {
+    var app: SimApp = sim_app_new();
+    var cfg: SimConfig = sim_config_default();
+    cfg.demo = SimDemoKind.Dashboard;
+    cfg.width = SIM_DEFAULT_RES_WIDTH;
+    cfg.height = SIM_DEFAULT_RES_HEIGHT;
+    try assert_eq_bool(app.init(cfg), true);
+
+    const pixels_len: usize = framebuffer_required_bytes(cfg.width, cfg.height, PixelFormat.ARGB8888);
+    const pixels: &byte = malloc(pixels_len) as &byte;
+    if pixels == null {
+        try assert_eq_bool(false, true);
+        return;
+    }
+    defer {
+        free(pixels as &void);
+    }
+
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(pixels, cfg.width, cfg.height, cfg.width * 4u16, PixelFormat.ARGB8888));
+    var batch: DrawBatch = draw_batch_new();
+    render_ctx_attach_batch(&ctx, &batch);
+    render_ctx_set_mode(&ctx, RenderMode.Batch);
+    app.render(&ctx);
+
+    try assert_eq_bool(ctx.stats.batch_flushes > 0u32, true);
+    try assert_eq_bool(ctx.stats.text_ops > 0u32, true);
+    try assert_eq_bool(ctx.stats.line_ops > 0u32, true);
 }
 
 test "sim app renders and reacts to playback-style input" {

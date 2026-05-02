@@ -1,5 +1,7 @@
 use libc.atoi;
 use libc.getenv;
+use render.cpu_backend.CpuRenderBackendKind;
+use render.cpu_backend.cpu_render_backend_name;
 use sim.common.SIM_DEFAULT_RES_HEIGHT;
 use sim.common.SIM_DEFAULT_RES_WIDTH;
 use sim.common.sim_cstr_empty;
@@ -43,6 +45,7 @@ export enum SimGpuKind {
 export struct SimConfig {
     backend: SimBackendKind,
     gpu: SimGpuKind,
+    cpu_backend: CpuRenderBackendKind,
     demo: SimDemoKind,
     width: u16,
     height: u16,
@@ -140,11 +143,24 @@ export fn sim_gpu_name(kind: SimGpuKind) &const byte {
     return "auto" as &const byte;
 }
 
+/// 返回指定 CPU 渲染后端的显示名称。
+export fn sim_cpu_backend_name(kind: CpuRenderBackendKind) &const byte {
+    return cpu_render_backend_name(kind);
+}
+
+fn sim_parse_cpu_backend(value: &const byte) CpuRenderBackendKind {
+    if value != null && (sim_cstr_eq(value, "batch") || sim_cstr_eq(value, "batched")) {
+        return CpuRenderBackendKind.Batch;
+    }
+    return CpuRenderBackendKind.Immediate;
+}
+
 /// 返回默认的模拟器配置。
 export fn sim_config_default() SimConfig {
     return SimConfig{
         backend: SimBackendKind.Sdl2,
         gpu: SimGpuKind.Auto,
+        cpu_backend: CpuRenderBackendKind.Immediate,
         demo: SimDemoKind.Phase4,
         width: SIM_DEFAULT_RES_WIDTH,
         height: SIM_DEFAULT_RES_HEIGHT,
@@ -251,6 +267,9 @@ export fn sim_config_from_runtime() SimConfig {
                 } else {
                     cfg.gpu = SimGpuKind.Auto;
                 }
+                i = i + 1;
+            } else if (sim_cstr_eq(arg as &const byte, "--cpu-render") || sim_cstr_eq(arg as &const byte, "--cpu-backend")) && next != null {
+                cfg.cpu_backend = sim_parse_cpu_backend(next as &const byte);
                 i = i + 1;
             } else if sim_cstr_eq(arg as &const byte, "--width") && next != null {
                 cfg.width = (sim_clamp_positive_i32(atoi(next as &const byte), cfg.width as i32) as! u16).value;

@@ -29,9 +29,9 @@ use render.ctx.RenderCtx;
 use render.ctx.ctx_pixel;
 use render.ctx.render_ctx_new;
 use render.gpu.IGpuCtx;
-use render.gpu.SoftwareGpuCtx;
 use render.gpu.gpu_execute_batch;
-use render.gpu.software_gpu_new;
+use render.gpu_software.SoftwareGpuCtx;
+use render.gpu_software.software_gpu_new;
 use render.img.ImageData;
 use render.img.image_data_new;
 use render.zerocopy.ZeroCopyCtx;
@@ -83,11 +83,10 @@ test "gpu batch execution accelerates rects and falls back for lines" {
 
     var gpu: SoftwareGpuCtx = software_gpu_new(&ctx);
     var gpu_iface: IGpuCtx = gpu;
-    gpu_execute_batch(&gpu_iface, &ctx, &batch);
+    gpu_execute_batch(&gpu_iface, &batch);
 
     try assert_eq_i32(batch.count as i32, 2);
-    try assert_eq_i32(ctx.stats.batch_flushes as i32, 1);
-    try assert_eq_i32(ctx.stats.gpu_flushes as i32, 1);
+    try assert_eq_i32(gpu.sync_count as i32, 1);
     try assert_eq_bool(ctx_pixel(&ctx, 3, 0) == red_expected, true);
     try assert_eq_bool(ctx_pixel(&ctx, 7, 4) == green_expected, true);
 }

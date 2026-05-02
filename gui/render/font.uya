@@ -14,6 +14,8 @@ use libc.sys_munmap;
 use libc.sys_open;
 use platform.disp.PixelFormat;
 use render.ctx.RenderCtx;
+use render.ctx.RenderMode;
+use render.ctx.render_ctx_flush;
 
 extern fn malloc(size: usize) &void;
 extern fn free(ptr: &void) void;
@@ -3406,6 +3408,14 @@ export fn draw_text(ctx: &RenderCtx, x: i16, y: i16, text: &const byte, len: usi
     if ctx == null || font == null || text == null || len == 0usize {
         return;
     }
+    const prev_mode: RenderMode = ctx.mode;
+    if prev_mode == RenderMode.Batch {
+        render_ctx_flush(ctx);
+        ctx.mode = RenderMode.Immediate;
+    }
+    defer {
+        ctx.mode = prev_mode;
+    }
 
     var cursor: i16 = x;
     var i: usize = 0usize;
@@ -3433,6 +3443,9 @@ export fn draw_text(ctx: &RenderCtx, x: i16, y: i16, text: &const byte, len: usi
 
 /// 在指定矩形内按对齐方式绘制文本。
 export fn draw_text_aligned(ctx: &RenderCtx, rect: Rect, text: &const byte, len: usize, font: &Font, color: Color, align: TextAlign) void {
+    if ctx == null || font == null || text == null || len == 0usize || rect.is_empty() {
+        return;
+    }
     const width: i16 = text_width(text, len, font);
     var x: i16 = rect.x;
     if align == TextAlign.Center {

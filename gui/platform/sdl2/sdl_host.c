@@ -11,18 +11,21 @@ typedef struct UyaGuiSimGles2Fns {
     void (*AttachShader)(GLuint program, GLuint shader);
     void (*BindBuffer)(GLenum target, GLuint buffer);
     void (*BindTexture)(GLenum target, GLuint texture);
+    void (*BlendFunc)(GLenum sfactor, GLenum dfactor);
     void (*BufferData)(GLenum target, GLsizeiptr size, const void *data, GLenum usage);
     void (*Clear)(GLbitfield mask);
     void (*ClearColor)(GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha);
     void (*CompileShader)(GLuint shader);
     GLuint (*CreateProgram)(void);
     GLuint (*CreateShader)(GLenum type);
+    void (*Disable)(GLenum cap);
     void (*DeleteBuffers)(GLsizei n, const GLuint *buffers);
     void (*DeleteProgram)(GLuint program);
     void (*DeleteShader)(GLuint shader);
     void (*DeleteTextures)(GLsizei n, const GLuint *textures);
     void (*DisableVertexAttribArray)(GLuint index);
     void (*DrawArrays)(GLenum mode, GLint first, GLsizei count);
+    void (*Enable)(GLenum cap);
     void (*EnableVertexAttribArray)(GLuint index);
     void (*GenBuffers)(GLsizei n, GLuint *buffers);
     void (*GenTextures)(GLsizei n, GLuint *textures);
@@ -39,9 +42,11 @@ typedef struct UyaGuiSimGles2Fns {
     void (*TexParameteri)(GLenum target, GLenum pname, GLint param);
     void (*TexSubImage2D)(GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const void *pixels);
     void (*Uniform1i)(GLint location, GLint v0);
+    void (*Uniform4f)(GLint location, GLfloat v0, GLfloat v1, GLfloat v2, GLfloat v3);
     void (*UseProgram)(GLuint program);
     void (*VertexAttribPointer)(GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void *pointer);
     void (*Viewport)(GLint x, GLint y, GLsizei width, GLsizei height);
+    void (*Scissor)(GLint x, GLint y, GLsizei width, GLsizei height);
 } UyaGuiSimGles2Fns;
 
 enum {
@@ -64,11 +69,20 @@ typedef struct UyaGuiSimDisplay {
     SDL_GLContext gl_context;
     UyaGuiSimGles2Fns gl;
     GLuint gl_program;
+    GLuint gl_shape_program;
     GLuint gl_texture;
+    GLuint gl_white_texture;
     GLuint gl_vbo;
     GLint gl_attr_pos;
     GLint gl_attr_uv;
     GLint gl_uniform_tex;
+    GLint gl_uniform_color;
+    GLint gl_shape_attr_pos;
+    GLint gl_shape_attr_uv;
+    GLint gl_shape_uniform_color0;
+    GLint gl_shape_uniform_color1;
+    GLint gl_shape_uniform_params0;
+    GLint gl_shape_uniform_params1;
     uint8_t *gl_rgba_pixels;
     size_t gl_rgba_bytes;
     int width;
@@ -89,6 +103,7 @@ typedef struct UyaGuiSimDisplay {
     uint8_t *overlay_pixels;
     size_t overlay_bytes;
     int needs_refresh;
+    int direct_frame_active;
 } UyaGuiSimDisplay;
 
 typedef struct SdlHostEvent {
@@ -99,6 +114,51 @@ typedef struct SdlHostEvent {
     uint16_t key_code;
     uint16_t reserved;
 } SdlHostEvent;
+
+typedef struct UyaGuiRectCmd {
+    int16_t x;
+    int16_t y;
+    uint16_t w;
+    uint16_t h;
+} UyaGuiRectCmd;
+
+typedef struct UyaGuiColorCmd {
+    uint8_t r;
+    uint8_t g;
+    uint8_t b;
+    uint8_t a;
+} UyaGuiColorCmd;
+
+typedef struct UyaGuiGpuFillRectCmd {
+    UyaGuiRectCmd rect;
+    UyaGuiColorCmd color;
+} UyaGuiGpuFillRectCmd;
+
+typedef struct UyaGuiGpuStrokeRectCmd {
+    UyaGuiRectCmd rect;
+    UyaGuiColorCmd color;
+    int32_t width;
+} UyaGuiGpuStrokeRectCmd;
+
+typedef struct UyaGuiGpuLineCmd {
+    int32_t x1;
+    int32_t y1;
+    int32_t x2;
+    int32_t y2;
+    UyaGuiColorCmd color;
+    int32_t width;
+} UyaGuiGpuLineCmd;
+
+typedef struct UyaGuiGpuImageCmd {
+    UyaGuiRectCmd dst_rect;
+    UyaGuiRectCmd src_rect;
+    const uint8_t *pixels;
+    int32_t image_w;
+    int32_t image_h;
+    int32_t stride;
+    int32_t format_tag;
+    int32_t has_src;
+} UyaGuiGpuImageCmd;
 
 enum {
     SDL_EVT_NONE = 0,
@@ -230,8 +290,14 @@ static void uya_gui_sim_destroy_gles2_resources(UyaGuiSimDisplay *display) {
         if (display->gl.DeleteTextures != NULL && display->gl_texture != 0u) {
             display->gl.DeleteTextures(1, &display->gl_texture);
         }
+        if (display->gl.DeleteTextures != NULL && display->gl_white_texture != 0u) {
+            display->gl.DeleteTextures(1, &display->gl_white_texture);
+        }
         if (display->gl.DeleteProgram != NULL && display->gl_program != 0u) {
             display->gl.DeleteProgram(display->gl_program);
+        }
+        if (display->gl.DeleteProgram != NULL && display->gl_shape_program != 0u) {
+            display->gl.DeleteProgram(display->gl_shape_program);
         }
         SDL_GL_DeleteContext(display->gl_context);
     }
@@ -242,11 +308,20 @@ static void uya_gui_sim_destroy_gles2_resources(UyaGuiSimDisplay *display) {
     display->gl_rgba_bytes = 0u;
     display->gl_context = NULL;
     display->gl_program = 0u;
+    display->gl_shape_program = 0u;
     display->gl_texture = 0u;
+    display->gl_white_texture = 0u;
     display->gl_vbo = 0u;
     display->gl_attr_pos = -1;
     display->gl_attr_uv = -1;
     display->gl_uniform_tex = -1;
+    display->gl_uniform_color = -1;
+    display->gl_shape_attr_pos = -1;
+    display->gl_shape_attr_uv = -1;
+    display->gl_shape_uniform_color0 = -1;
+    display->gl_shape_uniform_color1 = -1;
+    display->gl_shape_uniform_params0 = -1;
+    display->gl_shape_uniform_params1 = -1;
     (void)memset(&display->gl, 0, sizeof(display->gl));
 }
 
@@ -262,6 +337,7 @@ static void uya_gui_sim_destroy_display_resources(UyaGuiSimDisplay *display) {
         display->window = NULL;
     }
     display->present_kind = UYA_GUI_SIM_PRESENT_SOFTWARE;
+    display->direct_frame_active = 0;
 }
 
 static int uya_gui_sim_overlay_ensure_capacity(UyaGuiSimDisplay *display, int32_t width, int32_t height) {
@@ -392,6 +468,38 @@ static int32_t uya_gui_sim_present_software(UyaGuiSimDisplay *display, const uin
     return 1;
 }
 
+static int uya_gui_sim_update_texture_region(UyaGuiSimDisplay *display,
+                                             const SDL_Rect *rect,
+                                             const uint8_t *pixels,
+                                             int32_t pitch) {
+    uint8_t *dst_pixels = NULL;
+    int dst_pitch = 0;
+    int32_t row = 0;
+    int32_t row_bytes = 0;
+    if (display == NULL || display->texture == NULL || rect == NULL || pixels == NULL) {
+        uya_gui_sim_set_error("texture region update unavailable");
+        return 0;
+    }
+    if (rect->w <= 0 || rect->h <= 0) {
+        return 1;
+    }
+    if (SDL_LockTexture(display->texture, rect, (void **)&dst_pixels, &dst_pitch) != 0) {
+        uya_gui_sim_set_error(SDL_GetError());
+        return 0;
+    }
+    row_bytes = rect->w * 4;
+    while (row < rect->h) {
+        (void)memcpy(
+            dst_pixels + (size_t)row * (size_t)dst_pitch,
+            pixels + (size_t)row * (size_t)pitch,
+            (size_t)row_bytes
+        );
+        row += 1;
+    }
+    SDL_UnlockTexture(display->texture);
+    return 1;
+}
+
 static void uya_gui_sim_convert_argb_to_rgba(uint8_t *dst, const uint8_t *src, int pitch, int width, int height) {
     int y = 0;
     while (y < height) {
@@ -411,6 +519,472 @@ static void uya_gui_sim_convert_argb_to_rgba(uint8_t *dst, const uint8_t *src, i
         }
         y += 1;
     }
+}
+
+static int uya_gui_sim_gles2_ensure_rgba_capacity(UyaGuiSimDisplay *display, size_t needed) {
+    if (display->gl_rgba_bytes >= needed && display->gl_rgba_pixels != NULL) {
+        return 1;
+    }
+    uint8_t *resized = (uint8_t *)uya_gui_sim_host_realloc(display->gl_rgba_pixels, needed);
+    if (resized == NULL) {
+        uya_gui_sim_set_error("gles2 scratch realloc failed");
+        return 0;
+    }
+    display->gl_rgba_pixels = resized;
+    display->gl_rgba_bytes = needed;
+    return 1;
+}
+
+static void uya_gui_sim_argb_u32_to_rgba_f32(uint32_t argb, GLfloat *out_rgba) {
+    out_rgba[0] = (GLfloat)((argb >> 16) & 0xFFu) / 255.0f;
+    out_rgba[1] = (GLfloat)((argb >> 8) & 0xFFu) / 255.0f;
+    out_rgba[2] = (GLfloat)(argb & 0xFFu) / 255.0f;
+    out_rgba[3] = (GLfloat)((argb >> 24) & 0xFFu) / 255.0f;
+}
+
+static void uya_gui_sim_gles2_rect_vertices(const UyaGuiSimDisplay *display,
+                                            float x0, float y0, float x1, float y1,
+                                            float u0, float v0, float u1, float v1,
+                                            GLfloat *out_vertices) {
+    const float width = (float)(display->width > 0 ? display->width : 1);
+    const float height = (float)(display->height > 0 ? display->height : 1);
+    const float left = (x0 * 2.0f / width) - 1.0f;
+    const float right = (x1 * 2.0f / width) - 1.0f;
+    const float top = 1.0f - (y0 * 2.0f / height);
+    const float bottom = 1.0f - (y1 * 2.0f / height);
+
+    out_vertices[0] = left;   out_vertices[1] = top;    out_vertices[2] = u0; out_vertices[3] = v0;
+    out_vertices[4] = left;   out_vertices[5] = bottom; out_vertices[6] = u0; out_vertices[7] = v1;
+    out_vertices[8] = right;  out_vertices[9] = top;    out_vertices[10] = u1; out_vertices[11] = v0;
+    out_vertices[12] = right; out_vertices[13] = bottom;out_vertices[14] = u1; out_vertices[15] = v1;
+}
+
+static int uya_gui_sim_gles2_draw_quad(UyaGuiSimDisplay *display, GLuint texture, const GLfloat *vertices, const GLfloat *rgba) {
+    if (SDL_GL_MakeCurrent(display->window, display->gl_context) != 0) {
+        uya_gui_sim_set_error(SDL_GetError());
+        return 0;
+    }
+
+    display->gl.UseProgram(display->gl_program);
+    display->gl.ActiveTexture(GL_TEXTURE0);
+    display->gl.BindTexture(GL_TEXTURE_2D, texture);
+    display->gl.Uniform1i(display->gl_uniform_tex, 0);
+    display->gl.Uniform4f(display->gl_uniform_color, rgba[0], rgba[1], rgba[2], rgba[3]);
+    display->gl.BindBuffer(GL_ARRAY_BUFFER, display->gl_vbo);
+    display->gl.BufferData(GL_ARRAY_BUFFER, (GLsizeiptr)(sizeof(GLfloat) * 16), vertices, GL_DYNAMIC_DRAW);
+    display->gl.EnableVertexAttribArray((GLuint)display->gl_attr_pos);
+    display->gl.EnableVertexAttribArray((GLuint)display->gl_attr_uv);
+    display->gl.VertexAttribPointer((GLuint)display->gl_attr_pos, 2, GL_FLOAT, GL_FALSE, (GLsizei)(sizeof(GLfloat) * 4), (const void *)0);
+    display->gl.VertexAttribPointer((GLuint)display->gl_attr_uv, 2, GL_FLOAT, GL_FALSE, (GLsizei)(sizeof(GLfloat) * 4), (const void *)(sizeof(GLfloat) * 2));
+    display->gl.DrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    display->gl.DisableVertexAttribArray((GLuint)display->gl_attr_pos);
+    display->gl.DisableVertexAttribArray((GLuint)display->gl_attr_uv);
+    display->gl.BindBuffer(GL_ARRAY_BUFFER, 0u);
+    return 1;
+}
+
+static int uya_gui_sim_gles2_draw_shape_quad(UyaGuiSimDisplay *display,
+                                             const GLfloat *vertices,
+                                             const GLfloat *color0,
+                                             const GLfloat *color1,
+                                             float size_x,
+                                             float size_y,
+                                             float radius,
+                                             float stroke_width,
+                                             float mode,
+                                             float extra0,
+                                             float extra1,
+                                             float extra2) {
+    if (SDL_GL_MakeCurrent(display->window, display->gl_context) != 0) {
+        uya_gui_sim_set_error(SDL_GetError());
+        return 0;
+    }
+
+    display->gl.UseProgram(display->gl_shape_program);
+    display->gl.Uniform4f(display->gl_shape_uniform_color0, color0[0], color0[1], color0[2], color0[3]);
+    display->gl.Uniform4f(display->gl_shape_uniform_color1, color1[0], color1[1], color1[2], color1[3]);
+    display->gl.Uniform4f(display->gl_shape_uniform_params0, size_x, size_y, radius, stroke_width);
+    display->gl.Uniform4f(display->gl_shape_uniform_params1, mode, extra0, extra1, extra2);
+    display->gl.BindBuffer(GL_ARRAY_BUFFER, display->gl_vbo);
+    display->gl.BufferData(GL_ARRAY_BUFFER, (GLsizeiptr)(sizeof(GLfloat) * 16), vertices, GL_DYNAMIC_DRAW);
+    display->gl.EnableVertexAttribArray((GLuint)display->gl_shape_attr_pos);
+    display->gl.EnableVertexAttribArray((GLuint)display->gl_shape_attr_uv);
+    display->gl.VertexAttribPointer((GLuint)display->gl_shape_attr_pos, 2, GL_FLOAT, GL_FALSE, (GLsizei)(sizeof(GLfloat) * 4), (const void *)0);
+    display->gl.VertexAttribPointer((GLuint)display->gl_shape_attr_uv, 2, GL_FLOAT, GL_FALSE, (GLsizei)(sizeof(GLfloat) * 4), (const void *)(sizeof(GLfloat) * 2));
+    display->gl.DrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    display->gl.DisableVertexAttribArray((GLuint)display->gl_shape_attr_pos);
+    display->gl.DisableVertexAttribArray((GLuint)display->gl_shape_attr_uv);
+    display->gl.BindBuffer(GL_ARRAY_BUFFER, 0u);
+    return 1;
+}
+
+static void uya_gui_sim_gles2_drawable_size(const UyaGuiSimDisplay *display, int *out_w, int *out_h) {
+    int drawable_w = 0;
+    int drawable_h = 0;
+    if (display != NULL && display->window != NULL) {
+        SDL_GL_GetDrawableSize(display->window, &drawable_w, &drawable_h);
+    }
+    if (drawable_w <= 0) {
+        drawable_w = display != NULL ? display->width * display->scale : 0;
+    }
+    if (drawable_h <= 0) {
+        drawable_h = display != NULL ? display->height * display->scale : 0;
+    }
+    if (out_w != NULL) {
+        *out_w = drawable_w;
+    }
+    if (out_h != NULL) {
+        *out_h = drawable_h;
+    }
+}
+
+static void uya_gui_sim_gles2_apply_scissor(UyaGuiSimDisplay *display, int32_t x, int32_t y, int32_t w, int32_t h) {
+    int drawable_w = 0;
+    int drawable_h = 0;
+    int scissor_x = 0;
+    int scissor_y = 0;
+    int scissor_w = 0;
+    int scissor_h = 0;
+    if (display == NULL || display->gl_context == NULL) {
+        return;
+    }
+    uya_gui_sim_gles2_drawable_size(display, &drawable_w, &drawable_h);
+    if (drawable_w <= 0 || drawable_h <= 0 || display->width <= 0 || display->height <= 0) {
+        display->gl.Scissor(0, 0, 0, 0);
+        return;
+    }
+    scissor_x = (x * drawable_w) / display->width;
+    scissor_y = ((display->height - (y + h)) * drawable_h) / display->height;
+    scissor_w = ((x + w) * drawable_w) / display->width - scissor_x;
+    scissor_h = ((y + h) * drawable_h) / display->height - (y * drawable_h) / display->height;
+    if (scissor_w < 0) {
+        scissor_w = 0;
+    }
+    if (scissor_h < 0) {
+        scissor_h = 0;
+    }
+    display->gl.Scissor(scissor_x, scissor_y, scissor_w, scissor_h);
+}
+
+static void uya_gui_sim_gles2_reset_full_clip(UyaGuiSimDisplay *display) {
+    if (display == NULL || display->gl_context == NULL) {
+        return;
+    }
+    uya_gui_sim_gles2_apply_scissor(display, 0, 0, display->width, display->height);
+}
+
+static int uya_gui_sim_unpack_image_pixel_rgba(uint8_t *dst_rgba, const uint8_t *src_row, int format_tag, int x) {
+    switch (format_tag) {
+        case 0: {
+            const uint16_t bits = (uint16_t)(src_row[x * 2 + 0] | ((uint16_t)src_row[x * 2 + 1] << 8));
+            const uint8_t r5 = (uint8_t)((bits >> 11) & 0x1Fu);
+            const uint8_t g6 = (uint8_t)((bits >> 5) & 0x3Fu);
+            const uint8_t b5 = (uint8_t)(bits & 0x1Fu);
+            dst_rgba[0] = (uint8_t)((r5 << 3) | (r5 >> 2));
+            dst_rgba[1] = (uint8_t)((g6 << 2) | (g6 >> 4));
+            dst_rgba[2] = (uint8_t)((b5 << 3) | (b5 >> 2));
+            dst_rgba[3] = 255u;
+            return 1;
+        }
+        case 1:
+            dst_rgba[0] = src_row[x * 3 + 0];
+            dst_rgba[1] = src_row[x * 3 + 1];
+            dst_rgba[2] = src_row[x * 3 + 2];
+            dst_rgba[3] = 255u;
+            return 1;
+        case 2:
+            dst_rgba[0] = src_row[x * 4 + 1];
+            dst_rgba[1] = src_row[x * 4 + 2];
+            dst_rgba[2] = src_row[x * 4 + 3];
+            dst_rgba[3] = src_row[x * 4 + 0];
+            return 1;
+        case 3: {
+            const uint16_t bits = (uint16_t)(src_row[x * 2 + 0] | ((uint16_t)src_row[x * 2 + 1] << 8));
+            const uint8_t a4 = (uint8_t)((bits >> 12) & 0x0Fu);
+            const uint8_t r4 = (uint8_t)((bits >> 8) & 0x0Fu);
+            const uint8_t g4 = (uint8_t)((bits >> 4) & 0x0Fu);
+            const uint8_t b4 = (uint8_t)(bits & 0x0Fu);
+            dst_rgba[0] = (uint8_t)(r4 * 17u);
+            dst_rgba[1] = (uint8_t)(g4 * 17u);
+            dst_rgba[2] = (uint8_t)(b4 * 17u);
+            dst_rgba[3] = (uint8_t)(a4 * 17u);
+            return 1;
+        }
+        case 4:
+            dst_rgba[0] = src_row[x];
+            dst_rgba[1] = src_row[x];
+            dst_rgba[2] = src_row[x];
+            dst_rgba[3] = 255u;
+            return 1;
+        case 5:
+            dst_rgba[0] = 255u;
+            dst_rgba[1] = 255u;
+            dst_rgba[2] = 255u;
+            dst_rgba[3] = src_row[x];
+            return 1;
+        case 6: {
+            const uint8_t byte = src_row[x / 8];
+            const uint8_t mask = (uint8_t)(0x80u >> (x % 8));
+            const uint8_t gray = (byte & mask) != 0 ? 255u : 0u;
+            dst_rgba[0] = gray;
+            dst_rgba[1] = gray;
+            dst_rgba[2] = gray;
+            dst_rgba[3] = 255u;
+            return 1;
+        }
+        case 7: {
+            const uint8_t packed = src_row[x / 2];
+            const uint8_t gray4 = (x % 2) == 0 ? (uint8_t)(packed >> 4) : (uint8_t)(packed & 0x0Fu);
+            const uint8_t gray = (uint8_t)(gray4 * 17u);
+            dst_rgba[0] = gray;
+            dst_rgba[1] = gray;
+            dst_rgba[2] = gray;
+            dst_rgba[3] = 255u;
+            return 1;
+        }
+        default:
+            return 0;
+    }
+}
+
+static int uya_gui_sim_convert_image_region_to_rgba(UyaGuiSimDisplay *display,
+                                                    const uint8_t *pixels,
+                                                    int32_t stride,
+                                                    int32_t format_tag,
+                                                    int32_t src_x,
+                                                    int32_t src_y,
+                                                    int32_t width,
+                                                    int32_t height) {
+    size_t needed = (size_t)width * (size_t)height * 4u;
+    int32_t y = 0;
+    if (!uya_gui_sim_gles2_ensure_rgba_capacity(display, needed)) {
+        return 0;
+    }
+    while (y < height) {
+        const uint8_t *src_row = pixels + (size_t)(src_y + y) * (size_t)stride;
+        uint8_t *dst_row = display->gl_rgba_pixels + (size_t)y * (size_t)width * 4u;
+        int32_t x = 0;
+        while (x < width) {
+            if (!uya_gui_sim_unpack_image_pixel_rgba(&dst_row[x * 4], src_row, format_tag, src_x + x)) {
+                uya_gui_sim_set_error("unsupported image pixel format for gles2");
+                return 0;
+            }
+            x += 1;
+        }
+        y += 1;
+    }
+    return 1;
+}
+
+static void uya_gui_sim_color_cmd_to_rgba_f32(const UyaGuiColorCmd *color, GLfloat *out_rgba) {
+    out_rgba[0] = (GLfloat)color->r / 255.0f;
+    out_rgba[1] = (GLfloat)color->g / 255.0f;
+    out_rgba[2] = (GLfloat)color->b / 255.0f;
+    out_rgba[3] = (GLfloat)color->a / 255.0f;
+}
+
+static float uya_gui_sim_gles2_ndc_x(const UyaGuiSimDisplay *display, float x) {
+    const float width = (float)(display->width > 0 ? display->width : 1);
+    return (x * 2.0f / width) - 1.0f;
+}
+
+static float uya_gui_sim_gles2_ndc_y(const UyaGuiSimDisplay *display, float y) {
+    const float height = (float)(display->height > 0 ? display->height : 1);
+    return 1.0f - (y * 2.0f / height);
+}
+
+static int uya_gui_sim_gles2_draw_solid_rect(UyaGuiSimDisplay *display, const UyaGuiRectCmd *rect, const UyaGuiColorCmd *color) {
+    GLfloat vertices[16];
+    GLfloat rgba[4];
+    uya_gui_sim_color_cmd_to_rgba_f32(color, rgba);
+    uya_gui_sim_gles2_rect_vertices(
+        display,
+        (float)rect->x,
+        (float)rect->y,
+        (float)rect->x + (float)rect->w,
+        (float)rect->y + (float)rect->h,
+        0.0f,
+        0.0f,
+        1.0f,
+        1.0f,
+        vertices
+    );
+    return uya_gui_sim_gles2_draw_quad(display, display->gl_white_texture, vertices, rgba);
+}
+
+static int uya_gui_sim_gles2_draw_shape_rect(UyaGuiSimDisplay *display,
+                                             const UyaGuiRectCmd *rect,
+                                             const UyaGuiColorCmd *color0,
+                                             const UyaGuiColorCmd *color1,
+                                             float radius,
+                                             float stroke_width,
+                                             float mode,
+                                             float extra0,
+                                             float extra1,
+                                             float extra2) {
+    GLfloat vertices[16];
+    GLfloat rgba0[4];
+    GLfloat rgba1[4];
+    uya_gui_sim_color_cmd_to_rgba_f32(color0, rgba0);
+    uya_gui_sim_color_cmd_to_rgba_f32(color1, rgba1);
+    uya_gui_sim_gles2_rect_vertices(
+        display,
+        (float)rect->x,
+        (float)rect->y,
+        (float)rect->x + (float)rect->w,
+        (float)rect->y + (float)rect->h,
+        0.0f,
+        0.0f,
+        1.0f,
+        1.0f,
+        vertices
+    );
+    return uya_gui_sim_gles2_draw_shape_quad(
+        display,
+        vertices,
+        rgba0,
+        rgba1,
+        (float)rect->w,
+        (float)rect->h,
+        radius,
+        stroke_width,
+        mode,
+        extra0,
+        extra1,
+        extra2
+    );
+}
+
+static int uya_gui_sim_gles2_draw_line(UyaGuiSimDisplay *display, const UyaGuiGpuLineCmd *cmd) {
+    GLfloat vertices[16];
+    GLfloat rgba[4];
+    const float x1 = (float)cmd->x1;
+    const float y1 = (float)cmd->y1;
+    const float x2 = (float)cmd->x2;
+    const float y2 = (float)cmd->y2;
+    const float width = (float)(cmd->width > 0 ? cmd->width : 1);
+    const float dx = x2 - x1;
+    const float dy = y2 - y1;
+    float nx = 0.0f;
+    float ny = 0.0f;
+    float len = SDL_sqrtf(dx * dx + dy * dy);
+    uya_gui_sim_color_cmd_to_rgba_f32(&cmd->color, rgba);
+
+    if (len <= 0.001f) {
+        UyaGuiRectCmd rect;
+        rect.x = (int16_t)(cmd->x1 - (cmd->width / 2));
+        rect.y = (int16_t)(cmd->y1 - (cmd->width / 2));
+        rect.w = (uint16_t)(cmd->width > 0 ? cmd->width : 1);
+        rect.h = (uint16_t)(cmd->width > 0 ? cmd->width : 1);
+        return uya_gui_sim_gles2_draw_solid_rect(display, &rect, &cmd->color);
+    }
+
+    nx = -dy / len * (width * 0.5f);
+    ny = dx / len * (width * 0.5f);
+
+    vertices[0] = uya_gui_sim_gles2_ndc_x(display, x1 + nx);
+    vertices[1] = uya_gui_sim_gles2_ndc_y(display, y1 + ny);
+    vertices[2] = 0.0f;
+    vertices[3] = 0.0f;
+    vertices[4] = uya_gui_sim_gles2_ndc_x(display, x1 - nx);
+    vertices[5] = uya_gui_sim_gles2_ndc_y(display, y1 - ny);
+    vertices[6] = 0.0f;
+    vertices[7] = 1.0f;
+    vertices[8] = uya_gui_sim_gles2_ndc_x(display, x2 + nx);
+    vertices[9] = uya_gui_sim_gles2_ndc_y(display, y2 + ny);
+    vertices[10] = 1.0f;
+    vertices[11] = 0.0f;
+    vertices[12] = uya_gui_sim_gles2_ndc_x(display, x2 - nx);
+    vertices[13] = uya_gui_sim_gles2_ndc_y(display, y2 - ny);
+    vertices[14] = 1.0f;
+    vertices[15] = 1.0f;
+    return uya_gui_sim_gles2_draw_quad(display, display->gl_white_texture, vertices, rgba);
+}
+
+static int uya_gui_sim_gles2_draw_image_region(UyaGuiSimDisplay *display,
+                                               const uint8_t *pixels,
+                                               int32_t stride,
+                                               int32_t format_tag,
+                                               int32_t src_x,
+                                               int32_t src_y,
+                                               int32_t src_w,
+                                               int32_t src_h,
+                                               const UyaGuiRectCmd *dst_rect) {
+    GLfloat vertices[16];
+    static const GLfloat rgba[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+    if (src_w <= 0 || src_h <= 0) {
+        return 1;
+    }
+    if (src_w > display->width || src_h > display->height) {
+        uya_gui_sim_set_error("gles2 image region exceeds scratch texture");
+        return 0;
+    }
+    if (!uya_gui_sim_convert_image_region_to_rgba(display, pixels, stride, format_tag, src_x, src_y, src_w, src_h)) {
+        return 0;
+    }
+    if (SDL_GL_MakeCurrent(display->window, display->gl_context) != 0) {
+        uya_gui_sim_set_error(SDL_GetError());
+        return 0;
+    }
+    display->gl.BindTexture(GL_TEXTURE_2D, display->gl_texture);
+    display->gl.PixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    display->gl.TexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, src_w, src_h, GL_RGBA, GL_UNSIGNED_BYTE, display->gl_rgba_pixels);
+    uya_gui_sim_gles2_rect_vertices(
+        display,
+        (float)dst_rect->x,
+        (float)dst_rect->y,
+        (float)dst_rect->x + (float)dst_rect->w,
+        (float)dst_rect->y + (float)dst_rect->h,
+        0.0f,
+        0.0f,
+        (float)src_w / (float)display->width,
+        (float)src_h / (float)display->height,
+        vertices
+    );
+    return uya_gui_sim_gles2_draw_quad(display, display->gl_texture, vertices, rgba);
+}
+
+static int uya_gui_sim_gles2_present_region(UyaGuiSimDisplay *display,
+                                            const uint8_t *pixels,
+                                            int32_t stride,
+                                            int32_t format_tag,
+                                            int32_t src_x,
+                                            int32_t src_y,
+                                            int32_t src_w,
+                                            int32_t src_h,
+                                            const UyaGuiRectCmd *dst_rect) {
+    GLfloat vertices[16];
+    static const GLfloat rgba[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+    if (src_w <= 0 || src_h <= 0) {
+        return 1;
+    }
+    if (src_x < 0 || src_y < 0 || src_x + src_w > display->width || src_y + src_h > display->height) {
+        uya_gui_sim_set_error("gles2 present region exceeds texture bounds");
+        return 0;
+    }
+    if (!uya_gui_sim_convert_image_region_to_rgba(display, pixels, stride, format_tag, src_x, src_y, src_w, src_h)) {
+        return 0;
+    }
+    if (SDL_GL_MakeCurrent(display->window, display->gl_context) != 0) {
+        uya_gui_sim_set_error(SDL_GetError());
+        return 0;
+    }
+    display->gl.BindTexture(GL_TEXTURE_2D, display->gl_texture);
+    display->gl.PixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    display->gl.TexSubImage2D(GL_TEXTURE_2D, 0, src_x, src_y, src_w, src_h, GL_RGBA, GL_UNSIGNED_BYTE, display->gl_rgba_pixels);
+    uya_gui_sim_gles2_rect_vertices(
+        display,
+        (float)dst_rect->x,
+        (float)dst_rect->y,
+        (float)dst_rect->x + (float)dst_rect->w,
+        (float)dst_rect->y + (float)dst_rect->h,
+        (float)src_x / (float)display->width,
+        (float)src_y / (float)display->height,
+        (float)(src_x + src_w) / (float)display->width,
+        (float)(src_y + src_h) / (float)display->height,
+        vertices
+    );
+    return uya_gui_sim_gles2_draw_quad(display, display->gl_texture, vertices, rgba);
 }
 
 static int uya_gui_sim_load_gles2_proc(void **slot, const char *name) {
@@ -434,18 +1008,21 @@ static int uya_gui_sim_load_gles2_functions(UyaGuiSimDisplay *display) {
         || !uya_gui_sim_load_gles2_proc((void **)&display->gl.AttachShader, "glAttachShader")
         || !uya_gui_sim_load_gles2_proc((void **)&display->gl.BindBuffer, "glBindBuffer")
         || !uya_gui_sim_load_gles2_proc((void **)&display->gl.BindTexture, "glBindTexture")
+        || !uya_gui_sim_load_gles2_proc((void **)&display->gl.BlendFunc, "glBlendFunc")
         || !uya_gui_sim_load_gles2_proc((void **)&display->gl.BufferData, "glBufferData")
         || !uya_gui_sim_load_gles2_proc((void **)&display->gl.Clear, "glClear")
         || !uya_gui_sim_load_gles2_proc((void **)&display->gl.ClearColor, "glClearColor")
         || !uya_gui_sim_load_gles2_proc((void **)&display->gl.CompileShader, "glCompileShader")
         || !uya_gui_sim_load_gles2_proc((void **)&display->gl.CreateProgram, "glCreateProgram")
         || !uya_gui_sim_load_gles2_proc((void **)&display->gl.CreateShader, "glCreateShader")
+        || !uya_gui_sim_load_gles2_proc((void **)&display->gl.Disable, "glDisable")
         || !uya_gui_sim_load_gles2_proc((void **)&display->gl.DeleteBuffers, "glDeleteBuffers")
         || !uya_gui_sim_load_gles2_proc((void **)&display->gl.DeleteProgram, "glDeleteProgram")
         || !uya_gui_sim_load_gles2_proc((void **)&display->gl.DeleteShader, "glDeleteShader")
         || !uya_gui_sim_load_gles2_proc((void **)&display->gl.DeleteTextures, "glDeleteTextures")
         || !uya_gui_sim_load_gles2_proc((void **)&display->gl.DisableVertexAttribArray, "glDisableVertexAttribArray")
         || !uya_gui_sim_load_gles2_proc((void **)&display->gl.DrawArrays, "glDrawArrays")
+        || !uya_gui_sim_load_gles2_proc((void **)&display->gl.Enable, "glEnable")
         || !uya_gui_sim_load_gles2_proc((void **)&display->gl.EnableVertexAttribArray, "glEnableVertexAttribArray")
         || !uya_gui_sim_load_gles2_proc((void **)&display->gl.GenBuffers, "glGenBuffers")
         || !uya_gui_sim_load_gles2_proc((void **)&display->gl.GenTextures, "glGenTextures")
@@ -462,9 +1039,11 @@ static int uya_gui_sim_load_gles2_functions(UyaGuiSimDisplay *display) {
         || !uya_gui_sim_load_gles2_proc((void **)&display->gl.TexParameteri, "glTexParameteri")
         || !uya_gui_sim_load_gles2_proc((void **)&display->gl.TexSubImage2D, "glTexSubImage2D")
         || !uya_gui_sim_load_gles2_proc((void **)&display->gl.Uniform1i, "glUniform1i")
+        || !uya_gui_sim_load_gles2_proc((void **)&display->gl.Uniform4f, "glUniform4f")
         || !uya_gui_sim_load_gles2_proc((void **)&display->gl.UseProgram, "glUseProgram")
         || !uya_gui_sim_load_gles2_proc((void **)&display->gl.VertexAttribPointer, "glVertexAttribPointer")
-        || !uya_gui_sim_load_gles2_proc((void **)&display->gl.Viewport, "glViewport")) {
+        || !uya_gui_sim_load_gles2_proc((void **)&display->gl.Viewport, "glViewport")
+        || !uya_gui_sim_load_gles2_proc((void **)&display->gl.Scissor, "glScissor")) {
         return 0;
     }
     return 1;
@@ -506,8 +1085,85 @@ static int uya_gui_sim_init_gles2_pipeline(UyaGuiSimDisplay *display) {
         "precision mediump float;\n"
         "varying vec2 v_uv;\n"
         "uniform sampler2D u_tex;\n"
+        "uniform vec4 u_color;\n"
         "void main() {\n"
-        "  gl_FragColor = texture2D(u_tex, v_uv);\n"
+        "  gl_FragColor = texture2D(u_tex, v_uv) * u_color;\n"
+        "}\n";
+    static const char *k_shape_fragment_shader =
+        "precision mediump float;\n"
+        "varying vec2 v_uv;\n"
+        "uniform vec4 u_color0;\n"
+        "uniform vec4 u_color1;\n"
+        "uniform vec4 u_params0;\n"
+        "uniform vec4 u_params1;\n"
+        "float sd_round_rect(vec2 p, vec2 b, float r) {\n"
+        "  vec2 q = abs(p) - b + vec2(r, r);\n"
+        "  return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;\n"
+        "}\n"
+        "float arc_contains(float angle, float start_deg, float end_deg) {\n"
+        "  if (start_deg <= end_deg) {\n"
+        "    return angle >= start_deg && angle <= end_deg ? 1.0 : 0.0;\n"
+        "  }\n"
+        "  return angle >= start_deg || angle <= end_deg ? 1.0 : 0.0;\n"
+        "}\n"
+        "void main() {\n"
+        "  vec2 size = u_params0.xy;\n"
+        "  float radius = max(u_params0.z, 0.0);\n"
+        "  float param_w = max(u_params0.w, 0.0);\n"
+        "  float mode = u_params1.x;\n"
+        "  float extra0 = u_params1.y;\n"
+        "  float extra1 = u_params1.z;\n"
+        "  float extra2 = u_params1.w;\n"
+        "  vec2 local = v_uv * size;\n"
+        "  vec2 center = size * 0.5;\n"
+        "  vec2 half_size = size * 0.5;\n"
+        "  float max_radius = min(half_size.x, half_size.y);\n"
+        "  if (radius > max_radius) radius = max_radius;\n"
+        "  vec4 base = u_color0;\n"
+        "  float alpha = 1.0;\n"
+        "  if (mode > 0.5 && mode < 1.5) {\n"
+        "    float t = extra0 > 0.5 ? v_uv.x : v_uv.y;\n"
+        "    base = mix(u_color0, u_color1, clamp(t, 0.0, 1.0));\n"
+        "  } else if (mode > 1.5) {\n"
+        "    if (mode < 2.5) {\n"
+        "      float rr = max(min(size.x, size.y) * 0.5, 1.0);\n"
+        "      float t = clamp(length(local - center) / rr, 0.0, 1.0);\n"
+        "      base = mix(u_color0, u_color1, t);\n"
+        "    } else if (mode < 3.5) {\n"
+        "      vec2 inner_half = max(half_size - vec2(param_w), vec2(0.0));\n"
+        "      float softness = param_w + 0.5;\n"
+        "      float dist = sd_round_rect(local - center, inner_half, radius);\n"
+        "      float t = clamp((softness - dist) / softness, 0.0, 1.0);\n"
+        "      alpha = t * t * (3.0 - 2.0 * t);\n"
+        "    } else {\n"
+        "      float dist = length(local - center) - radius;\n"
+        "      if (mode < 4.5) {\n"
+        "        float half_stroke = 0.5;\n"
+        "        alpha = 1.0 - smoothstep(half_stroke - 1.0, half_stroke + 1.0, abs(dist));\n"
+        "      } else if (mode < 5.5) {\n"
+        "        alpha = 1.0 - smoothstep(0.0, 1.0, dist);\n"
+        "      } else {\n"
+        "        float angle = degrees(atan(local.y - center.y, local.x - center.x));\n"
+        "        if (angle < 0.0) angle += 360.0;\n"
+        "        float in_arc = arc_contains(angle, extra0, extra1);\n"
+        "        if (mode < 6.5) {\n"
+        "          float half_stroke = max(param_w * 0.5, 0.5);\n"
+          "          alpha = (1.0 - smoothstep(half_stroke - 1.0, half_stroke + 1.0, abs(dist))) * in_arc;\n"
+        "        } else {\n"
+        "          alpha = (1.0 - smoothstep(0.0, 1.0, dist)) * in_arc;\n"
+        "        }\n"
+        "      }\n"
+        "    }\n"
+        "  } else {\n"
+        "    float dist = sd_round_rect(local - center, half_size, radius);\n"
+        "    if (param_w > 0.0) {\n"
+        "      float half_stroke = param_w * 0.5;\n"
+        "      alpha = 1.0 - smoothstep(half_stroke - 1.0, half_stroke + 1.0, abs(dist));\n"
+        "    } else {\n"
+        "      alpha = 1.0 - smoothstep(0.0, 1.0, dist);\n"
+        "    }\n"
+        "  }\n"
+        "  gl_FragColor = vec4(base.rgb, base.a * alpha);\n"
         "}\n";
     static const GLfloat k_quad_vertices[] = {
         -1.0f,  1.0f, 0.0f, 0.0f,
@@ -519,6 +1175,8 @@ static int uya_gui_sim_init_gles2_pipeline(UyaGuiSimDisplay *display) {
     size_t rgba_bytes = (size_t)display->width * (size_t)display->height * 4u;
     GLuint vertex_shader = 0u;
     GLuint fragment_shader = 0u;
+    GLuint shape_vertex_shader = 0u;
+    GLuint shape_fragment_shader = 0u;
 
     if (!uya_gui_sim_load_gles2_functions(display)) {
         return 0;
@@ -556,8 +1214,55 @@ static int uya_gui_sim_init_gles2_pipeline(UyaGuiSimDisplay *display) {
     display->gl_attr_pos = display->gl.GetAttribLocation(display->gl_program, "a_pos");
     display->gl_attr_uv = display->gl.GetAttribLocation(display->gl_program, "a_uv");
     display->gl_uniform_tex = display->gl.GetUniformLocation(display->gl_program, "u_tex");
-    if (display->gl_attr_pos < 0 || display->gl_attr_uv < 0 || display->gl_uniform_tex < 0) {
+    display->gl_uniform_color = display->gl.GetUniformLocation(display->gl_program, "u_color");
+    if (display->gl_attr_pos < 0 || display->gl_attr_uv < 0 || display->gl_uniform_tex < 0 || display->gl_uniform_color < 0) {
         uya_gui_sim_set_error("gles2 shader attribute lookup failed");
+        return 0;
+    }
+
+    if (!uya_gui_sim_compile_gles2_shader(display, GL_VERTEX_SHADER, k_vertex_shader, &shape_vertex_shader)) {
+        return 0;
+    }
+    if (!uya_gui_sim_compile_gles2_shader(display, GL_FRAGMENT_SHADER, k_shape_fragment_shader, &shape_fragment_shader)) {
+        display->gl.DeleteShader(shape_vertex_shader);
+        return 0;
+    }
+
+    display->gl_shape_program = display->gl.CreateProgram();
+    if (display->gl_shape_program == 0u) {
+        display->gl.DeleteShader(shape_vertex_shader);
+        display->gl.DeleteShader(shape_fragment_shader);
+        uya_gui_sim_set_error("glCreateProgram shape failed");
+        return 0;
+    }
+    display->gl.AttachShader(display->gl_shape_program, shape_vertex_shader);
+    display->gl.AttachShader(display->gl_shape_program, shape_fragment_shader);
+    display->gl.LinkProgram(display->gl_shape_program);
+    display->gl.GetProgramiv(display->gl_shape_program, GL_LINK_STATUS, &ok);
+    display->gl.DeleteShader(shape_vertex_shader);
+    display->gl.DeleteShader(shape_fragment_shader);
+    if (ok == 0) {
+        GLchar info[512];
+        GLsizei info_len = 0;
+        info[0] = '\0';
+        display->gl.GetProgramInfoLog(display->gl_shape_program, (GLsizei)sizeof(info), &info_len, info);
+        uya_gui_sim_set_error(info_len > 0 ? (const char *)info : "glLinkProgram shape failed");
+        return 0;
+    }
+
+    display->gl_shape_attr_pos = display->gl.GetAttribLocation(display->gl_shape_program, "a_pos");
+    display->gl_shape_attr_uv = display->gl.GetAttribLocation(display->gl_shape_program, "a_uv");
+    display->gl_shape_uniform_color0 = display->gl.GetUniformLocation(display->gl_shape_program, "u_color0");
+    display->gl_shape_uniform_color1 = display->gl.GetUniformLocation(display->gl_shape_program, "u_color1");
+    display->gl_shape_uniform_params0 = display->gl.GetUniformLocation(display->gl_shape_program, "u_params0");
+    display->gl_shape_uniform_params1 = display->gl.GetUniformLocation(display->gl_shape_program, "u_params1");
+    if (display->gl_shape_attr_pos < 0
+        || display->gl_shape_attr_uv < 0
+        || display->gl_shape_uniform_color0 < 0
+        || display->gl_shape_uniform_color1 < 0
+        || display->gl_shape_uniform_params0 < 0
+        || display->gl_shape_uniform_params1 < 0) {
+        uya_gui_sim_set_error("gles2 shape shader lookup failed");
         return 0;
     }
 
@@ -569,6 +1274,18 @@ static int uya_gui_sim_init_gles2_pipeline(UyaGuiSimDisplay *display) {
     display->gl.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     display->gl.PixelStorei(GL_UNPACK_ALIGNMENT, 1);
     display->gl.TexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, display->width, display->height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+
+    {
+        static const uint8_t k_white_pixel[4] = { 255u, 255u, 255u, 255u };
+        display->gl.GenTextures(1, &display->gl_white_texture);
+        display->gl.BindTexture(GL_TEXTURE_2D, display->gl_white_texture);
+        display->gl.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        display->gl.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        display->gl.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        display->gl.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        display->gl.PixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        display->gl.TexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, k_white_pixel);
+    }
 
     display->gl.GenBuffers(1, &display->gl_vbo);
     display->gl.BindBuffer(GL_ARRAY_BUFFER, display->gl_vbo);
@@ -583,6 +1300,10 @@ static int uya_gui_sim_init_gles2_pipeline(UyaGuiSimDisplay *display) {
     display->gl_rgba_bytes = rgba_bytes;
 
     display->gl.ClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    display->gl.Enable(GL_BLEND);
+    display->gl.BlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    display->gl.Enable(GL_SCISSOR_TEST);
+    display->gl.Scissor(0, 0, display->width, display->height);
     display->present_kind = UYA_GUI_SIM_PRESENT_GLES2;
     return 1;
 }
@@ -653,6 +1374,7 @@ static int uya_gui_sim_present_gles2(UyaGuiSimDisplay *display, const uint8_t *p
     display->gl.PixelStorei(GL_UNPACK_ALIGNMENT, 1);
     display->gl.TexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, display->gl_rgba_pixels);
     display->gl.Uniform1i(display->gl_uniform_tex, 0);
+    display->gl.Uniform4f(display->gl_uniform_color, 1.0f, 1.0f, 1.0f, 1.0f);
     display->gl.BindBuffer(GL_ARRAY_BUFFER, display->gl_vbo);
     display->gl.EnableVertexAttribArray((GLuint)display->gl_attr_pos);
     display->gl.EnableVertexAttribArray((GLuint)display->gl_attr_uv);
@@ -664,6 +1386,470 @@ static int uya_gui_sim_present_gles2(UyaGuiSimDisplay *display, const uint8_t *p
     display->gl.BindBuffer(GL_ARRAY_BUFFER, 0u);
     SDL_GL_SwapWindow(display->window);
     display->needs_refresh = 0;
+    display->direct_frame_active = 0;
+    return 1;
+}
+
+static int uya_gui_sim_begin_gles2_frame_with_pixels(UyaGuiSimDisplay *display, const uint8_t *pixels, int32_t pitch, int32_t width, int32_t height) {
+    int drawable_w = 0;
+    int drawable_h = 0;
+    if (display->gl_context == NULL || display->window == NULL || display->gl_rgba_pixels == NULL) {
+        uya_gui_sim_set_error("gles2 backend not initialized");
+        return 0;
+    }
+    if ((size_t)width * (size_t)height * 4u > display->gl_rgba_bytes) {
+        uya_gui_sim_set_error("gles2 scratch buffer too small");
+        return 0;
+    }
+    uya_gui_sim_convert_argb_to_rgba(display->gl_rgba_pixels, pixels, pitch, width, height);
+    if (SDL_GL_MakeCurrent(display->window, display->gl_context) != 0) {
+        uya_gui_sim_set_error(SDL_GetError());
+        return 0;
+    }
+    SDL_GL_GetDrawableSize(display->window, &drawable_w, &drawable_h);
+    if (drawable_w <= 0 || drawable_h <= 0) {
+        drawable_w = display->width * display->scale;
+        drawable_h = display->height * display->scale;
+    }
+    display->gl.Viewport(0, 0, drawable_w, drawable_h);
+    display->gl.Enable(GL_BLEND);
+    display->gl.BlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    display->gl.Enable(GL_SCISSOR_TEST);
+    uya_gui_sim_gles2_reset_full_clip(display);
+    display->gl.ClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    display->gl.Clear(GL_COLOR_BUFFER_BIT);
+    display->gl.UseProgram(display->gl_program);
+    display->gl.ActiveTexture(GL_TEXTURE0);
+    display->gl.BindTexture(GL_TEXTURE_2D, display->gl_texture);
+    display->gl.PixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    display->gl.TexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, display->gl_rgba_pixels);
+    display->gl.Uniform1i(display->gl_uniform_tex, 0);
+    display->gl.Uniform4f(display->gl_uniform_color, 1.0f, 1.0f, 1.0f, 1.0f);
+    display->gl.BindBuffer(GL_ARRAY_BUFFER, display->gl_vbo);
+    display->gl.EnableVertexAttribArray((GLuint)display->gl_attr_pos);
+    display->gl.EnableVertexAttribArray((GLuint)display->gl_attr_uv);
+    display->gl.VertexAttribPointer((GLuint)display->gl_attr_pos, 2, GL_FLOAT, GL_FALSE, (GLsizei)(sizeof(GLfloat) * 4), (const void *)0);
+    display->gl.VertexAttribPointer((GLuint)display->gl_attr_uv, 2, GL_FLOAT, GL_FALSE, (GLsizei)(sizeof(GLfloat) * 4), (const void *)(sizeof(GLfloat) * 2));
+    display->gl.DrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    display->gl.DisableVertexAttribArray((GLuint)display->gl_attr_pos);
+    display->gl.DisableVertexAttribArray((GLuint)display->gl_attr_uv);
+    display->gl.BindBuffer(GL_ARRAY_BUFFER, 0u);
+    display->direct_frame_active = 1;
+    return 1;
+}
+
+int32_t uya_gui_sim_sdl_gles2_active(void *handle) {
+    UyaGuiSimDisplay *display = (UyaGuiSimDisplay *)handle;
+    if (display == NULL) {
+        return 0;
+    }
+    return display->present_kind == UYA_GUI_SIM_PRESENT_GLES2 ? 1 : 0;
+}
+
+int32_t uya_gui_sim_sdl_gles2_begin_frame(void *handle, uint32_t clear_argb) {
+    UyaGuiSimDisplay *display = (UyaGuiSimDisplay *)handle;
+    GLfloat rgba[4];
+    int drawable_w = 0;
+    int drawable_h = 0;
+    if (display == NULL || display->present_kind != UYA_GUI_SIM_PRESENT_GLES2 || display->gl_context == NULL) {
+        uya_gui_sim_set_error("gles2 frame begin unavailable");
+        return 0;
+    }
+    if (SDL_GL_MakeCurrent(display->window, display->gl_context) != 0) {
+        uya_gui_sim_set_error(SDL_GetError());
+        return 0;
+    }
+    SDL_GL_GetDrawableSize(display->window, &drawable_w, &drawable_h);
+    if (drawable_w <= 0 || drawable_h <= 0) {
+        drawable_w = display->width * display->scale;
+        drawable_h = display->height * display->scale;
+    }
+    uya_gui_sim_argb_u32_to_rgba_f32(clear_argb, rgba);
+    display->gl.Viewport(0, 0, drawable_w, drawable_h);
+    display->gl.Enable(GL_BLEND);
+    display->gl.BlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    display->gl.Enable(GL_SCISSOR_TEST);
+    uya_gui_sim_gles2_reset_full_clip(display);
+    display->gl.ClearColor(rgba[0], rgba[1], rgba[2], rgba[3]);
+    display->gl.Clear(GL_COLOR_BUFFER_BIT);
+    display->direct_frame_active = 1;
+    return 1;
+}
+
+int32_t uya_gui_sim_sdl_gles2_begin_frame_from_pixels(void *handle, const uint8_t *pixels, int32_t pitch, int32_t width, int32_t height, int32_t format_tag) {
+    UyaGuiSimDisplay *display = (UyaGuiSimDisplay *)handle;
+    if (display == NULL || display->present_kind != UYA_GUI_SIM_PRESENT_GLES2 || display->gl_context == NULL || pixels == NULL) {
+        uya_gui_sim_set_error("gles2 frame begin from pixels unavailable");
+        return 0;
+    }
+    if (format_tag != 2) {
+        uya_gui_sim_set_error("unsupported framebuffer format for gles2 frame begin");
+        return 0;
+    }
+    return uya_gui_sim_begin_gles2_frame_with_pixels(display, pixels, pitch, width, height);
+}
+
+int32_t uya_gui_sim_sdl_gles2_set_clip(void *handle, int32_t x, int32_t y, int32_t w, int32_t h) {
+    UyaGuiSimDisplay *display = (UyaGuiSimDisplay *)handle;
+    int32_t left = x;
+    int32_t top = y;
+    int32_t width = w;
+    int32_t height = h;
+    if (display == NULL || display->present_kind != UYA_GUI_SIM_PRESENT_GLES2 || display->gl_context == NULL) {
+        uya_gui_sim_set_error("gles2 clip unavailable");
+        return 0;
+    }
+    if (SDL_GL_MakeCurrent(display->window, display->gl_context) != 0) {
+        uya_gui_sim_set_error(SDL_GetError());
+        return 0;
+    }
+    if (left < 0) {
+        width += left;
+        left = 0;
+    }
+    if (top < 0) {
+        height += top;
+        top = 0;
+    }
+    if (left + width > display->width) {
+        width = display->width - left;
+    }
+    if (top + height > display->height) {
+        height = display->height - top;
+    }
+    if (width <= 0 || height <= 0) {
+        display->gl.Scissor(0, 0, 0, 0);
+        return 1;
+    }
+    uya_gui_sim_gles2_apply_scissor(display, left, top, width, height);
+    return 1;
+}
+
+int32_t uya_gui_sim_sdl_gles2_fill_round_rect(void *handle, int32_t x, int32_t y, int32_t w, int32_t h, int32_t radius, uint32_t color_argb) {
+    UyaGuiSimDisplay *display = (UyaGuiSimDisplay *)handle;
+    UyaGuiRectCmd rect;
+    UyaGuiColorCmd color;
+    if (display == NULL || !display->direct_frame_active) {
+        uya_gui_sim_set_error("gles2 fill round rect unavailable");
+        return 0;
+    }
+    rect.x = (int16_t)x;
+    rect.y = (int16_t)y;
+    rect.w = (uint16_t)w;
+    rect.h = (uint16_t)h;
+    color.a = (uint8_t)((color_argb >> 24) & 0xFFu);
+    color.r = (uint8_t)((color_argb >> 16) & 0xFFu);
+    color.g = (uint8_t)((color_argb >> 8) & 0xFFu);
+    color.b = (uint8_t)(color_argb & 0xFFu);
+    return uya_gui_sim_gles2_draw_shape_rect(display, &rect, &color, &color, (float)radius, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+}
+
+int32_t uya_gui_sim_sdl_gles2_draw_round_rect(void *handle, int32_t x, int32_t y, int32_t w, int32_t h, int32_t radius, uint32_t color_argb, int32_t stroke_width) {
+    UyaGuiSimDisplay *display = (UyaGuiSimDisplay *)handle;
+    UyaGuiRectCmd rect;
+    UyaGuiColorCmd color;
+    if (display == NULL || !display->direct_frame_active) {
+        uya_gui_sim_set_error("gles2 draw round rect unavailable");
+        return 0;
+    }
+    rect.x = (int16_t)x;
+    rect.y = (int16_t)y;
+    rect.w = (uint16_t)w;
+    rect.h = (uint16_t)h;
+    color.a = (uint8_t)((color_argb >> 24) & 0xFFu);
+    color.r = (uint8_t)((color_argb >> 16) & 0xFFu);
+    color.g = (uint8_t)((color_argb >> 8) & 0xFFu);
+    color.b = (uint8_t)(color_argb & 0xFFu);
+    return uya_gui_sim_gles2_draw_shape_rect(display, &rect, &color, &color, (float)radius, (float)stroke_width, 0.0f, 0.0f, 0.0f, 0.0f);
+}
+
+int32_t uya_gui_sim_sdl_gles2_fill_linear_gradient(void *handle, int32_t x, int32_t y, int32_t w, int32_t h, uint32_t start_argb, uint32_t end_argb, int32_t horizontal) {
+    UyaGuiSimDisplay *display = (UyaGuiSimDisplay *)handle;
+    UyaGuiRectCmd rect;
+    UyaGuiColorCmd start;
+    UyaGuiColorCmd end;
+    if (display == NULL || !display->direct_frame_active) {
+        uya_gui_sim_set_error("gles2 linear gradient unavailable");
+        return 0;
+    }
+    rect.x = (int16_t)x;
+    rect.y = (int16_t)y;
+    rect.w = (uint16_t)w;
+    rect.h = (uint16_t)h;
+    start.a = (uint8_t)((start_argb >> 24) & 0xFFu);
+    start.r = (uint8_t)((start_argb >> 16) & 0xFFu);
+    start.g = (uint8_t)((start_argb >> 8) & 0xFFu);
+    start.b = (uint8_t)(start_argb & 0xFFu);
+    end.a = (uint8_t)((end_argb >> 24) & 0xFFu);
+    end.r = (uint8_t)((end_argb >> 16) & 0xFFu);
+    end.g = (uint8_t)((end_argb >> 8) & 0xFFu);
+    end.b = (uint8_t)(end_argb & 0xFFu);
+    return uya_gui_sim_gles2_draw_shape_rect(display, &rect, &start, &end, 0.0f, 0.0f, 1.0f, horizontal != 0 ? 1.0f : 0.0f, 0.0f, 0.0f);
+}
+
+int32_t uya_gui_sim_sdl_gles2_fill_radial_gradient(void *handle, int32_t x, int32_t y, int32_t w, int32_t h, uint32_t inner_argb, uint32_t outer_argb) {
+    UyaGuiSimDisplay *display = (UyaGuiSimDisplay *)handle;
+    UyaGuiRectCmd rect;
+    UyaGuiColorCmd inner;
+    UyaGuiColorCmd outer;
+    if (display == NULL || !display->direct_frame_active) {
+        uya_gui_sim_set_error("gles2 radial gradient unavailable");
+        return 0;
+    }
+    rect.x = (int16_t)x;
+    rect.y = (int16_t)y;
+    rect.w = (uint16_t)w;
+    rect.h = (uint16_t)h;
+    inner.a = (uint8_t)((inner_argb >> 24) & 0xFFu);
+    inner.r = (uint8_t)((inner_argb >> 16) & 0xFFu);
+    inner.g = (uint8_t)((inner_argb >> 8) & 0xFFu);
+    inner.b = (uint8_t)(inner_argb & 0xFFu);
+    outer.a = (uint8_t)((outer_argb >> 24) & 0xFFu);
+    outer.r = (uint8_t)((outer_argb >> 16) & 0xFFu);
+    outer.g = (uint8_t)((outer_argb >> 8) & 0xFFu);
+    outer.b = (uint8_t)(outer_argb & 0xFFu);
+    return uya_gui_sim_gles2_draw_shape_rect(display, &rect, &inner, &outer, 0.0f, 0.0f, 2.0f, 0.0f, 0.0f, 0.0f);
+}
+
+int32_t uya_gui_sim_sdl_gles2_fill_round_shadow(void *handle, int32_t x, int32_t y, int32_t w, int32_t h, int32_t radius, int32_t blur, uint32_t color_argb) {
+    UyaGuiSimDisplay *display = (UyaGuiSimDisplay *)handle;
+    UyaGuiRectCmd rect;
+    UyaGuiColorCmd color;
+    rect.x = (int16_t)(x - blur);
+    rect.y = (int16_t)(y - blur);
+    rect.w = (uint16_t)(w + blur * 2);
+    rect.h = (uint16_t)(h + blur * 2);
+    if (display == NULL || !display->direct_frame_active) {
+        uya_gui_sim_set_error("gles2 round shadow unavailable");
+        return 0;
+    }
+    color.a = (uint8_t)((color_argb >> 24) & 0xFFu);
+    color.r = (uint8_t)((color_argb >> 16) & 0xFFu);
+    color.g = (uint8_t)((color_argb >> 8) & 0xFFu);
+    color.b = (uint8_t)(color_argb & 0xFFu);
+    return uya_gui_sim_gles2_draw_shape_rect(display, &rect, &color, &color, (float)radius, (float)blur, 3.0f, 0.0f, 0.0f, 0.0f);
+}
+
+int32_t uya_gui_sim_sdl_gles2_draw_circle(void *handle, int32_t cx, int32_t cy, int32_t r, uint32_t color_argb) {
+    UyaGuiSimDisplay *display = (UyaGuiSimDisplay *)handle;
+    UyaGuiRectCmd rect;
+    UyaGuiColorCmd color;
+    if (display == NULL || !display->direct_frame_active) {
+        uya_gui_sim_set_error("gles2 draw circle unavailable");
+        return 0;
+    }
+    rect.x = (int16_t)(cx - r);
+    rect.y = (int16_t)(cy - r);
+    rect.w = (uint16_t)(r * 2 + 1);
+    rect.h = (uint16_t)(r * 2 + 1);
+    color.a = (uint8_t)((color_argb >> 24) & 0xFFu);
+    color.r = (uint8_t)((color_argb >> 16) & 0xFFu);
+    color.g = (uint8_t)((color_argb >> 8) & 0xFFu);
+    color.b = (uint8_t)(color_argb & 0xFFu);
+    return uya_gui_sim_gles2_draw_shape_rect(display, &rect, &color, &color, (float)r, 1.0f, 4.0f, 0.0f, 0.0f, 0.0f);
+}
+
+int32_t uya_gui_sim_sdl_gles2_fill_circle(void *handle, int32_t cx, int32_t cy, int32_t r, uint32_t color_argb) {
+    UyaGuiSimDisplay *display = (UyaGuiSimDisplay *)handle;
+    UyaGuiRectCmd rect;
+    UyaGuiColorCmd color;
+    if (display == NULL || !display->direct_frame_active) {
+        uya_gui_sim_set_error("gles2 fill circle unavailable");
+        return 0;
+    }
+    rect.x = (int16_t)(cx - r);
+    rect.y = (int16_t)(cy - r);
+    rect.w = (uint16_t)(r * 2 + 1);
+    rect.h = (uint16_t)(r * 2 + 1);
+    color.a = (uint8_t)((color_argb >> 24) & 0xFFu);
+    color.r = (uint8_t)((color_argb >> 16) & 0xFFu);
+    color.g = (uint8_t)((color_argb >> 8) & 0xFFu);
+    color.b = (uint8_t)(color_argb & 0xFFu);
+    return uya_gui_sim_gles2_draw_shape_rect(display, &rect, &color, &color, (float)r, 0.0f, 5.0f, 0.0f, 0.0f, 0.0f);
+}
+
+int32_t uya_gui_sim_sdl_gles2_draw_arc(void *handle, int32_t cx, int32_t cy, int32_t r, int32_t start_deg, int32_t end_deg, int32_t width, uint32_t color_argb) {
+    UyaGuiSimDisplay *display = (UyaGuiSimDisplay *)handle;
+    UyaGuiRectCmd rect;
+    UyaGuiColorCmd color;
+    if (display == NULL || !display->direct_frame_active) {
+        uya_gui_sim_set_error("gles2 draw arc unavailable");
+        return 0;
+    }
+    rect.x = (int16_t)(cx - r - width);
+    rect.y = (int16_t)(cy - r - width);
+    rect.w = (uint16_t)(r * 2 + width * 2 + 1);
+    rect.h = (uint16_t)(r * 2 + width * 2 + 1);
+    color.a = (uint8_t)((color_argb >> 24) & 0xFFu);
+    color.r = (uint8_t)((color_argb >> 16) & 0xFFu);
+    color.g = (uint8_t)((color_argb >> 8) & 0xFFu);
+    color.b = (uint8_t)(color_argb & 0xFFu);
+    return uya_gui_sim_gles2_draw_shape_rect(display, &rect, &color, &color, (float)r, (float)width, 6.0f, (float)start_deg, (float)end_deg, 0.0f);
+}
+
+int32_t uya_gui_sim_sdl_gles2_fill_arc(void *handle, int32_t cx, int32_t cy, int32_t r, int32_t start_deg, int32_t end_deg, uint32_t color_argb) {
+    UyaGuiSimDisplay *display = (UyaGuiSimDisplay *)handle;
+    UyaGuiRectCmd rect;
+    UyaGuiColorCmd color;
+    if (display == NULL || !display->direct_frame_active) {
+        uya_gui_sim_set_error("gles2 fill arc unavailable");
+        return 0;
+    }
+    rect.x = (int16_t)(cx - r);
+    rect.y = (int16_t)(cy - r);
+    rect.w = (uint16_t)(r * 2 + 1);
+    rect.h = (uint16_t)(r * 2 + 1);
+    color.a = (uint8_t)((color_argb >> 24) & 0xFFu);
+    color.r = (uint8_t)((color_argb >> 16) & 0xFFu);
+    color.g = (uint8_t)((color_argb >> 8) & 0xFFu);
+    color.b = (uint8_t)(color_argb & 0xFFu);
+    return uya_gui_sim_gles2_draw_shape_rect(display, &rect, &color, &color, (float)r, 0.0f, 7.0f, (float)start_deg, (float)end_deg, 0.0f);
+}
+
+int32_t uya_gui_sim_sdl_gles2_fill_rects(void *handle, const UyaGuiGpuFillRectCmd *cmds, int32_t count) {
+    UyaGuiSimDisplay *display = (UyaGuiSimDisplay *)handle;
+    int32_t i = 0;
+    if (display == NULL || cmds == NULL || count < 0 || !display->direct_frame_active) {
+        uya_gui_sim_set_error("gles2 fill rects unavailable");
+        return 0;
+    }
+    while (i < count) {
+        if (!uya_gui_sim_gles2_draw_solid_rect(display, &cmds[i].rect, &cmds[i].color)) {
+            return 0;
+        }
+        i += 1;
+    }
+    return 1;
+}
+
+int32_t uya_gui_sim_sdl_gles2_draw_rects(void *handle, const UyaGuiGpuStrokeRectCmd *cmds, int32_t count) {
+    UyaGuiSimDisplay *display = (UyaGuiSimDisplay *)handle;
+    int32_t i = 0;
+    if (display == NULL || cmds == NULL || count < 0 || !display->direct_frame_active) {
+        uya_gui_sim_set_error("gles2 draw rects unavailable");
+        return 0;
+    }
+    while (i < count) {
+        const UyaGuiGpuStrokeRectCmd *cmd = &cmds[i];
+        int32_t width = cmd->width > 0 ? cmd->width : 1;
+        UyaGuiRectCmd top = cmd->rect;
+        UyaGuiRectCmd bottom = cmd->rect;
+        UyaGuiRectCmd left = cmd->rect;
+        UyaGuiRectCmd right = cmd->rect;
+        if ((int32_t)top.w <= 0 || (int32_t)top.h <= 0) {
+            i += 1;
+            continue;
+        }
+        top.h = (uint16_t)((width < (int32_t)cmd->rect.h) ? width : (int32_t)cmd->rect.h);
+        bottom.y = (int16_t)(cmd->rect.y + (int16_t)(cmd->rect.h - top.h));
+        bottom.h = top.h;
+        left.w = (uint16_t)((width < (int32_t)cmd->rect.w) ? width : (int32_t)cmd->rect.w);
+        right.x = (int16_t)(cmd->rect.x + (int16_t)(cmd->rect.w - left.w));
+        right.w = left.w;
+        if (!uya_gui_sim_gles2_draw_solid_rect(display, &top, &cmd->color)
+            || !uya_gui_sim_gles2_draw_solid_rect(display, &bottom, &cmd->color)
+            || !uya_gui_sim_gles2_draw_solid_rect(display, &left, &cmd->color)
+            || !uya_gui_sim_gles2_draw_solid_rect(display, &right, &cmd->color)) {
+            return 0;
+        }
+        i += 1;
+    }
+    return 1;
+}
+
+int32_t uya_gui_sim_sdl_gles2_draw_lines(void *handle, const UyaGuiGpuLineCmd *cmds, int32_t count) {
+    UyaGuiSimDisplay *display = (UyaGuiSimDisplay *)handle;
+    int32_t i = 0;
+    if (display == NULL || cmds == NULL || count < 0 || !display->direct_frame_active) {
+        uya_gui_sim_set_error("gles2 draw lines unavailable");
+        return 0;
+    }
+    while (i < count) {
+        if (!uya_gui_sim_gles2_draw_line(display, &cmds[i])) {
+            return 0;
+        }
+        i += 1;
+    }
+    return 1;
+}
+
+int32_t uya_gui_sim_sdl_gles2_draw_images(void *handle, const UyaGuiGpuImageCmd *cmds, int32_t count) {
+    UyaGuiSimDisplay *display = (UyaGuiSimDisplay *)handle;
+    int32_t i = 0;
+    if (display == NULL || cmds == NULL || count < 0 || !display->direct_frame_active) {
+        uya_gui_sim_set_error("gles2 draw images unavailable");
+        return 0;
+    }
+    while (i < count) {
+        const UyaGuiGpuImageCmd *cmd = &cmds[i];
+        int32_t src_x = 0;
+        int32_t src_y = 0;
+        int32_t src_w = cmd->image_w;
+        int32_t src_h = cmd->image_h;
+        if (cmd->pixels == NULL) {
+            i += 1;
+            continue;
+        }
+        if (cmd->has_src != 0) {
+            src_x = cmd->src_rect.x;
+            src_y = cmd->src_rect.y;
+            src_w = (int32_t)cmd->src_rect.w;
+            src_h = (int32_t)cmd->src_rect.h;
+        }
+        if (!uya_gui_sim_gles2_draw_image_region(display, cmd->pixels, cmd->stride, cmd->format_tag, src_x, src_y, src_w, src_h, &cmd->dst_rect)) {
+            return 0;
+        }
+        i += 1;
+    }
+    return 1;
+}
+
+int32_t uya_gui_sim_sdl_gles2_present_frame(void *handle,
+                                            const uint8_t *pixels,
+                                            int32_t pitch,
+                                            int32_t width,
+                                            int32_t height,
+                                            const UyaGuiRectCmd *rects,
+                                            int32_t rect_count,
+                                            int32_t overlay_enabled) {
+    UyaGuiSimDisplay *display = (UyaGuiSimDisplay *)handle;
+    int32_t i = 0;
+    if (display == NULL || display->present_kind != UYA_GUI_SIM_PRESENT_GLES2 || display->gl_context == NULL || !display->direct_frame_active) {
+        uya_gui_sim_set_error("gles2 direct present unavailable");
+        return 0;
+    }
+    (void)width;
+    (void)height;
+    uya_gui_sim_gles2_reset_full_clip(display);
+    if (pixels != NULL && rects != NULL && rect_count > 0) {
+        while (i < rect_count) {
+            const UyaGuiRectCmd *rect = &rects[i];
+            if (rect->w > 0 && rect->h > 0) {
+                if (!uya_gui_sim_gles2_present_region(display, pixels, pitch, 2, rect->x, rect->y, rect->w, rect->h, rect)) {
+                    return 0;
+                }
+            }
+            i += 1;
+        }
+    }
+    if (overlay_enabled != 0 && rects != NULL && rect_count > 0) {
+        UyaGuiColorCmd overlay = { 255u, 255u, 0u, 255u };
+        UyaGuiGpuStrokeRectCmd stroke;
+        stroke.color = overlay;
+        stroke.width = 1;
+        i = 0;
+        while (i < rect_count) {
+            stroke.rect = rects[i];
+            if (!uya_gui_sim_sdl_gles2_draw_rects(display, &stroke, 1)) {
+                return 0;
+            }
+            i += 1;
+        }
+    }
+    uya_gui_sim_gles2_reset_full_clip(display);
+    SDL_GL_SwapWindow(display->window);
+    display->needs_refresh = 0;
+    display->direct_frame_active = 0;
     return 1;
 }
 
@@ -732,8 +1918,7 @@ int32_t uya_gui_sim_sdl_display_present_region(void *handle, const uint8_t *pixe
     rect.w = w;
     rect.h = h;
     region_pixels = pixels + (size_t)y * (size_t)pitch + (size_t)x * 4u;
-    if (SDL_UpdateTexture(display->texture, &rect, region_pixels, pitch) != 0) {
-        uya_gui_sim_set_error(SDL_GetError());
+    if (!uya_gui_sim_update_texture_region(display, &rect, region_pixels, pitch)) {
         return 0;
     }
     display->pending_present = 1;

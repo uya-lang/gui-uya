@@ -30,12 +30,13 @@ use platform.disp.framebuffer_required_bytes;
 use platform.disp.framebuffer_new;
 use render.batch.DrawBatch;
 use render.batch.draw_batch_new;
+use render.cpu_backend.cpu_render_batch_execute;
 use render.ctx.RenderCtx;
 use render.ctx.render_ctx_new;
 use render.gpu.IGpuCtx;
-use render.gpu.SoftwareGpuCtx;
 use render.gpu.gpu_execute_batch;
-use render.gpu.software_gpu_new;
+use render.gpu_software.SoftwareGpuCtx;
+use render.gpu_software.software_gpu_new;
 use render.img.ImageData;
 use render.img.draw_image_scaled;
 use render.img.image_data_new;
@@ -263,7 +264,7 @@ fn bench_batch_compare_case(optimize: bool) !u64 {
     const start_ms: u64 = try now_ms();
     var iter: i32 = 0;
     while iter < BENCH_ITERATIONS {
-        batch.execute(&ctx);
+        cpu_render_batch_execute(&ctx, &batch);
         iter = iter + 1;
     }
     return (try now_ms()) - start_ms;
@@ -289,7 +290,7 @@ fn bench_render_image_batch() !u64 {
     var i: i32 = 0;
     while i < BENCH_ITERATIONS {
         draw_image_scaled(&ctx, Rect{ x: 8, y: 8, w: 12, h: 12 }, &img);
-        batch.execute(&ctx);
+        cpu_render_batch_execute(&ctx, &batch);
         zc.present(Rect{ x: 0, y: 0, w: 32, h: 32 });
         i = i + 1;
     }
@@ -317,7 +318,7 @@ fn bench_gpu_batch() !u64 {
     const start_ms: u64 = try now_ms();
     var i: i32 = 0;
     while i < BENCH_ITERATIONS {
-        gpu_execute_batch(&gpu_iface, &ctx, &batch);
+        gpu_execute_batch(&gpu_iface, &batch);
         i = i + 1;
     }
     return (try now_ms()) - start_ms;

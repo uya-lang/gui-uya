@@ -14,6 +14,13 @@ use platform.disp.framebuffer_clear;
 use platform.disp.framebuffer_get_pixel;
 use platform.disp.framebuffer_rect;
 use platform.disp.framebuffer_set_pixel;
+use render.batch.DRAW_BATCH_CAPACITY;
+use render.batch.DrawBatch;
+use render.batch.DrawCmd;
+use render.batch.DrawCmdKind;
+use render.batch.draw_batch_new;
+use render.gpu.IGpuCtx;
+use render.gpu.gpu_execute_batch;
 
 export const MAX_CLIP_STACK: i32 = 16;
 const CIRCLE_AA_GRID: i32 = 4;
@@ -382,9 +389,12 @@ export struct RenderCtx {
     dirty: DirtyRegion,
     stats: RenderStats,
     mode: RenderMode,
+    batch: &DrawBatch,
+    gpu: &IGpuCtx,
     clear_color: Color,
 
     fn push_clip(self: &Self, rect: Rect) void {
+        self.flush();
         if self.clip_len >= MAX_CLIP_STACK {
             return;
         }
@@ -394,6 +404,7 @@ export struct RenderCtx {
     }
 
     fn pop_clip(self: &Self) void {
+        self.flush();
         if self.clip_len > 1 {
             self.clip_len = self.clip_len - 1;
         }
@@ -447,13 +458,55 @@ export struct RenderCtx {
         return true;
     }
 
+    fn batch_enabled(self: &Self) bool {
+        return self.mode == RenderMode.Batch && self.batch != null;
+    }
+
+    fn gpu_accelerated(self: &Self) bool {
+        return self.gpu != null && self.gpu.accelerated();
+    }
+
+    fn with_immediate_mode(self: &Self) RenderMode {
+        const prev_mode: RenderMode = self.mode;
+        if self.batch_enabled() {
+            self.flush();
+            self.mode = RenderMode.Immediate;
+        }
+        return prev_mode;
+    }
+
+    fn flush(self: &Self) void {
+        if self.batch == null || self.batch.count == 0u16 {
+            return;
+        }
+        self.batch.optimize();
+        if self.gpu != null {
+            self.gpu.set_clip(self.current_clip());
+            gpu_execute_batch(self.gpu, self.batch);
+            self.stats.batch_flushes = self.stats.batch_flushes + 1u32;
+            self.stats.gpu_flushes = self.stats.gpu_flushes + 1u32;
+        } else {
+            render_ctx_execute_geometry_batch(self, self.batch);
+        }
+        *self.batch = draw_batch_new();
+    }
+
     fn clear(self: &Self, color: Color) void {
+        self.flush();
         self.clear_color = color;
+        if self.gpu != null {
+            self.gpu.clear(color);
+            return;
+        }
         framebuffer_clear(&self.fb, color);
         self.dirty.add(render_full_rect(&self.fb));
     }
 
     fn draw_pixel(self: &Self, x: i16, y: i16, color: Color) void {
+        const prev_mode: RenderMode = self.with_immediate_mode();
+        defer {
+            self.mode = prev_mode;
+        }
         if !self.draw_pixel_no_dirty(x as i32, y as i32, color) {
             return;
         }
@@ -478,6 +531,17 @@ export struct RenderCtx {
         if draw_rect.is_empty() {
             return;
         }
+        if self.batch_enabled() {
+            if self.batch.count >= DRAW_BATCH_CAPACITY as u16 {
+                self.flush();
+            }
+            if self.batch != null {
+                self.batch.push_fill_rect(draw_rect, color);
+                self.stats.rect_ops = self.stats.rect_ops + 1u32;
+                self.dirty.add(draw_rect);
+                return;
+            }
+        }
         self.fill_rect_pixels(draw_rect, color);
         self.stats.rect_ops = self.stats.rect_ops + 1u32;
         self.dirty.add(draw_rect);
@@ -486,6 +550,22 @@ export struct RenderCtx {
     fn draw_rect(self: &Self, rect: Rect, color: Color, width: u8) void {
         if rect.is_empty() || width == 0 {
             return;
+        }
+        const clip: Rect = self.current_clip();
+        const draw_rect: Rect = clip.intersect(rect);
+        if draw_rect.is_empty() {
+            return;
+        }
+        if self.batch_enabled() {
+            if self.batch.count >= DRAW_BATCH_CAPACITY as u16 {
+                self.flush();
+            }
+            if self.batch != null {
+                self.batch.push_draw_rect(rect, color, width);
+                self.stats.rect_ops = self.stats.rect_ops + 1u32;
+                self.dirty.add(draw_rect);
+                return;
+            }
         }
         var i: i32 = 0;
         while i < width as i32 {
@@ -515,6 +595,27 @@ export struct RenderCtx {
             return;
         }
         const clip: Rect = self.current_clip();
+        const half: i32 = width as i32 / 2;
+        const dirty_rect: Rect = clip.intersect(Rect{
+            x: (ctx_min_i32(x1 as i32, x2 as i32) - half) as i16,
+            y: (ctx_min_i32(y1 as i32, y2 as i32) - half) as i16,
+            w: (ctx_max_i32(x1 as i32, x2 as i32) - ctx_min_i32(x1 as i32, x2 as i32) + width as i32) as u16,
+            h: (ctx_max_i32(y1 as i32, y2 as i32) - ctx_min_i32(y1 as i32, y2 as i32) + width as i32) as u16,
+        });
+        if dirty_rect.is_empty() {
+            return;
+        }
+        if self.batch_enabled() {
+            if self.batch.count >= DRAW_BATCH_CAPACITY as u16 {
+                self.flush();
+            }
+            if self.batch != null {
+                self.batch.push_line(x1, y1, x2, y2, color, width);
+                self.stats.line_ops = self.stats.line_ops + 1u32;
+                self.dirty.add(dirty_rect);
+                return;
+            }
+        }
         if clip.is_empty() {
             return;
         }
@@ -540,8 +641,6 @@ export struct RenderCtx {
             sy = 1;
         }
         var err: i32 = dx - dy_abs;
-        const half: i32 = width as i32 / 2;
-
         while true {
             if width == 1u8 {
                 _ = self.draw_pixel_no_dirty(x0, y0, color);
@@ -565,12 +664,6 @@ export struct RenderCtx {
             }
         }
 
-        const dirty_rect: Rect = clip.intersect(Rect{
-            x: (ctx_min_i32(x1 as i32, x2 as i32) - half) as i16,
-            y: (ctx_min_i32(y1 as i32, y2 as i32) - half) as i16,
-            w: (ctx_max_i32(x1 as i32, x2 as i32) - ctx_min_i32(x1 as i32, x2 as i32) + width as i32) as u16,
-            h: (ctx_max_i32(y1 as i32, y2 as i32) - ctx_min_i32(y1 as i32, y2 as i32) + width as i32) as u16,
-        });
         if !dirty_rect.is_empty() {
             self.dirty.add(dirty_rect);
         }
@@ -578,6 +671,28 @@ export struct RenderCtx {
     }
 
     fn draw_circle(self: &Self, cx: i16, cy: i16, r: i16, color: Color) void {
+        if self.gpu_accelerated() && r > 0 && color.a != 0u8 {
+            const clip: Rect = self.current_clip();
+            const draw_rect: Rect = clip.intersect(Rect{
+                x: (cx as i32 - r as i32) as i16,
+                y: (cy as i32 - r as i32) as i16,
+                w: (r as i32 * 2 + 1) as u16,
+                h: (r as i32 * 2 + 1) as u16,
+            });
+            if draw_rect.is_empty() {
+                return;
+            }
+            self.flush();
+            self.gpu.set_clip(clip);
+            self.gpu.draw_circle(cx as i32, cy as i32, r as i32, color);
+            self.stats.circle_ops = self.stats.circle_ops + 1u32;
+            self.dirty.add(draw_rect);
+            return;
+        }
+        const prev_mode: RenderMode = self.with_immediate_mode();
+        defer {
+            self.mode = prev_mode;
+        }
         if r <= 0 || color.a == 0u8 {
             return;
         }
@@ -630,6 +745,28 @@ export struct RenderCtx {
     }
 
     fn fill_circle(self: &Self, cx: i16, cy: i16, r: i16, color: Color) void {
+        if self.gpu_accelerated() && r > 0 && color.a != 0u8 {
+            const clip: Rect = self.current_clip();
+            const draw_rect: Rect = clip.intersect(Rect{
+                x: (cx as i32 - r as i32) as i16,
+                y: (cy as i32 - r as i32) as i16,
+                w: (r as i32 * 2 + 1) as u16,
+                h: (r as i32 * 2 + 1) as u16,
+            });
+            if draw_rect.is_empty() {
+                return;
+            }
+            self.flush();
+            self.gpu.set_clip(clip);
+            self.gpu.fill_circle(cx as i32, cy as i32, r as i32, color);
+            self.stats.circle_ops = self.stats.circle_ops + 1u32;
+            self.dirty.add(draw_rect);
+            return;
+        }
+        const prev_mode: RenderMode = self.with_immediate_mode();
+        defer {
+            self.mode = prev_mode;
+        }
         if r <= 0 || color.a == 0u8 {
             return;
         }
@@ -693,6 +830,23 @@ export struct RenderCtx {
     }
 
     fn fill_round_rect(self: &Self, rect: Rect, radius: u8, color: Color) void {
+        if self.gpu_accelerated() && radius > 0u8 && !rect.is_empty() && color.a != 0u8 {
+            const clip: Rect = self.current_clip();
+            const draw_rect: Rect = clip.intersect(rect);
+            if draw_rect.is_empty() {
+                return;
+            }
+            self.flush();
+            self.gpu.set_clip(clip);
+            self.gpu.fill_round_rect(rect, radius as i32, color);
+            self.stats.rect_ops = self.stats.rect_ops + 1u32;
+            self.dirty.add(draw_rect);
+            return;
+        }
+        const prev_mode: RenderMode = self.with_immediate_mode();
+        defer {
+            self.mode = prev_mode;
+        }
         if rect.is_empty() || color.a == 0u8 {
             return;
         }
@@ -777,11 +931,29 @@ export struct RenderCtx {
     }
 
     fn fill_round_shadow(self: &Self, rect: Rect, radius: u8, blur: u8, color: Color) void {
-        if rect.is_empty() || color.a == 0u8 {
-            return;
-        }
         if blur == 0u8 {
             self.fill_round_rect(rect, radius, color);
+            return;
+        }
+        if self.gpu_accelerated() && !rect.is_empty() && color.a != 0u8 {
+            const shadow_bounds: Rect = rect.inflate(blur as i16, blur as i16);
+            const clip: Rect = self.current_clip();
+            const draw_rect: Rect = clip.intersect(shadow_bounds);
+            if draw_rect.is_empty() {
+                return;
+            }
+            self.flush();
+            self.gpu.set_clip(clip);
+            self.gpu.fill_round_shadow(rect, radius as i32, blur as i32, color);
+            self.stats.rect_ops = self.stats.rect_ops + 1u32;
+            self.dirty.add(draw_rect);
+            return;
+        }
+        const prev_mode: RenderMode = self.with_immediate_mode();
+        defer {
+            self.mode = prev_mode;
+        }
+        if rect.is_empty() || color.a == 0u8 {
             return;
         }
 
@@ -807,6 +979,23 @@ export struct RenderCtx {
     }
 
     fn draw_round_rect(self: &Self, rect: Rect, radius: u8, color: Color, width: u8) void {
+        if self.gpu_accelerated() && radius > 0u8 && width > 0u8 && !rect.is_empty() && color.a != 0u8 {
+            const clip: Rect = self.current_clip();
+            const draw_rect: Rect = clip.intersect(rect);
+            if draw_rect.is_empty() {
+                return;
+            }
+            self.flush();
+            self.gpu.set_clip(clip);
+            self.gpu.draw_round_rect(rect, radius as i32, color, width as i32);
+            self.stats.rect_ops = self.stats.rect_ops + 1u32;
+            self.dirty.add(draw_rect);
+            return;
+        }
+        const prev_mode: RenderMode = self.with_immediate_mode();
+        defer {
+            self.mode = prev_mode;
+        }
         if rect.is_empty() || width == 0u8 || color.a == 0u8 {
             return;
         }
@@ -902,6 +1091,23 @@ export struct RenderCtx {
     }
 
     fn fill_linear_gradient(self: &Self, rect: Rect, start: Color, end: Color, horizontal: bool) void {
+        if self.gpu_accelerated() && !rect.is_empty() {
+            const clip: Rect = self.current_clip();
+            const draw_rect: Rect = clip.intersect(rect);
+            if draw_rect.is_empty() {
+                return;
+            }
+            self.flush();
+            self.gpu.set_clip(clip);
+            self.gpu.fill_linear_gradient(rect, start, end, horizontal);
+            self.stats.rect_ops = self.stats.rect_ops + 1u32;
+            self.dirty.add(draw_rect);
+            return;
+        }
+        const prev_mode: RenderMode = self.with_immediate_mode();
+        defer {
+            self.mode = prev_mode;
+        }
         if rect.is_empty() {
             return;
         }
@@ -940,6 +1146,23 @@ export struct RenderCtx {
     }
 
     fn fill_radial_gradient(self: &Self, rect: Rect, inner: Color, outer: Color) void {
+        if self.gpu_accelerated() && !rect.is_empty() {
+            const clip: Rect = self.current_clip();
+            const draw_rect: Rect = clip.intersect(rect);
+            if draw_rect.is_empty() {
+                return;
+            }
+            self.flush();
+            self.gpu.set_clip(clip);
+            self.gpu.fill_radial_gradient(rect, inner, outer);
+            self.stats.rect_ops = self.stats.rect_ops + 1u32;
+            self.dirty.add(draw_rect);
+            return;
+        }
+        const prev_mode: RenderMode = self.with_immediate_mode();
+        defer {
+            self.mode = prev_mode;
+        }
         if rect.is_empty() {
             return;
         }
@@ -979,6 +1202,28 @@ export struct RenderCtx {
     }
 
     fn draw_arc(self: &Self, cx: i16, cy: i16, r: i16, start_deg: i16, end_deg: i16, width: u8, color: Color) void {
+        if self.gpu_accelerated() && r > 0 && width > 0u8 && color.a != 0u8 {
+            const clip: Rect = self.current_clip();
+            const draw_rect: Rect = clip.intersect(Rect{
+                x: (cx as i32 - r as i32 - width as i32) as i16,
+                y: (cy as i32 - r as i32 - width as i32) as i16,
+                w: (r as i32 * 2 + width as i32 * 2 + 1) as u16,
+                h: (r as i32 * 2 + width as i32 * 2 + 1) as u16,
+            });
+            if draw_rect.is_empty() {
+                return;
+            }
+            self.flush();
+            self.gpu.set_clip(clip);
+            self.gpu.draw_arc(cx as i32, cy as i32, r as i32, start_deg as i32, end_deg as i32, width as i32, color);
+            self.stats.circle_ops = self.stats.circle_ops + 1u32;
+            self.dirty.add(draw_rect);
+            return;
+        }
+        const prev_mode: RenderMode = self.with_immediate_mode();
+        defer {
+            self.mode = prev_mode;
+        }
         if r <= 0 || width == 0u8 || color.a == 0u8 {
             return;
         }
@@ -1019,6 +1264,28 @@ export struct RenderCtx {
     }
 
     fn fill_arc(self: &Self, cx: i16, cy: i16, r: i16, start_deg: i16, end_deg: i16, color: Color) void {
+        if self.gpu_accelerated() && r > 0 && color.a != 0u8 {
+            const clip: Rect = self.current_clip();
+            const draw_rect: Rect = clip.intersect(Rect{
+                x: (cx as i32 - r as i32) as i16,
+                y: (cy as i32 - r as i32) as i16,
+                w: (r as i32 * 2 + 1) as u16,
+                h: (r as i32 * 2 + 1) as u16,
+            });
+            if draw_rect.is_empty() {
+                return;
+            }
+            self.flush();
+            self.gpu.set_clip(clip);
+            self.gpu.fill_arc(cx as i32, cy as i32, r as i32, start_deg as i32, end_deg as i32, color);
+            self.stats.circle_ops = self.stats.circle_ops + 1u32;
+            self.dirty.add(draw_rect);
+            return;
+        }
+        const prev_mode: RenderMode = self.with_immediate_mode();
+        defer {
+            self.mode = prev_mode;
+        }
         if r <= 0 || color.a == 0u8 {
             return;
         }
@@ -1083,6 +1350,8 @@ export fn render_ctx_new(fb: FrameBuffer) RenderCtx {
             gpu_flushes: 0u32,
         },
         mode: RenderMode.Immediate,
+        batch: null,
+        gpu: null,
         clear_color: empty_framebuffer_color(),
     };
 }
@@ -1099,5 +1368,68 @@ export fn default_ctx() RenderCtx {
 
 /// 读取渲染上下文帧缓冲中的指定像素。
 export fn ctx_pixel(ctx: &RenderCtx, x: i16, y: i16) Color {
+    render_ctx_flush(ctx);
     return framebuffer_get_pixel(&ctx.fb, x as i32, y as i32);
+}
+
+fn render_ctx_execute_geometry_batch(ctx: &RenderCtx, batch: &DrawBatch) void {
+    const prev_mode: RenderMode = ctx.mode;
+    if prev_mode == RenderMode.Batch {
+        ctx.mode = RenderMode.Immediate;
+    }
+    defer {
+        ctx.mode = prev_mode;
+    }
+
+    var i: i32 = 0;
+    while i < batch.count as i32 {
+        const cmd: DrawCmd = batch.cmds[i];
+        if cmd.kind == DrawCmdKind.FillRect {
+            ctx.fill_rect(cmd.rect, cmd.color);
+        } else if cmd.kind == DrawCmdKind.DrawRect {
+            ctx.draw_rect(cmd.rect, cmd.color, cmd.width);
+        } else if cmd.kind == DrawCmdKind.Line {
+            ctx.draw_line(cmd.x1, cmd.y1, cmd.x2, cmd.y2, cmd.color, cmd.width);
+        }
+        i = i + 1;
+    }
+    ctx.stats.batch_flushes = ctx.stats.batch_flushes + 1u32;
+}
+
+/// 附加 CPU batch 存储区，供 `RenderMode.Batch` 复用。
+export fn render_ctx_attach_batch(ctx: &RenderCtx, batch: &DrawBatch) void {
+    if ctx == null {
+        return;
+    }
+    ctx.flush();
+    ctx.batch = batch;
+    if batch != null {
+        *batch = draw_batch_new();
+    }
+}
+
+/// 附加 GPU 设备，供 batch flush 时提交。
+export fn render_ctx_attach_gpu(ctx: &RenderCtx, gpu: &IGpuCtx) void {
+    if ctx == null {
+        return;
+    }
+    ctx.flush();
+    ctx.gpu = gpu;
+}
+
+/// 切换渲染上下文模式。
+export fn render_ctx_set_mode(ctx: &RenderCtx, mode: RenderMode) void {
+    if ctx == null {
+        return;
+    }
+    ctx.flush();
+    ctx.mode = mode;
+}
+
+/// 刷新 CPU batch 中待执行的绘制命令。
+export fn render_ctx_flush(ctx: &RenderCtx) void {
+    if ctx == null {
+        return;
+    }
+    ctx.flush();
 }

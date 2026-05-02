@@ -44,7 +44,7 @@
 |------|------|
 | `DirtyRegion` 结构体大小 | `208 bytes` |
 | `DrawBatch` 结构体大小 | `4624 bytes` |
-| `RenderCtx` 结构体大小 | `408 bytes` |
+| `RenderCtx` 结构体大小 | `416 bytes` |
 | `ZeroCopyCtx` 结构体大小 | `160 bytes` |
 | `ImageCache` 结构体大小 | `800 bytes` |
 | `FB 480x320 RGB565` | `307200 bytes` |
