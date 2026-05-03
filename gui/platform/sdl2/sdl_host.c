@@ -940,59 +940,208 @@ static int uya_gui_sim_gles2_draw_image_region(UyaGuiSimDisplay *display,
     return uya_gui_sim_gles2_draw_quad(display, display->gl_texture, vertices, rgba);
 }
 
-static int uya_gui_sim_gles2_draw_glyph(UyaGuiSimDisplay *display, const UyaGuiGpuGlyphCmd *cmd) {
-    GLfloat vertices[16];
-    GLfloat rgba[4];
-    int32_t y = 0;
-    if (cmd == NULL || cmd->pixels == NULL || cmd->glyph_w <= 0 || cmd->glyph_h <= 0 || cmd->stride <= 0) {
+static uint8_t *g_glyph_atlas_pixels = NULL;
+static size_t g_glyph_atlas_bytes = 0;
+
+static int uya_gui_sim_ensure_glyph_atlas_capacity(size_t needed) {
+    if (g_glyph_atlas_bytes >= needed && g_glyph_atlas_pixels != NULL) {
         return 1;
     }
-    if (cmd->glyph_w > display->width || cmd->glyph_h > display->height) {
-        uya_gui_sim_set_error("gles2 glyph region exceeds scratch texture");
+    uint8_t *resized = (uint8_t *)uya_gui_sim_host_realloc(g_glyph_atlas_pixels, needed);
+    if (resized == NULL) {
+        uya_gui_sim_set_error("glyph atlas realloc failed");
         return 0;
     }
-    if (cmd->format_tag != 5) {
-        uya_gui_sim_set_error("unsupported glyph pixel format for gles2");
+    g_glyph_atlas_pixels = resized;
+    g_glyph_atlas_bytes = needed;
+    return 1;
+}
+
+typedef struct {
+    int32_t atlas_x;
+    int32_t atlas_y;
+    int32_t glyph_w;
+    int32_t glyph_h;
+} GlyphAtlasEntry;
+
+static int uya_gui_sim_gles2_draw_glyph_batch(UyaGuiSimDisplay *display, const UyaGuiGpuGlyphCmd *cmds, int32_t count) {
+    GlyphAtlasEntry *entries = NULL;
+    GLfloat *vertices = NULL;
+    int32_t atlas_x = 0;
+    int32_t atlas_y = 0;
+    int32_t row_h = 0;
+    int32_t atlas_w = 0;
+    int32_t atlas_h = 0;
+    int32_t valid_count = 0;
+    int32_t i = 0;
+    GLfloat color_rgba[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+
+    if (count <= 0) {
+        return 1;
+    }
+
+    entries = (GlyphAtlasEntry *)malloc(sizeof(GlyphAtlasEntry) * count);
+    if (entries == NULL) {
+        uya_gui_sim_set_error("glyph atlas entries alloc failed");
         return 0;
     }
-    if (!uya_gui_sim_gles2_ensure_rgba_capacity(display, (size_t)cmd->glyph_w * (size_t)cmd->glyph_h * 4u)) {
-        return 0;
-    }
-    while (y < cmd->glyph_h) {
-        const uint8_t *src_row = cmd->pixels + (size_t)y * (size_t)cmd->stride;
-        uint8_t *dst_row = display->gl_rgba_pixels + (size_t)y * (size_t)cmd->glyph_w * 4u;
-        int32_t x = 0;
-        while (x < cmd->glyph_w) {
-            const uint8_t alpha = src_row[x];
-            dst_row[x * 4 + 0] = 255u;
-            dst_row[x * 4 + 1] = 255u;
-            dst_row[x * 4 + 2] = 255u;
-            dst_row[x * 4 + 3] = alpha;
-            x += 1;
+
+    // 计算 atlas 排列
+    for (i = 0; i < count; i++) {
+        const UyaGuiGpuGlyphCmd *cmd = &cmds[i];
+        if (cmd->pixels == NULL || cmd->glyph_w <= 0 || cmd->glyph_h <= 0 || cmd->stride <= 0) {
+            entries[i].atlas_x = -1;
+            entries[i].atlas_y = -1;
+            entries[i].glyph_w = 0;
+            entries[i].glyph_h = 0;
+            continue;
         }
-        y += 1;
+        if (cmd->glyph_w > display->width || cmd->glyph_h > display->height) {
+            free(entries);
+            uya_gui_sim_set_error("gles2 glyph region exceeds scratch texture");
+            return 0;
+        }
+        if (cmd->format_tag != 5) {
+            free(entries);
+            uya_gui_sim_set_error("unsupported glyph pixel format for gles2");
+            return 0;
+        }
+        if (atlas_x + cmd->glyph_w > display->width) {
+            atlas_y += row_h;
+            atlas_x = 0;
+            row_h = 0;
+        }
+        if (atlas_y + cmd->glyph_h > display->height) {
+            // atlas 满了，绘制已累积的 batch 后重新开始
+            free(entries);
+            uya_gui_sim_set_error("gles2 glyph atlas overflow");
+            return 0;
+        }
+        entries[i].atlas_x = atlas_x;
+        entries[i].atlas_y = atlas_y;
+        entries[i].glyph_w = cmd->glyph_w;
+        entries[i].glyph_h = cmd->glyph_h;
+        atlas_x += cmd->glyph_w;
+        if (row_h < cmd->glyph_h) row_h = cmd->glyph_h;
+        if (atlas_w < atlas_x) atlas_w = atlas_x;
+        valid_count++;
     }
+
+    if (valid_count == 0) {
+        free(entries);
+        return 1;
+    }
+
+    atlas_h = atlas_y + row_h;
+
+    // 分配 atlas buffer 并清零
+    size_t atlas_pixels_needed = (size_t)atlas_w * (size_t)atlas_h * 4u;
+    if (!uya_gui_sim_ensure_glyph_atlas_capacity(atlas_pixels_needed)) {
+        free(entries);
+        return 0;
+    }
+    memset(g_glyph_atlas_pixels, 0, atlas_pixels_needed);
+
+    // 拷贝 A8→RGBA 数据到 atlas buffer
+    for (i = 0; i < count; i++) {
+        const UyaGuiGpuGlyphCmd *cmd = &cmds[i];
+        if (entries[i].atlas_x < 0) continue;
+
+        int32_t gw = cmd->glyph_w;
+        int32_t gh = cmd->glyph_h;
+        int32_t gx = entries[i].atlas_x;
+        int32_t gy = entries[i].atlas_y;
+        int32_t y;
+
+        for (y = 0; y < gh; y++) {
+            const uint8_t *src_row = cmd->pixels + (size_t)y * (size_t)cmd->stride;
+            uint8_t *dst_row = g_glyph_atlas_pixels + ((size_t)(gy + y) * (size_t)atlas_w + (size_t)gx) * 4u;
+            int32_t x;
+            for (x = 0; x < gw; x++) {
+                uint8_t alpha = src_row[x];
+                dst_row[x * 4 + 0] = 255u;
+                dst_row[x * 4 + 1] = 255u;
+                dst_row[x * 4 + 2] = 255u;
+                dst_row[x * 4 + 3] = alpha;
+            }
+        }
+
+        // 记录第一个有效 glyph 的颜色作为统一 tint
+        if (color_rgba[3] == 1.0f && i == 0) {
+            uya_gui_sim_color_cmd_to_rgba_f32(&cmd->color, color_rgba);
+        }
+    }
+
+    // 准备顶点数组：每个 glyph 6 个顶点（2 triangles）
+    vertices = (GLfloat *)malloc(sizeof(GLfloat) * 4 * 6 * valid_count);
+    if (vertices == NULL) {
+        free(entries);
+        uya_gui_sim_set_error("glyph vertices alloc failed");
+        return 0;
+    }
+
+    {
+        GLfloat *v = vertices;
+        for (i = 0; i < count; i++) {
+            const UyaGuiGpuGlyphCmd *cmd = &cmds[i];
+            if (entries[i].atlas_x < 0) continue;
+
+            float x0 = (float)cmd->dst_rect.x;
+            float y0 = (float)cmd->dst_rect.y;
+            float x1 = x0 + (float)cmd->dst_rect.w;
+            float y1 = y0 + (float)cmd->dst_rect.h;
+
+            float u0 = (float)entries[i].atlas_x / (float)display->width;
+            float v0 = (float)entries[i].atlas_y / (float)display->height;
+            float u1 = (float)(entries[i].atlas_x + cmd->glyph_w) / (float)display->width;
+            float v1 = (float)(entries[i].atlas_y + cmd->glyph_h) / (float)display->height;
+
+            float left = (x0 * 2.0f / (float)display->width) - 1.0f;
+            float right = (x1 * 2.0f / (float)display->width) - 1.0f;
+            float top = 1.0f - (y0 * 2.0f / (float)display->height);
+            float bottom = 1.0f - (y1 * 2.0f / (float)display->height);
+
+            // triangle 1
+            v[0]  = left;  v[1]  = top;    v[2]  = u0; v[3]  = v0;
+            v[4]  = left;  v[5]  = bottom; v[6]  = u0; v[7]  = v1;
+            v[8]  = right; v[9]  = top;    v[10] = u1; v[11] = v0;
+            // triangle 2
+            v[12] = right; v[13] = top;    v[14] = u1; v[15] = v0;
+            v[16] = left;  v[17] = bottom; v[18] = u0; v[19] = v1;
+            v[20] = right; v[21] = bottom; v[22] = u1; v[23] = v1;
+            v += 24;
+        }
+    }
+
     if (SDL_GL_MakeCurrent(display->window, display->gl_context) != 0) {
+        free(entries);
+        free(vertices);
         uya_gui_sim_set_error(SDL_GetError());
         return 0;
     }
+
     display->gl.BindTexture(GL_TEXTURE_2D, display->gl_texture);
     display->gl.PixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    display->gl.TexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, cmd->glyph_w, cmd->glyph_h, GL_RGBA, GL_UNSIGNED_BYTE, display->gl_rgba_pixels);
-    uya_gui_sim_gles2_rect_vertices(
-        display,
-        (float)cmd->dst_rect.x,
-        (float)cmd->dst_rect.y,
-        (float)cmd->dst_rect.x + (float)cmd->dst_rect.w,
-        (float)cmd->dst_rect.y + (float)cmd->dst_rect.h,
-        0.0f,
-        0.0f,
-        (float)cmd->glyph_w / (float)display->width,
-        (float)cmd->glyph_h / (float)display->height,
-        vertices
-    );
-    uya_gui_sim_color_cmd_to_rgba_f32(&cmd->color, rgba);
-    return uya_gui_sim_gles2_draw_quad(display, display->gl_texture, vertices, rgba);
+    display->gl.TexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, atlas_w, atlas_h, GL_RGBA, GL_UNSIGNED_BYTE, g_glyph_atlas_pixels);
+
+    display->gl.UseProgram(display->gl_program);
+    display->gl.ActiveTexture(GL_TEXTURE0);
+    display->gl.Uniform1i(display->gl_uniform_tex, 0);
+    display->gl.Uniform4f(display->gl_uniform_color, color_rgba[0], color_rgba[1], color_rgba[2], color_rgba[3]);
+    display->gl.BindBuffer(GL_ARRAY_BUFFER, display->gl_vbo);
+    display->gl.BufferData(GL_ARRAY_BUFFER, (GLsizeiptr)(sizeof(GLfloat) * 4 * 6 * valid_count), vertices, GL_DYNAMIC_DRAW);
+    display->gl.EnableVertexAttribArray((GLuint)display->gl_attr_pos);
+    display->gl.EnableVertexAttribArray((GLuint)display->gl_attr_uv);
+    display->gl.VertexAttribPointer((GLuint)display->gl_attr_pos, 2, GL_FLOAT, GL_FALSE, (GLsizei)(sizeof(GLfloat) * 4), (const void *)0);
+    display->gl.VertexAttribPointer((GLuint)display->gl_attr_uv, 2, GL_FLOAT, GL_FALSE, (GLsizei)(sizeof(GLfloat) * 4), (const void *)(sizeof(GLfloat) * 2));
+    display->gl.DrawArrays(GL_TRIANGLES, 0, valid_count * 6);
+    display->gl.DisableVertexAttribArray((GLuint)display->gl_attr_pos);
+    display->gl.DisableVertexAttribArray((GLuint)display->gl_attr_uv);
+    display->gl.BindBuffer(GL_ARRAY_BUFFER, 0u);
+
+    free(entries);
+    free(vertices);
+    return 1;
 }
 
 static int uya_gui_sim_gles2_present_region(UyaGuiSimDisplay *display,
@@ -1867,18 +2016,11 @@ int32_t uya_gui_sim_sdl_gles2_draw_images(void *handle, const UyaGuiGpuImageCmd 
 
 int32_t uya_gui_sim_sdl_gles2_draw_glyphs(void *handle, const UyaGuiGpuGlyphCmd *cmds, int32_t count) {
     UyaGuiSimDisplay *display = (UyaGuiSimDisplay *)handle;
-    int32_t i = 0;
     if (display == NULL || cmds == NULL || count < 0 || !display->direct_frame_active) {
         uya_gui_sim_set_error("gles2 draw glyphs unavailable");
         return 0;
     }
-    while (i < count) {
-        if (!uya_gui_sim_gles2_draw_glyph(display, &cmds[i])) {
-            return 0;
-        }
-        i += 1;
-    }
-    return 1;
+    return uya_gui_sim_gles2_draw_glyph_batch(display, cmds, count);
 }
 
 int32_t uya_gui_sim_sdl_gles2_present_frame(void *handle,
