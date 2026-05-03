@@ -16,6 +16,7 @@ use render.ctx.render_ctx_new;
 use render.font.Font;
 use render.font.draw_text;
 use render.font.font_system_ui_ref;
+use render.font.font_ui_default_ref;
 use render.font.text_width;
 use sim.common.sim_layout_font;
 use sim.common.sim_layout_h;
@@ -132,38 +133,47 @@ fn game_cstr_len(text: &const byte) usize {
     return i;
 }
 
+
+fn game_font_ref(pixel_height: u8) &Font {
+    const font: &Font = font_ui_default_ref(pixel_height);
+    if font != null {
+        return font;
+    }
+    return font_system_ui_ref(pixel_height);
+}
+
 fn game_font_title() &Font {
-    return font_system_ui_ref(sim_layout_font(30u8));
+    return game_font_ref(sim_layout_font(30u8));
 }
 
 fn game_font_subtitle() &Font {
-    return font_system_ui_ref(sim_layout_font(14u8));
+    return game_font_ref(sim_layout_font(14u8));
 }
 
 fn game_font_stat_label() &Font {
-    return font_system_ui_ref(sim_layout_font(13u8));
+    return game_font_ref(sim_layout_font(13u8));
 }
 
 fn game_font_stat_value() &Font {
-    return font_system_ui_ref(sim_layout_font(24u8));
+    return game_font_ref(sim_layout_font(24u8));
 }
 
 fn game_font_body() &Font {
-    return font_system_ui_ref(sim_layout_font(16u8));
+    return game_font_ref(sim_layout_font(16u8));
 }
 
 fn game_font_overlay() &Font {
-    return font_system_ui_ref(sim_layout_font(22u8));
+    return game_font_ref(sim_layout_font(22u8));
 }
 
 fn game_font_tile(value: i32) &Font {
     if value >= 1024 {
-        return font_system_ui_ref(sim_layout_font(18u8));
+        return game_font_ref(sim_layout_font(18u8));
     }
     if value >= 128 {
-        return font_system_ui_ref(sim_layout_font(21u8));
+        return game_font_ref(sim_layout_font(21u8));
     }
-    return font_system_ui_ref(sim_layout_font(24u8));
+    return game_font_ref(sim_layout_font(24u8));
 }
 
 struct GameDemoLayout {
@@ -588,7 +598,13 @@ fn game_draw_cstr(ctx: &RenderCtx, x: i16, y: i16, text: &const byte, font: &Fon
 }
 
 fn game_draw_centered_text(ctx: &RenderCtx, rect: Rect, text: &const byte, font: &Font, color: Color) void {
+    if ctx == null || text == null || font == null {
+        return;
+    }
     const len: usize = game_cstr_len(text);
+    if len == 0usize {
+        return;
+    }
     const text_w: i16 = text_width(text, len, font);
     const text_x: i16 = rect.x + ((rect.w as i32 - text_w as i32) / 2) as i16;
     const text_y: i16 = rect.y + ((rect.h as i32 - font.line_height as i32) / 2) as i16;

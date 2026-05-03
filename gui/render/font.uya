@@ -3737,6 +3737,9 @@ export fn glyph_for_char(font: &Font, code: u8) Glyph {
 
 /// 计算指定文本在给定字体下的显示宽度。
 export fn text_width(text: &const byte, len: usize, font: &Font) i16 {
+    if font == null || text == null || len == 0usize {
+        return 0;
+    }
     return font.text_width(text, len);
 }
 
