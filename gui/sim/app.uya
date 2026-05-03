@@ -1287,24 +1287,35 @@ SimApp {
         }
     }
 
+    fn set_dashboard_metric(self: &Self, metric: i32) void {
+        if self.dashboard_metric == metric {
+            return;
+        }
+        self.dashboard_metric = metric;
+        self.dashboard_retained.page.widget.base.invalidate();
+    }
+
     fn handle_dashboard_demo_touch(self: &Self, evt: &Event, local: Point) void {
-        _ = self;
         if evt.event_type != EventType.Click {
             return;
         }
-        const shell_x: i16 = sim_layout_x(DASHBOARD_SHELL_X);
-        const shell_y: i16 = sim_layout_y(DASHBOARD_SHELL_Y);
-        const button_x: i16 = shell_x + sim_layout_x(DASHBOARD_BUTTON_X);
-        const button_y: i16 = shell_y + sim_layout_y(DASHBOARD_BUTTON_Y);
-        const button_w: u16 = sim_layout_w(DASHBOARD_BUTTON_W as u16);
-        const button_h: u16 = sim_layout_h(DASHBOARD_BUTTON_H as u16);
-        const button_step_y: i16 = sim_layout_y(DASHBOARD_BUTTON_STEP_Y);
-        if self.standalone_rect_contains(local, button_x, button_y, button_w, button_h) {
-            self.dashboard_metric = 0;
-        } else if self.standalone_rect_contains(local, button_x, button_y + button_step_y, button_w, button_h) {
-            self.dashboard_metric = 1;
-        } else if self.standalone_rect_contains(local, button_x, button_y + button_step_y * 2, button_w, button_h) {
-            self.dashboard_metric = 2;
+
+        dashboard_retained_init(&self.dashboard_retained);
+        self.dashboard_retained.page.widget.at(0, 0);
+
+        const cpu_area: Rect = self.dashboard_retained.cpu.widget.base.screen_area();
+        if cpu_area.contains(local) {
+            self.set_dashboard_metric(0);
+            return;
+        }
+        const net_area: Rect = self.dashboard_retained.net.widget.base.screen_area();
+        if net_area.contains(local) {
+            self.set_dashboard_metric(1);
+            return;
+        }
+        const mem_area: Rect = self.dashboard_retained.mem.widget.base.screen_area();
+        if mem_area.contains(local) {
+            self.set_dashboard_metric(2);
         }
     }
 
