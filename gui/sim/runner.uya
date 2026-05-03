@@ -123,9 +123,15 @@ fn run_simulator_sdl(cfg: SimConfig) i32 {
             _ = app.render_retained(&seed_ctx, true);
         }
         _ = framebuffer_copy(display.get_front_buffer(), seed_back);
+        if direct_gles2 {
+            if !display.refresh_front() {
+                _ = printf("[sim] present failed: %s\n" as *byte, sdl_display_last_error());
+                return 2;
+            }
+        }
         first_frame = false;
         last_dirty_render = true;
-        pending_seed_present = true;
+        pending_seed_present = !direct_gles2;
     }
     var last_tick_ms: u32 = get_tick_ms();
     while true {
@@ -203,7 +209,12 @@ fn run_simulator_sdl(cfg: SimConfig) i32 {
         if direct_gles2 {
             const dirty_view: DirtyRegionView = ctx.dirty.get_regions();
             if !dirty_render || retained_result.rendered || !dirty_view.is_empty() {
-                if !display.present_gpu_frame(&ctx.dirty) {
+                if dirty_render {
+                    if !display.present_dirty(&ctx.dirty) {
+                        _ = printf("[sim] present failed: %s\n" as *byte, sdl_display_last_error());
+                        break;
+                    }
+                } else if !display.present() {
                     _ = printf("[sim] present failed: %s\n" as *byte, sdl_display_last_error());
                     break;
                 }

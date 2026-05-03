@@ -1353,6 +1353,9 @@ static int uya_gui_sim_present_gles2(UyaGuiSimDisplay *display, const uint8_t *p
     }
 
     display->gl.Viewport(0, 0, drawable_w, drawable_h);
+    display->gl.Disable(GL_BLEND);
+    display->gl.Enable(GL_SCISSOR_TEST);
+    uya_gui_sim_gles2_reset_full_clip(display);
     display->gl.Clear(GL_COLOR_BUFFER_BIT);
     GLfloat vertices[16];
     uya_gui_sim_gles2_rect_vertices(display, 0.0f, 0.0f, (float)width, (float)height, 0.0f, 0.0f, 1.0f, 1.0f, vertices);
@@ -1401,8 +1404,7 @@ static int uya_gui_sim_begin_gles2_frame_with_pixels(UyaGuiSimDisplay *display, 
         drawable_h = display->height * display->scale;
     }
     display->gl.Viewport(0, 0, drawable_w, drawable_h);
-    display->gl.Enable(GL_BLEND);
-    display->gl.BlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    display->gl.Disable(GL_BLEND);
     display->gl.Enable(GL_SCISSOR_TEST);
     uya_gui_sim_gles2_reset_full_clip(display);
     display->gl.ClearColor(0.0f, 0.0f, 0.0f, 1.0f);
@@ -1426,6 +1428,8 @@ static int uya_gui_sim_begin_gles2_frame_with_pixels(UyaGuiSimDisplay *display, 
     display->gl.DisableVertexAttribArray((GLuint)display->gl_attr_pos);
     display->gl.DisableVertexAttribArray((GLuint)display->gl_attr_uv);
     display->gl.BindBuffer(GL_ARRAY_BUFFER, 0u);
+    display->gl.Enable(GL_BLEND);
+    display->gl.BlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     display->direct_frame_active = 1;
     return 1;
 }
