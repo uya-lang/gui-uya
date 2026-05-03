@@ -564,6 +564,7 @@
   - [x] `interface IGpuCtx`
     - [x] `fn draw_rects(self, rects, colors, count) void`
     - [x] `fn draw_images(self, cmds, count) void`
+    - [x] `fn draw_glyphs(self, cmds, count) void`
     - [x] `fn fill_rects(self, rects, colors, count) void`
     - [x] `fn sync(self) void`
   - [x] 软件回退后端 `SoftwareGpuCtx`

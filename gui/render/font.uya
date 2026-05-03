@@ -1,6 +1,7 @@
 @c_import("font_stb_backend.c");
 
 use core.color.Color;
+use core.rect.RECT_ZERO;
 use core.rect.Rect;
 use libc.MAP_PRIVATE;
 use libc.O_RDONLY;
@@ -16,6 +17,7 @@ use platform.disp.PixelFormat;
 use render.ctx.RenderCtx;
 use render.ctx.RenderMode;
 use render.ctx.render_ctx_flush;
+use render.gpu.GpuGlyphCmd;
 
 extern fn malloc(size: usize) &void;
 extern fn free(ptr: &void) void;
@@ -74,6 +76,10 @@ export const TTF_CACHE_SLOT_DIM: i32 = 64;
 export const TTF_CACHE_SLOT_BYTES: i32 = TTF_CACHE_SLOT_DIM * TTF_CACHE_SLOT_DIM;
 export const TTF_CACHE_STORAGE_BYTES: i32 = TTF_CACHE_ENTRY_CAPACITY * TTF_CACHE_SLOT_BYTES;
 export const SYSTEM_UI_FONT_SLOT_CAPACITY: i32 = 16;
+const GPU_TEXT_GLYPH_BATCH_CAPACITY: i32 = 16;
+const GPU_TEXT_GLYPH_SLOT_DIM: i32 = 64;
+const GPU_TEXT_GLYPH_SLOT_BYTES: i32 = GPU_TEXT_GLYPH_SLOT_DIM * GPU_TEXT_GLYPH_SLOT_DIM;
+const GPU_TEXT_GLYPH_STORAGE_BYTES: i32 = GPU_TEXT_GLYPH_BATCH_CAPACITY * GPU_TEXT_GLYPH_SLOT_BYTES;
 
 export enum TextAlign {
     Start,
@@ -261,6 +267,8 @@ var _ui_default_font_slots: [SystemUiFontSlot: 16] = [];
 var _ui_default_font_slots_ready: bool = false;
 var _system_ui_font_slots: [SystemUiFontSlot: 16] = [];
 var _font_ui_dpi: u16 = UI_FONT_BASE_DPI;
+var _gpu_text_glyph_cmds: [GpuGlyphCmd: 16] = [];
+var _gpu_text_glyph_storage: [byte: 65536] = [];
 
 fn glyph_pack7(r0: u8, r1: u8, r2: u8, r3: u8, r4: u8, r5: u8, r6: u8) u64 {
     return (r0 as u64)
@@ -749,6 +757,89 @@ fn glyph_bitmap_coverage(font: &Font, glyph: &Glyph, col: i32, row: i32) u8 {
     }
 
     return 0u8;
+}
+
+fn glyph_coverage_clear(dst: &byte, dst_stride: usize, width: i32, height: i32) void {
+    if dst == null || dst_stride == 0usize || width <= 0 || height <= 0 {
+        return;
+    }
+
+    var row: i32 = 0;
+    while row < height {
+        var col: i32 = 0;
+        while col < width {
+            dst[row as usize * dst_stride + col as usize] = 0u8;
+            col = col + 1;
+        }
+        row = row + 1;
+    }
+}
+
+fn glyph_coverage_copy(dst: &byte, dst_stride: usize, src: &const byte, src_stride: usize, width: i32, height: i32) void {
+    if dst == null || src == null || dst_stride == 0usize || src_stride == 0usize || width <= 0 || height <= 0 {
+        return;
+    }
+
+    var row: i32 = 0;
+    while row < height {
+        var col: i32 = 0;
+        while col < width {
+            dst[row as usize * dst_stride + col as usize] = src[row as usize * src_stride + col as usize] as u8;
+            col = col + 1;
+        }
+        row = row + 1;
+    }
+}
+
+fn builtin_glyph_coverage(font: &Font, glyph: &Glyph, dst: &byte, dst_stride: usize) bool {
+    if glyph == null || dst == null || dst_stride == 0usize || glyph.width == 0u8 || glyph.height == 0u8 {
+        return false;
+    }
+    glyph_coverage_clear(dst, dst_stride, glyph.width as i32, glyph.height as i32);
+    if glyph.codepoint == ' ' as u32 {
+        return true;
+    }
+
+    const bits: u64 = glyph_pattern_bits(glyph.codepoint);
+    if !glyph_is_cjk(glyph.codepoint) && bits == 0u64 {
+        return true;
+    }
+
+    var row: i32 = 0;
+    while row < glyph.height as i32 {
+        var col: i32 = 0;
+        while col < glyph.width as i32 {
+            dst[row as usize * dst_stride + col as usize] = glyph_edge_alpha(glyph, bits, col, row);
+            col = col + 1;
+        }
+        row = row + 1;
+    }
+    return true;
+}
+
+fn bitmap_atlas_glyph_coverage(font: &Font, glyph: &Glyph, dst: &byte, dst_stride: usize) bool {
+    if font == null || glyph == null || dst == null || dst_stride == 0usize || font.bitmap_format == FontBitmapFormat.None {
+        return false;
+    }
+    glyph_coverage_clear(dst, dst_stride, glyph.width as i32, glyph.height as i32);
+    var row: i32 = 0;
+    while row < glyph.height as i32 {
+        var col: i32 = 0;
+        while col < glyph.width as i32 {
+            dst[row as usize * dst_stride + col as usize] = glyph_bitmap_coverage(font, glyph, col, row);
+            col = col + 1;
+        }
+        row = row + 1;
+    }
+    return true;
+}
+
+fn vector_glyph_coverage(font: &Font, glyph: &Glyph, dst: &byte, dst_stride: usize) bool {
+    _ = font;
+    _ = glyph;
+    _ = dst;
+    _ = dst_stride;
+    return false;
 }
 
 const VEC_SEG_TOP: u16 = 1u16 << 0;
@@ -1286,6 +1377,40 @@ fn ttf_optimize_small_coverage(asset: &TtfFontAsset, coverage: u8) u8 {
     return (value as! u8).value;
 }
 
+fn ttf_coverage_copy_optimized(asset: &TtfFontAsset, glyph: &Glyph, dst: &byte, dst_stride: usize, src: &const byte, src_stride: usize) void {
+    if asset == null || glyph == null || dst == null || src == null || dst_stride == 0usize || src_stride == 0usize {
+        return;
+    }
+
+    var row: i32 = 0;
+    while row < glyph.height as i32 {
+        var col: i32 = 0;
+        while col < glyph.width as i32 {
+            const coverage: u8 = src[row as usize * src_stride + col as usize] as u8;
+            dst[row as usize * dst_stride + col as usize] = ttf_optimize_small_coverage(asset, coverage);
+            col = col + 1;
+        }
+        row = row + 1;
+    }
+}
+
+fn ttf_coverage_optimize_in_place(asset: &TtfFontAsset, glyph: &Glyph, dst: &byte, dst_stride: usize) void {
+    if asset == null || glyph == null || dst == null || dst_stride == 0usize {
+        return;
+    }
+
+    var row: i32 = 0;
+    while row < glyph.height as i32 {
+        var col: i32 = 0;
+        while col < glyph.width as i32 {
+            const offset: usize = row as usize * dst_stride + col as usize;
+            dst[offset] = ttf_optimize_small_coverage(asset, dst[offset] as u8);
+            col = col + 1;
+        }
+        row = row + 1;
+    }
+}
+
 fn ttf_draw_coverage_bitmap(ctx: &RenderCtx, x: i16, y: i16, glyph: &Glyph, color: &Color, coverage: &const byte, stride: usize, asset: &TtfFontAsset) void {
     const antialias: bool = glyph_antialias_enabled(ctx);
     var row: i32 = 0;
@@ -1318,6 +1443,80 @@ fn ttf_render_native_bitmap(asset: &TtfFontAsset, glyph: &Glyph, dst: &byte, str
         glyph.height as i32,
         asset.hint_enabled as i32
     ) != 0;
+}
+
+fn ttf_glyph_coverage(font: &Font, glyph: &Glyph, dst: &byte, dst_stride: usize) bool {
+    if glyph == null || dst == null || dst_stride == 0usize || glyph.bitmap_offset == TTF_GLYPH_FALLBACK_ID {
+        return false;
+    }
+    const asset: &TtfFontAsset = ttf_backend(font);
+    if asset == null {
+        return false;
+    }
+    if glyph.width == 0u8 || glyph.height == 0u8 {
+        return true;
+    }
+
+    const native: &void = ttf_native_backend(asset);
+    if native != null {
+        const cache_idx_native: i32 = ttf_cache_lookup(asset, glyph);
+        if cache_idx_native >= 0 {
+            const cache_offset_native: usize = ttf_cache_slot_offset(cache_idx_native);
+            if cache_offset_native < TTF_CACHE_STORAGE_BYTES as usize {
+                ttf_coverage_copy_optimized(asset, glyph, dst, dst_stride, &(_ttf_cache_storage[cache_offset_native]), TTF_CACHE_SLOT_DIM as usize);
+                return true;
+            }
+        }
+
+        const reserve_idx_native: i32 = ttf_cache_reserve(asset, glyph);
+        if reserve_idx_native >= 0 {
+            const cache_offset_native: usize = ttf_cache_slot_offset(reserve_idx_native);
+            if cache_offset_native < TTF_CACHE_STORAGE_BYTES as usize
+                && ttf_render_native_bitmap(asset, glyph, &(_ttf_cache_storage[cache_offset_native]), TTF_CACHE_SLOT_DIM as usize) {
+                ttf_coverage_copy_optimized(asset, glyph, dst, dst_stride, &(_ttf_cache_storage[cache_offset_native]), TTF_CACHE_SLOT_DIM as usize);
+                return true;
+            }
+        }
+
+        var native_scratch: [byte: 4096] = [];
+        if ttf_render_native_bitmap(asset, glyph, &native_scratch[0], glyph.width as usize) {
+            ttf_coverage_copy_optimized(asset, glyph, dst, dst_stride, &native_scratch[0], glyph.width as usize);
+            return true;
+        }
+    }
+
+    const cache_idx: i32 = ttf_cache_lookup(asset, glyph);
+    if cache_idx >= 0 {
+        const cache_offset: usize = ttf_cache_slot_offset(cache_idx);
+        if cache_offset < TTF_CACHE_STORAGE_BYTES as usize {
+            ttf_coverage_copy_optimized(asset, glyph, dst, dst_stride, &(_ttf_cache_storage[cache_offset]), TTF_CACHE_SLOT_DIM as usize);
+            return true;
+        }
+    }
+
+    var edge_count: i32 = 0;
+    if !ttf_build_edges(asset, (glyph.bitmap_offset as! u16).value, &edge_count) {
+        return false;
+    }
+    if edge_count == 0 {
+        glyph_coverage_clear(dst, dst_stride, glyph.width as i32, glyph.height as i32);
+        return true;
+    }
+
+    const reserve_idx: i32 = ttf_cache_reserve(asset, glyph);
+    if reserve_idx >= 0 {
+        const cache_offset: usize = ttf_cache_slot_offset(reserve_idx);
+        if cache_offset < TTF_CACHE_STORAGE_BYTES as usize {
+            ttf_rasterize_glyph_coverage(edge_count, glyph, &(_ttf_cache_storage[cache_offset]), TTF_CACHE_SLOT_DIM as usize);
+            ttf_coverage_copy_optimized(asset, glyph, dst, dst_stride, &(_ttf_cache_storage[cache_offset]), TTF_CACHE_SLOT_DIM as usize);
+            return true;
+        }
+    }
+
+    var scratch: [byte: 4096] = [];
+    ttf_rasterize_glyph_coverage(edge_count, glyph, &scratch[0], glyph.width as usize);
+    ttf_coverage_copy_optimized(asset, glyph, dst, dst_stride, &scratch[0], glyph.width as usize);
+    return true;
 }
 
 fn draw_ttf_glyph(ctx: &RenderCtx, x: i16, y: i16, font: &Font, glyph: &Glyph, color: &Color) bool {
@@ -1460,6 +1659,144 @@ fn draw_glyph(ctx: &RenderCtx, x: i16, y: i16, font: &Font, glyph: &Glyph, color
     }
 
     draw_builtin_bitmap_glyph(ctx, x, y, glyph, color);
+}
+
+fn gpu_text_glyph_supported(font: &Font, glyph: &Glyph) bool {
+    if font == null || glyph == null {
+        return false;
+    }
+    if glyph.width as i32 > GPU_TEXT_GLYPH_SLOT_DIM || glyph.height as i32 > GPU_TEXT_GLYPH_SLOT_DIM {
+        return false;
+    }
+    if glyph.width == 0u8 || glyph.height == 0u8 {
+        return true;
+    }
+    if font.render_kind == FontRenderKind.VectorStroke {
+        return false;
+    }
+    if font.render_kind == FontRenderKind.BitmapAtlas {
+        return font.bitmap_format != FontBitmapFormat.None;
+    }
+    return true;
+}
+
+fn gpu_text_can_draw(text: &const byte, len: usize, font: &Font) bool {
+    var i: usize = 0usize;
+    while i < len {
+        const decoded: DecodedCodePoint = decode_codepoint(text, len, i);
+        const resolved: ResolvedGlyph = resolve_glyph_for_font(font, decoded.codepoint);
+        if !gpu_text_glyph_supported(resolved.font, &resolved.glyph) {
+            return false;
+        }
+        if decoded.span <= 1usize || i + decoded.span > len {
+            i = i + 1usize;
+        } else {
+            i = i + decoded.span;
+        }
+    }
+    return true;
+}
+
+fn gpu_text_build_glyph_coverage(font: &Font, glyph: &Glyph, dst: &byte, dst_stride: usize) bool {
+    if font == null || glyph == null || dst == null || dst_stride == 0usize {
+        return false;
+    }
+    if glyph.width == 0u8 || glyph.height == 0u8 {
+        return true;
+    }
+    if font.render_kind == FontRenderKind.TrueTypeOutline {
+        if ttf_glyph_coverage(font, glyph, dst, dst_stride) {
+            return true;
+        }
+        return builtin_glyph_coverage(font, glyph, dst, dst_stride);
+    }
+    if font.render_kind == FontRenderKind.BitmapAtlas {
+        return bitmap_atlas_glyph_coverage(font, glyph, dst, dst_stride);
+    }
+    if font.render_kind == FontRenderKind.VectorStroke {
+        return vector_glyph_coverage(font, glyph, dst, dst_stride);
+    }
+    return builtin_glyph_coverage(font, glyph, dst, dst_stride);
+}
+
+fn gpu_text_flush(ctx: &RenderCtx, count: i32) void {
+    if ctx == null || ctx.gpu == null || count <= 0 {
+        return;
+    }
+    ctx.gpu.draw_glyphs(&_gpu_text_glyph_cmds[0], count);
+}
+
+fn draw_text_gpu(ctx: &RenderCtx, x: i16, y: i16, text: &const byte, len: usize, font: &Font, color: &Color) bool {
+    if ctx == null || ctx.gpu == null || !ctx.gpu.accelerated() || font == null || text == null || len == 0usize {
+        return false;
+    }
+    if color.a == 0u8 {
+        return true;
+    }
+    if !gpu_text_can_draw(text, len, font) {
+        return false;
+    }
+
+    const clip: Rect = ctx.current_clip();
+    if clip.is_empty() {
+        return true;
+    }
+    ctx.gpu.set_clip(clip);
+
+    var cursor: i16 = x;
+    var i: usize = 0usize;
+    var prev_codepoint: u32 = 0u32;
+    var prev_font: &Font = null;
+    var batch_count: i32 = 0;
+    while i < len {
+        const decoded: DecodedCodePoint = decode_codepoint(text, len, i);
+        const resolved: ResolvedGlyph = resolve_glyph_for_font(font, decoded.codepoint);
+        const glyph: Glyph = resolved.glyph;
+        if prev_codepoint != 0u32 && prev_font == resolved.font {
+            cursor = cursor + resolved.font.kerning_adjust(prev_codepoint, glyph.codepoint) as i16;
+        }
+
+        const glyph_x: i16 = cursor + glyph.offset_x as i16;
+        const glyph_y: i16 = y + glyph.offset_y as i16;
+        if glyph.width != 0u8 && glyph.height != 0u8 {
+            if batch_count >= GPU_TEXT_GLYPH_BATCH_CAPACITY {
+                gpu_text_flush(ctx, batch_count);
+                batch_count = 0;
+            }
+
+            const slot_offset: usize = (batch_count as usize) * GPU_TEXT_GLYPH_SLOT_BYTES as usize;
+            if !gpu_text_build_glyph_coverage(resolved.font, &glyph, &(_gpu_text_glyph_storage[slot_offset]), GPU_TEXT_GLYPH_SLOT_DIM as usize) {
+                gpu_text_flush(ctx, batch_count);
+                return false;
+            }
+
+            const clipped: Rect = clip.intersect(Rect{ x: glyph_x, y: glyph_y, w: glyph.width as u16, h: glyph.height as u16 });
+            if !clipped.is_empty() {
+                _gpu_text_glyph_cmds[batch_count as usize] = GpuGlyphCmd{
+                    dst_rect: Rect{ x: glyph_x, y: glyph_y, w: glyph.width as u16, h: glyph.height as u16 },
+                    pixels: &(_gpu_text_glyph_storage[slot_offset]),
+                    glyph_w: glyph.width as i32,
+                    glyph_h: glyph.height as i32,
+                    stride: GPU_TEXT_GLYPH_SLOT_DIM,
+                    format_tag: PixelFormat.A8 as i32,
+                    color: color[0],
+                };
+                batch_count = batch_count + 1;
+                ctx.dirty.add(Rect{ x: clipped.x, y: clipped.y, w: clipped.w, h: clipped.h });
+            }
+        }
+
+        cursor = cursor + glyph.advance as i16;
+        prev_codepoint = glyph.codepoint;
+        prev_font = resolved.font;
+        if decoded.span <= 1usize || i + decoded.span > len {
+            i = i + 1usize;
+        } else {
+            i = i + decoded.span;
+        }
+    }
+    gpu_text_flush(ctx, batch_count);
+    return true;
 }
 
 Font {
@@ -3415,6 +3752,11 @@ export fn draw_text(ctx: &RenderCtx, x: i16, y: i16, text: &const byte, len: usi
     }
     defer {
         ctx.mode = prev_mode;
+    }
+
+    if draw_text_gpu(ctx, x, y, text, len, font, &color) {
+        ctx.stats.text_ops = ctx.stats.text_ops + 1u32;
+        return;
     }
 
     var cursor: i16 = x;

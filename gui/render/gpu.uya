@@ -36,6 +36,16 @@ export struct GpuImageCmd {
     has_src: i32,
 }
 
+export struct GpuGlyphCmd {
+    dst_rect: Rect,
+    pixels: &const byte,
+    glyph_w: i32,
+    glyph_h: i32,
+    stride: i32,
+    format_tag: i32,
+    color: Color,
+}
+
 fn gpu_fill_rect_cmd(rect: Rect, color: Color) GpuFillRectCmd {
     return GpuFillRectCmd{
         rect: rect,
@@ -91,6 +101,7 @@ export interface IGpuCtx {
     fn draw_rects(self: &Self, cmds: &GpuStrokeRectCmd, count: i32) void;
     fn draw_lines(self: &Self, cmds: &GpuLineCmd, count: i32) void;
     fn draw_images(self: &Self, cmds: &GpuImageCmd, count: i32) void;
+    fn draw_glyphs(self: &Self, cmds: &GpuGlyphCmd, count: i32) void;
     fn fill_rects(self: &Self, cmds: &GpuFillRectCmd, count: i32) void;
     fn sync(self: &Self) void;
 }

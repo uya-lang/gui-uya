@@ -160,6 +160,16 @@ typedef struct UyaGuiGpuImageCmd {
     int32_t has_src;
 } UyaGuiGpuImageCmd;
 
+typedef struct UyaGuiGpuGlyphCmd {
+    UyaGuiRectCmd dst_rect;
+    const uint8_t *pixels;
+    int32_t glyph_w;
+    int32_t glyph_h;
+    int32_t stride;
+    int32_t format_tag;
+    UyaGuiColorCmd color;
+} UyaGuiGpuGlyphCmd;
+
 enum {
     SDL_EVT_NONE = 0,
     SDL_EVT_QUIT = 1,
@@ -927,6 +937,61 @@ static int uya_gui_sim_gles2_draw_image_region(UyaGuiSimDisplay *display,
         (float)src_h / (float)display->height,
         vertices
     );
+    return uya_gui_sim_gles2_draw_quad(display, display->gl_texture, vertices, rgba);
+}
+
+static int uya_gui_sim_gles2_draw_glyph(UyaGuiSimDisplay *display, const UyaGuiGpuGlyphCmd *cmd) {
+    GLfloat vertices[16];
+    GLfloat rgba[4];
+    int32_t y = 0;
+    if (cmd == NULL || cmd->pixels == NULL || cmd->glyph_w <= 0 || cmd->glyph_h <= 0 || cmd->stride <= 0) {
+        return 1;
+    }
+    if (cmd->glyph_w > display->width || cmd->glyph_h > display->height) {
+        uya_gui_sim_set_error("gles2 glyph region exceeds scratch texture");
+        return 0;
+    }
+    if (cmd->format_tag != 5) {
+        uya_gui_sim_set_error("unsupported glyph pixel format for gles2");
+        return 0;
+    }
+    if (!uya_gui_sim_gles2_ensure_rgba_capacity(display, (size_t)cmd->glyph_w * (size_t)cmd->glyph_h * 4u)) {
+        return 0;
+    }
+    while (y < cmd->glyph_h) {
+        const uint8_t *src_row = cmd->pixels + (size_t)y * (size_t)cmd->stride;
+        uint8_t *dst_row = display->gl_rgba_pixels + (size_t)y * (size_t)cmd->glyph_w * 4u;
+        int32_t x = 0;
+        while (x < cmd->glyph_w) {
+            const uint8_t alpha = src_row[x];
+            dst_row[x * 4 + 0] = 255u;
+            dst_row[x * 4 + 1] = 255u;
+            dst_row[x * 4 + 2] = 255u;
+            dst_row[x * 4 + 3] = alpha;
+            x += 1;
+        }
+        y += 1;
+    }
+    if (SDL_GL_MakeCurrent(display->window, display->gl_context) != 0) {
+        uya_gui_sim_set_error(SDL_GetError());
+        return 0;
+    }
+    display->gl.BindTexture(GL_TEXTURE_2D, display->gl_texture);
+    display->gl.PixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    display->gl.TexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, cmd->glyph_w, cmd->glyph_h, GL_RGBA, GL_UNSIGNED_BYTE, display->gl_rgba_pixels);
+    uya_gui_sim_gles2_rect_vertices(
+        display,
+        (float)cmd->dst_rect.x,
+        (float)cmd->dst_rect.y,
+        (float)cmd->dst_rect.x + (float)cmd->dst_rect.w,
+        (float)cmd->dst_rect.y + (float)cmd->dst_rect.h,
+        0.0f,
+        0.0f,
+        (float)cmd->glyph_w / (float)display->width,
+        (float)cmd->glyph_h / (float)display->height,
+        vertices
+    );
+    uya_gui_sim_color_cmd_to_rgba_f32(&cmd->color, rgba);
     return uya_gui_sim_gles2_draw_quad(display, display->gl_texture, vertices, rgba);
 }
 
@@ -1793,6 +1858,22 @@ int32_t uya_gui_sim_sdl_gles2_draw_images(void *handle, const UyaGuiGpuImageCmd 
             src_h = (int32_t)cmd->src_rect.h;
         }
         if (!uya_gui_sim_gles2_draw_image_region(display, cmd->pixels, cmd->stride, cmd->format_tag, src_x, src_y, src_w, src_h, &cmd->dst_rect)) {
+            return 0;
+        }
+        i += 1;
+    }
+    return 1;
+}
+
+int32_t uya_gui_sim_sdl_gles2_draw_glyphs(void *handle, const UyaGuiGpuGlyphCmd *cmds, int32_t count) {
+    UyaGuiSimDisplay *display = (UyaGuiSimDisplay *)handle;
+    int32_t i = 0;
+    if (display == NULL || cmds == NULL || count < 0 || !display->direct_frame_active) {
+        uya_gui_sim_set_error("gles2 draw glyphs unavailable");
+        return 0;
+    }
+    while (i < count) {
+        if (!uya_gui_sim_gles2_draw_glyph(display, &cmds[i])) {
             return 0;
         }
         i += 1;

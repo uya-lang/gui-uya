@@ -13,6 +13,7 @@ use platform.disp.framebuffer_new;
 use platform.disp.framebuffer_rect;
 use platform.disp.framebuffer_required_bytes;
 use render.gpu.GpuFillRectCmd;
+use render.gpu.GpuGlyphCmd;
 use render.gpu.GpuImageCmd;
 use render.gpu.GpuLineCmd;
 use render.gpu.GpuStrokeRectCmd;
@@ -48,6 +49,7 @@ extern fn uya_gui_sim_sdl_gles2_fill_rects(handle: &void, cmds: &GpuFillRectCmd,
 extern fn uya_gui_sim_sdl_gles2_draw_rects(handle: &void, cmds: &GpuStrokeRectCmd, count: i32) i32;
 extern fn uya_gui_sim_sdl_gles2_draw_lines(handle: &void, cmds: &GpuLineCmd, count: i32) i32;
 extern fn uya_gui_sim_sdl_gles2_draw_images(handle: &void, cmds: &GpuImageCmd, count: i32) i32;
+extern fn uya_gui_sim_sdl_gles2_draw_glyphs(handle: &void, cmds: &GpuGlyphCmd, count: i32) i32;
 extern fn uya_gui_sim_sdl_gles2_present_frame(handle: &void, pixels: &const byte, pitch: i32, width: i32, height: i32, rects: &Rect, rect_count: i32, overlay_enabled: i32) i32;
 extern fn uya_gui_sim_sdl_last_error() &byte;
 
@@ -399,6 +401,13 @@ export struct SdlDisplay {
             return false;
         }
         return uya_gui_sim_sdl_gles2_draw_images(self.host, cmds, count) != 0;
+    }
+
+    fn gpu_draw_glyphs(self: &Self, cmds: &GpuGlyphCmd, count: i32) bool {
+        if self.host == null {
+            return false;
+        }
+        return uya_gui_sim_sdl_gles2_draw_glyphs(self.host, cmds, count) != 0;
     }
 
     fn present_gpu_frame(self: &Self, dirty: &DirtyRegion) bool {

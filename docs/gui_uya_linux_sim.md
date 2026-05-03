@@ -98,7 +98,7 @@ make sim-fb-run
 - 可覆盖参数：`SIM_HEADLESS_ARGS="--max-frames 5 --screenshot build/sim/custom.bmp"`
 - 实现方式：通过 `SDL_VIDEODRIVER=dummy` 复用 SDL2 主线，不额外分叉一套 headless runtime
 - 说明：`--gpu auto` 在 dummy video / 无 GLES2 context 的环境下会自动回退到 software；`--gpu gles2` 会严格要求成功创建 GLES2 context
-- 说明：当 `--gpu gles2 --cpu-render batch` 同时启用时，batch 内的矩形 / 描边矩形 / 线段 / 图像会直接走 GLES2 绘制；文本与复杂 AA 图元仍保留 CPU fallback
+- 说明：当 `--gpu gles2 --cpu-render batch` 同时启用时，batch 内的矩形 / 描边矩形 / 线段 / 图像会直接走 GLES2 绘制；文本会提交 A8 字形覆盖图到 GLES2，复杂矢量描边字形仍保留 CPU fallback
 
 ### Framebuffer 专用入口
 

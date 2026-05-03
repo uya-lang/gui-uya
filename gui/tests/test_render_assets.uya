@@ -7,6 +7,7 @@ use platform.disp.PixelFormat;
 use platform.disp.framebuffer_new;
 use render.ctx.RenderCtx;
 use render.ctx.ctx_pixel;
+use render.ctx.render_ctx_attach_gpu;
 use render.ctx.render_ctx_new;
 use render.font.BitmapFontAsset;
 use render.font.Font;
@@ -33,6 +34,12 @@ use render.font.ttf_cache_miss_count;
 use render.font.ttf_cache_reset;
 use render.font.ttf_font_load_memory;
 use render.font.ttf_font_set_hinting;
+use render.gpu.GpuFillRectCmd;
+use render.gpu.GpuGlyphCmd;
+use render.gpu.GpuImageCmd;
+use render.gpu.GpuLineCmd;
+use render.gpu.GpuStrokeRectCmd;
+use render.gpu.IGpuCtx;
 use render.img.ImageData;
 use render.img.draw_image;
 use render.img.draw_image_clipped;
@@ -51,6 +58,143 @@ use widget.base.widget_font;
 
 export const TEST_RENDER_ASSETS_MODULE: i32 = 1;
 const TEST_DEJAVU_TTF_BYTES: &[const byte] = @embed("../render/DejaVuSans.ttf");
+
+struct CountingTextGpu : IGpuCtx {
+    glyph_count: i32,
+    last_color: Color,
+
+    fn accelerated(self: &Self) bool {
+        _ = self;
+        return true;
+    }
+
+    fn clear(self: &Self, color: Color) void {
+        _ = self;
+        _ = color;
+    }
+
+    fn set_clip(self: &Self, clip: Rect) void {
+        _ = self;
+        _ = clip;
+    }
+
+    fn fill_round_shadow(self: &Self, rect: Rect, radius: i32, blur: i32, color: Color) void {
+        _ = self;
+        _ = rect;
+        _ = radius;
+        _ = blur;
+        _ = color;
+    }
+
+    fn draw_circle(self: &Self, cx: i32, cy: i32, r: i32, color: Color) void {
+        _ = self;
+        _ = cx;
+        _ = cy;
+        _ = r;
+        _ = color;
+    }
+
+    fn fill_circle(self: &Self, cx: i32, cy: i32, r: i32, color: Color) void {
+        _ = self;
+        _ = cx;
+        _ = cy;
+        _ = r;
+        _ = color;
+    }
+
+    fn draw_arc(self: &Self, cx: i32, cy: i32, r: i32, start_deg: i32, end_deg: i32, width: i32, color: Color) void {
+        _ = self;
+        _ = cx;
+        _ = cy;
+        _ = r;
+        _ = start_deg;
+        _ = end_deg;
+        _ = width;
+        _ = color;
+    }
+
+    fn fill_arc(self: &Self, cx: i32, cy: i32, r: i32, start_deg: i32, end_deg: i32, color: Color) void {
+        _ = self;
+        _ = cx;
+        _ = cy;
+        _ = r;
+        _ = start_deg;
+        _ = end_deg;
+        _ = color;
+    }
+
+    fn fill_round_rect(self: &Self, rect: Rect, radius: i32, color: Color) void {
+        _ = self;
+        _ = rect;
+        _ = radius;
+        _ = color;
+    }
+
+    fn draw_round_rect(self: &Self, rect: Rect, radius: i32, color: Color, width: i32) void {
+        _ = self;
+        _ = rect;
+        _ = radius;
+        _ = color;
+        _ = width;
+    }
+
+    fn fill_linear_gradient(self: &Self, rect: Rect, start: Color, end: Color, horizontal: bool) void {
+        _ = self;
+        _ = rect;
+        _ = start;
+        _ = end;
+        _ = horizontal;
+    }
+
+    fn fill_radial_gradient(self: &Self, rect: Rect, inner: Color, outer: Color) void {
+        _ = self;
+        _ = rect;
+        _ = inner;
+        _ = outer;
+    }
+
+    fn draw_rects(self: &Self, cmds: &GpuStrokeRectCmd, count: i32) void {
+        _ = self;
+        _ = cmds;
+        _ = count;
+    }
+
+    fn draw_lines(self: &Self, cmds: &GpuLineCmd, count: i32) void {
+        _ = self;
+        _ = cmds;
+        _ = count;
+    }
+
+    fn draw_images(self: &Self, cmds: &GpuImageCmd, count: i32) void {
+        _ = self;
+        _ = cmds;
+        _ = count;
+    }
+
+    fn draw_glyphs(self: &Self, cmds: &GpuGlyphCmd, count: i32) void {
+        self.glyph_count = self.glyph_count + count;
+        if count > 0 {
+            self.last_color = cmds[0].color;
+        }
+    }
+
+    fn fill_rects(self: &Self, cmds: &GpuFillRectCmd, count: i32) void {
+        _ = self;
+        _ = cmds;
+        _ = count;
+    }
+
+    fn sync(self: &Self) void {
+        _ = self;
+    }
+}
+
+fn counting_text_gpu_new() CountingTextGpu {
+    return CountingTextGpu{
+        glyph_count: 0,
+        last_color: Color{ r: 0, g: 0, b: 0, a: 0 },
+    };
+}
 
 test "image draw and cache get work" {
     var dst_bytes: [byte: 256] = [];
@@ -131,6 +275,23 @@ test "font draws and measures text" {
 
     try assert_eq_bool(ctx.stats.text_ops >= 2u32, true);
     try assert_eq_bool(ctx_pixel(&ctx, 1, 0) == white2, true);
+}
+
+test "font submits glyph coverage to accelerated gpu" {
+    var bytes: [byte: 1024] = [];
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 16, 16, 64, PixelFormat.ARGB8888));
+    var gpu: CountingTextGpu = counting_text_gpu_new();
+    var gpu_iface: IGpuCtx = gpu;
+    const font: Font = font_default();
+    const green: Color = Color{ r: 0, g: 255, b: 0, a: 255 };
+    const green_expect: Color = Color{ r: 0, g: 255, b: 0, a: 255 };
+
+    render_ctx_attach_gpu(&ctx, &gpu_iface);
+    draw_text(&ctx, 0, 0, "OK", 2usize, &font, green);
+
+    try assert_eq_i32(ctx.stats.text_ops as i32, 1);
+    try assert_eq_i32(gpu.glyph_count, 2);
+    try assert_eq_bool(gpu.last_color == green_expect, true);
 }
 
 test "font glyphs are no longer placeholder boxes" {
