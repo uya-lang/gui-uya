@@ -472,10 +472,6 @@ static int uya_gui_sim_update_texture_region(UyaGuiSimDisplay *display,
                                              const SDL_Rect *rect,
                                              const uint8_t *pixels,
                                              int32_t pitch) {
-    uint8_t *dst_pixels = NULL;
-    int dst_pitch = 0;
-    int32_t row = 0;
-    int32_t row_bytes = 0;
     if (display == NULL || display->texture == NULL || rect == NULL || pixels == NULL) {
         uya_gui_sim_set_error("texture region update unavailable");
         return 0;
@@ -483,20 +479,10 @@ static int uya_gui_sim_update_texture_region(UyaGuiSimDisplay *display,
     if (rect->w <= 0 || rect->h <= 0) {
         return 1;
     }
-    if (SDL_LockTexture(display->texture, rect, (void **)&dst_pixels, &dst_pitch) != 0) {
+    if (SDL_UpdateTexture(display->texture, rect, pixels, pitch) != 0) {
         uya_gui_sim_set_error(SDL_GetError());
         return 0;
     }
-    row_bytes = rect->w * 4;
-    while (row < rect->h) {
-        (void)memcpy(
-            dst_pixels + (size_t)row * (size_t)dst_pitch,
-            pixels + (size_t)row * (size_t)pitch,
-            (size_t)row_bytes
-        );
-        row += 1;
-    }
-    SDL_UnlockTexture(display->texture);
     return 1;
 }
 
@@ -1368,6 +1354,8 @@ static int uya_gui_sim_present_gles2(UyaGuiSimDisplay *display, const uint8_t *p
 
     display->gl.Viewport(0, 0, drawable_w, drawable_h);
     display->gl.Clear(GL_COLOR_BUFFER_BIT);
+    GLfloat vertices[16];
+    uya_gui_sim_gles2_rect_vertices(display, 0.0f, 0.0f, (float)width, (float)height, 0.0f, 0.0f, 1.0f, 1.0f, vertices);
     display->gl.UseProgram(display->gl_program);
     display->gl.ActiveTexture(GL_TEXTURE0);
     display->gl.BindTexture(GL_TEXTURE_2D, display->gl_texture);
@@ -1376,6 +1364,7 @@ static int uya_gui_sim_present_gles2(UyaGuiSimDisplay *display, const uint8_t *p
     display->gl.Uniform1i(display->gl_uniform_tex, 0);
     display->gl.Uniform4f(display->gl_uniform_color, 1.0f, 1.0f, 1.0f, 1.0f);
     display->gl.BindBuffer(GL_ARRAY_BUFFER, display->gl_vbo);
+    display->gl.BufferData(GL_ARRAY_BUFFER, (GLsizeiptr)(sizeof(GLfloat) * 16), vertices, GL_DYNAMIC_DRAW);
     display->gl.EnableVertexAttribArray((GLuint)display->gl_attr_pos);
     display->gl.EnableVertexAttribArray((GLuint)display->gl_attr_uv);
     display->gl.VertexAttribPointer((GLuint)display->gl_attr_pos, 2, GL_FLOAT, GL_FALSE, (GLsizei)(sizeof(GLfloat) * 4), (const void *)0);
@@ -1418,6 +1407,8 @@ static int uya_gui_sim_begin_gles2_frame_with_pixels(UyaGuiSimDisplay *display, 
     uya_gui_sim_gles2_reset_full_clip(display);
     display->gl.ClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     display->gl.Clear(GL_COLOR_BUFFER_BIT);
+    GLfloat vertices[16];
+    uya_gui_sim_gles2_rect_vertices(display, 0.0f, 0.0f, (float)width, (float)height, 0.0f, 0.0f, 1.0f, 1.0f, vertices);
     display->gl.UseProgram(display->gl_program);
     display->gl.ActiveTexture(GL_TEXTURE0);
     display->gl.BindTexture(GL_TEXTURE_2D, display->gl_texture);
@@ -1426,6 +1417,7 @@ static int uya_gui_sim_begin_gles2_frame_with_pixels(UyaGuiSimDisplay *display, 
     display->gl.Uniform1i(display->gl_uniform_tex, 0);
     display->gl.Uniform4f(display->gl_uniform_color, 1.0f, 1.0f, 1.0f, 1.0f);
     display->gl.BindBuffer(GL_ARRAY_BUFFER, display->gl_vbo);
+    display->gl.BufferData(GL_ARRAY_BUFFER, (GLsizeiptr)(sizeof(GLfloat) * 16), vertices, GL_DYNAMIC_DRAW);
     display->gl.EnableVertexAttribArray((GLuint)display->gl_attr_pos);
     display->gl.EnableVertexAttribArray((GLuint)display->gl_attr_uv);
     display->gl.VertexAttribPointer((GLuint)display->gl_attr_pos, 2, GL_FLOAT, GL_FALSE, (GLsizei)(sizeof(GLfloat) * 4), (const void *)0);

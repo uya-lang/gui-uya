@@ -216,13 +216,14 @@ fn run_simulator_sdl(cfg: SimConfig) i32 {
                 pending_seed_present = false;
             }
         } else if dirty_render {
-            const dirty_view: DirtyRegionView = ctx.dirty.get_regions();
             if retained_result.present_mode == RenderPresentMode.Full {
                 if !display.present() {
                     _ = printf("[sim] present failed: %s\n" as *byte, sdl_display_last_error());
                     break;
                 }
-            } else if pending_seed_present && dirty_view.is_empty() {
+            } else if pending_seed_present {
+                // Seeded retained content must be uploaded once before partial presents,
+                // otherwise untouched SDL texture regions remain black.
                 if !display.present() {
                     _ = printf("[sim] present failed: %s\n" as *byte, sdl_display_last_error());
                     break;
@@ -366,13 +367,14 @@ fn run_simulator_fb(cfg_in: SimConfig) i32 {
         }
 
         if dirty_render {
-            const dirty_view: DirtyRegionView = ctx.dirty.get_regions();
             if retained_result.present_mode == RenderPresentMode.Full {
                 if !display.present() {
                     _ = printf("[sim] framebuffer present failed: %s\n" as *byte, fb_display_last_error());
                     break;
                 }
-            } else if pending_seed_present && dirty_view.is_empty() {
+            } else if pending_seed_present {
+                // Ensure the seeded retained frame reaches the real display before any
+                // dirty-only updates, or untouched regions can keep stale/black pixels.
                 if !display.present() {
                     _ = printf("[sim] framebuffer present failed: %s\n" as *byte, fb_display_last_error());
                     break;
