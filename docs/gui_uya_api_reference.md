@@ -38,7 +38,7 @@
 
 ## `gui/benchmarks/core_bench.uya`
 
-- L411: `export fn run_core_bench() i32 {`
+- L412: `export fn run_core_bench() i32 {`
   说明: 运行 `core_bench` 并返回退出码。
 
 ## `gui/core/bitmap.uya`
@@ -198,18 +198,55 @@
 - L10: `export fn run_custom_keyboard_example() i32 {`
   说明: 运行 `custom_keyboard_example` 示例并返回退出码。
 
+## `gui/examples/demo_animation.uya`
+
+- L606: `export struct AnimationRetained {`
+- L662: `export fn animation_retained_new() AnimationRetained {`
+  说明: 创建默认的 `AnimationRetained` 实例。
+- L720: `export fn animation_demo_section_rect(index: i32) Rect {`
+  说明: 返回 section 按钮在 demo 本地坐标系中的区域。
+- L725: `export fn animation_demo_replay_rect() Rect {`
+  说明: 返回 `Replay` 按钮在 demo 本地坐标系中的区域。
+- L730: `export fn animation_demo_toggle_rect() Rect {`
+  说明: 返回 `Play/Pause` 按钮在 demo 本地坐标系中的区域。
+- L735: `export fn animation_retained_init(anim: &AnimationRetained) void {`
+  说明: 初始化 `animation_retained` 的内部状态。
+- L991: `export fn animation_retained_set_view(anim: &AnimationRetained, view: i32) void {`
+  说明: 切换到指定动画视图。
+- L1012: `export fn animation_retained_next_view(anim: &AnimationRetained) void {`
+  说明: 切换到下一个动画视图。
+- L1025: `export fn animation_retained_prev_view(anim: &AnimationRetained) void {`
+  说明: 切换到上一个动画视图。
+- L1038: `export fn animation_retained_sync(anim: &AnimationRetained) void {`
+  说明: 将外部状态同步到 `animation_retained`。
+- L1048: `export fn animation_retained_replay(anim: &AnimationRetained) void {`
+  说明: 重播整段动画序列。
+- L1061: `export fn animation_retained_toggle(anim: &AnimationRetained) void {`
+  说明: 切换动画播放状态。
+- L1078: `export fn animation_retained_handle_touch(anim: &AnimationRetained, evt: &Event, local: Point) bool {`
+  说明: 处理动画 demo 的本地触摸事件。
+- L1118: `export fn animation_retained_update(anim: &AnimationRetained, dt_ms: u32) void {`
+  说明: 推进动画 demo 的时间轴。
+- L1137: `export fn render_demo_animation_retained_state(anim: &AnimationRetained, ctx: &RenderCtx, origin_x: i16, origin_y: i16) void {`
+  说明: 使用 retained 状态将 `animation` demo 渲染到指定上下文。
+- L1153: `export fn render_demo_animation(ctx: &RenderCtx, origin_x: i16, origin_y: i16) void {`
+  说明: 将 `animation` demo 渲染到指定上下文。
+- L1159: `export fn run_demo_animation() i32 {`
+  说明: 运行 `animation` demo 并返回退出码。
+
 ## `gui/examples/demo_clock.uya`
 
-- L27: `export struct ClockRetained {`
-- L39: `export fn clock_retained_new() ClockRetained {`
+- L121: `export struct ClockRetained {`
+- L145: `export fn clock_retained_new() ClockRetained {`
   说明: 创建默认的 `ClockRetained` 实例。
-- L53: `export fn clock_retained_init(clock: &ClockRetained) void {`
+- L239: `export fn clock_retained_sync(clock: &ClockRetained) void {`
+- L284: `export fn clock_retained_init(clock: &ClockRetained) void {`
   说明: 初始化 `clock_retained` 的内部状态。
-- L97: `export fn render_demo_clock_retained(clock: &ClockRetained, ctx: &RenderCtx, origin_x: i16, origin_y: i16) void {`
+- L324: `export fn render_demo_clock_retained(clock: &ClockRetained, ctx: &RenderCtx, origin_x: i16, origin_y: i16) void {`
   说明: 使用 retained 状态将 `clock_retained` 渲染到指定上下文。
-- L107: `export fn render_demo_clock(ctx: &RenderCtx, origin_x: i16, origin_y: i16) void {`
+- L335: `export fn render_demo_clock(ctx: &RenderCtx, origin_x: i16, origin_y: i16) void {`
   说明: 将 `clock` demo 渲染到指定上下文。
-- L113: `export fn run_demo_clock() i32 {`
+- L341: `export fn run_demo_clock() i32 {`
   说明: 运行 `clock` demo 并返回退出码。
 
 ## `gui/examples/demo_custom.uya`
@@ -395,7 +432,7 @@
 
 ## `gui/examples/phase2_smoke.uya`
 
-- L27: `export fn run_phase2_smoke() i32 {`
+- L28: `export fn run_phase2_smoke() i32 {`
   说明: 运行 `phase2_smoke` 场景并返回退出码。
 
 ## `gui/examples/phase3_smoke.uya`
@@ -410,7 +447,7 @@
 
 ## `gui/examples/phase6_smoke.uya`
 
-- L14: `export fn run_phase6_smoke() i32 {`
+- L15: `export fn run_phase6_smoke() i32 {`
   说明: 运行 `phase6_smoke` 场景并返回退出码。
 
 ## `gui/examples/text_render_compare.uya`
@@ -492,40 +529,40 @@
 
 ## `gui/platform/disp.uya`
 
-- L201: `export enum PixelFormat {`
-- L212: `export struct FrameBuffer {`
-- L219: `export struct DisplayCtx {`
-- L245: `export fn bytes_per_pixel(format: PixelFormat) u8 {`
+- L258: `export enum PixelFormat {`
+- L269: `export struct FrameBuffer {`
+- L276: `export struct DisplayCtx {`
+- L302: `export fn bytes_per_pixel(format: PixelFormat) u8 {`
   说明: 返回指定像素格式的每像素字节数。
-- L262: `export fn framebuffer_required_bytes(w: u16, h: u16, format: PixelFormat) usize {`
+- L319: `export fn framebuffer_required_bytes(w: u16, h: u16, format: PixelFormat) usize {`
   说明: 计算指定帧缓冲配置所需的总字节数。
-- L273: `export fn framebuffer_rect(fb: &FrameBuffer) Rect {`
+- L330: `export fn framebuffer_rect(fb: &FrameBuffer) Rect {`
   说明: 返回帧缓冲覆盖的完整矩形区域。
-- L278: `export fn framebuffer_copy(dst: &FrameBuffer, src: &FrameBuffer) bool {`
+- L335: `export fn framebuffer_copy(dst: &FrameBuffer, src: &FrameBuffer) bool {`
   说明: 复制整个源帧缓冲到目标帧缓冲。
-- L307: `export fn framebuffer_copy_rect(dst: &FrameBuffer, src: &FrameBuffer, rect: Rect) bool {`
+- L364: `export fn framebuffer_copy_rect(dst: &FrameBuffer, src: &FrameBuffer, rect: Rect) bool {`
   说明: 复制源帧缓冲的指定矩形区域到目标帧缓冲。
-- L347: `export fn framebuffer_new(pixels: &byte, w: u16, h: u16, stride: u16, format: PixelFormat) FrameBuffer {`
+- L404: `export fn framebuffer_new(pixels: &byte, w: u16, h: u16, stride: u16, format: PixelFormat) FrameBuffer {`
   说明: 根据像素指针和尺寸信息构造帧缓冲描述符。
-- L357: `export fn empty_framebuffer() FrameBuffer {`
+- L414: `export fn empty_framebuffer() FrameBuffer {`
   说明: 返回空的帧缓冲描述符。
-- L367: `export fn display_ctx_new(front: FrameBuffer, back: FrameBuffer) DisplayCtx {`
+- L424: `export fn display_ctx_new(front: FrameBuffer, back: FrameBuffer) DisplayCtx {`
   说明: 创建包含前后缓冲的显示上下文。
-- L376: `export fn framebuffer_inside(fb: &FrameBuffer, x: i32, y: i32) bool {`
+- L433: `export fn framebuffer_inside(fb: &FrameBuffer, x: i32, y: i32) bool {`
   说明: 判断坐标是否位于帧缓冲范围内。
-- L381: `export fn framebuffer_get_pixel(fb: &FrameBuffer, x: i32, y: i32) Color {`
+- L438: `export fn framebuffer_get_pixel(fb: &FrameBuffer, x: i32, y: i32) Color {`
   说明: 读取帧缓冲指定坐标的颜色值。
-- L440: `export fn framebuffer_set_pixel(fb: &FrameBuffer, x: i32, y: i32, color: &Color) void {`
+- L497: `export fn framebuffer_set_pixel(fb: &FrameBuffer, x: i32, y: i32, color: &Color) void {`
   说明: 向帧缓冲指定坐标写入颜色值。
-- L510: `export fn framebuffer_clear(fb: &FrameBuffer, color: Color) void {`
+- L513: `export fn framebuffer_clear(fb: &FrameBuffer, color: Color) void {`
   说明: 使用指定颜色清空整个帧缓冲。
-- L536: `export enum DisplayDriverKind {`
-- L545: `export struct DisplayDriverProfile {`
-- L556: `export fn display_driver_profile(kind: DisplayDriverKind) DisplayDriverProfile {`
+- L539: `export enum DisplayDriverKind {`
+- L548: `export struct DisplayDriverProfile {`
+- L559: `export fn display_driver_profile(kind: DisplayDriverKind) DisplayDriverProfile {`
   说明: 返回指定显示驱动类型的能力画像。
-- L624: `export fn display_driver_required_bytes(kind: DisplayDriverKind) usize {`
+- L627: `export fn display_driver_required_bytes(kind: DisplayDriverKind) usize {`
   说明: 计算指定显示驱动默认缓冲所需的字节数。
-- L630: `export fn framebuffer_new_for_driver(pixels: &byte, kind: DisplayDriverKind) FrameBuffer {`
+- L633: `export fn framebuffer_new_for_driver(pixels: &byte, kind: DisplayDriverKind) FrameBuffer {`
   说明: 按驱动默认画像构造帧缓冲描述符。
 
 ## `gui/platform/fb/disp_fb.uya`
@@ -596,11 +633,17 @@
 
 ## `gui/platform/sdl2/disp_sdl.uya`
 
-- L31: `export struct SdlDisplay {`
-- L225: `export fn sdl_display_new() SdlDisplay {`
+- L54: `export struct SdlDisplay {`
+- L446: `export fn sdl_display_new() SdlDisplay {`
   说明: 创建 SDL2 显示驱动实例。
-- L239: `export fn sdl_display_last_error() &const byte {`
+- L462: `export fn sdl_display_last_error() &const byte {`
   说明: 返回最近一次 SDL2 显示驱动错误信息。
+
+## `gui/platform/sdl2/gpu_sdl.uya`
+
+- L16: `export struct SdlGles2GpuCtx : IGpuCtx {`
+- L233: `export fn sdl_gles2_gpu_new(display: &SdlDisplay, mirror: &RenderCtx) SdlGles2GpuCtx {`
+  说明: 基于 SDL GLES2 display 和共享 framebuffer 创建 GPU 上下文。
 
 ## `gui/platform/sdl2/indev_sdl.uya`
 
@@ -620,149 +663,172 @@
 
 ## `gui/render/batch.uya`
 
-- L11: `export const DRAW_BATCH_CAPACITY: i32 = 64;`
-- L13: `export enum DrawCmdKind {`
-- L20: `export struct DrawCmd {`
-- L237: `export struct DrawBatch {`
-- L400: `export fn draw_batch_new() DrawBatch {`
+- L8: `export const DRAW_BATCH_CAPACITY: i32 = 64;`
+- L10: `export enum DrawCmdKind {`
+- L17: `export struct DrawCmd {`
+- L234: `export struct DrawBatch {`
+- L376: `export fn draw_batch_new() DrawBatch {`
   说明: 创建空的绘制批处理缓冲区。
+
+## `gui/render/cpu_backend.uya`
+
+- L9: `export enum CpuRenderBackendKind {`
+- L15: `export fn cpu_render_backend_name(kind: CpuRenderBackendKind) &const byte {`
+  说明: 返回 CPU 渲染后端的显示名称。
+- L23: `export fn cpu_render_batch_execute(ctx: &RenderCtx, batch: &DrawBatch) void {`
+  说明: 使用 CPU 渲染路径执行一批绘制命令。
 
 ## `gui/render/ctx.uya`
 
-- L19: `export const MAX_CLIP_STACK: i32 = 16;`
-- L326: `export enum RenderMode {`
-- L332: `export struct RenderStats {`
-- L343: `export struct RenderCtx {`
-- L927: `export fn empty_framebuffer_color() Color {`
+- L25: `export const MAX_CLIP_STACK: i32 = 16;`
+- L368: `export enum RenderMode {`
+- L374: `export struct RenderStats {`
+- L385: `export struct RenderCtx {`
+- L1330: `export fn empty_framebuffer_color() Color {`
   说明: 返回空帧缓冲上下文使用的清屏颜色。
-- L932: `export fn render_ctx_new(fb: FrameBuffer) RenderCtx {`
+- L1335: `export fn render_ctx_new(fb: FrameBuffer) RenderCtx {`
   说明: 基于帧缓冲创建渲染上下文。
-- L955: `export fn empty_render_ctx() RenderCtx {`
+- L1360: `export fn empty_render_ctx() RenderCtx {`
   说明: 返回空的渲染上下文。
-- L960: `export fn default_ctx() RenderCtx {`
+- L1365: `export fn default_ctx() RenderCtx {`
   说明: 返回带默认帧缓冲的渲染上下文。
-- L965: `export fn ctx_pixel(ctx: &RenderCtx, x: i16, y: i16) Color {`
+- L1370: `export fn ctx_pixel(ctx: &RenderCtx, x: i16, y: i16) Color {`
   说明: 读取渲染上下文帧缓冲中的指定像素。
+- L1400: `export fn render_ctx_attach_batch(ctx: &RenderCtx, batch: &DrawBatch) void {`
+  说明: 附加 CPU batch 存储区，供 `RenderMode.Batch` 复用。
+- L1412: `export fn render_ctx_attach_gpu(ctx: &RenderCtx, gpu: &IGpuCtx) void {`
+  说明: 附加 GPU 设备，供 batch flush 时提交。
+- L1421: `export fn render_ctx_set_mode(ctx: &RenderCtx, mode: RenderMode) void {`
+  说明: 切换渲染上下文模式。
+- L1430: `export fn render_ctx_flush(ctx: &RenderCtx) void {`
+  说明: 刷新 CPU batch 中待执行的绘制命令。
 
 ## `gui/render/font.uya`
 
-- L62: `export const UI_FONT_BASE_DPI: u16 = 96u16;`
-- L63: `export const BITMAP_FONT_GLYPH_CAPACITY: i32 = 128;`
-- L64: `export const BITMAP_FONT_UNICODE_CAPACITY: i32 = 64;`
-- L65: `export const BITMAP_FONT_KERNING_CAPACITY: i32 = 64;`
-- L66: `export const TTF_POINT_CAPACITY: i32 = 2048;`
-- L67: `export const TTF_CONTOUR_CAPACITY: i32 = 256;`
-- L68: `export const TTF_EDGE_CAPACITY: i32 = 16384;`
-- L69: `export const TTF_COMPOSITE_DEPTH_MAX: i32 = 8;`
-- L70: `export const TTF_CACHE_ENTRY_CAPACITY: i32 = 1024;`
-- L71: `export const TTF_CACHE_SLOT_DIM: i32 = 64;`
-- L72: `export const TTF_CACHE_SLOT_BYTES: i32 = TTF_CACHE_SLOT_DIM * TTF_CACHE_SLOT_DIM;`
-- L73: `export const TTF_CACHE_STORAGE_BYTES: i32 = TTF_CACHE_ENTRY_CAPACITY * TTF_CACHE_SLOT_BYTES;`
-- L74: `export const SYSTEM_UI_FONT_SLOT_CAPACITY: i32 = 16;`
-- L76: `export enum TextAlign {`
-- L82: `export enum FontBitmapFormat {`
-- L88: `export enum FontRenderKind {`
-- L100: `export struct Glyph {`
-- L115: `export struct GlyphLookupEntry {`
-- L120: `export struct GlyphLookupTable {`
-- L127: `export struct KerningPair {`
-- L133: `export struct Font {`
-- L154: `export struct BitmapFontAsset {`
-- L200: `export struct TtfFontAsset {`
-- L1780: `export fn ttf_cache_reset() void {`
+- L64: `export const UI_FONT_BASE_DPI: u16 = 96u16;`
+- L65: `export const BITMAP_FONT_GLYPH_CAPACITY: i32 = 128;`
+- L66: `export const BITMAP_FONT_UNICODE_CAPACITY: i32 = 64;`
+- L67: `export const BITMAP_FONT_KERNING_CAPACITY: i32 = 64;`
+- L68: `export const TTF_POINT_CAPACITY: i32 = 2048;`
+- L69: `export const TTF_CONTOUR_CAPACITY: i32 = 256;`
+- L70: `export const TTF_EDGE_CAPACITY: i32 = 16384;`
+- L71: `export const TTF_COMPOSITE_DEPTH_MAX: i32 = 8;`
+- L72: `export const TTF_CACHE_ENTRY_CAPACITY: i32 = 1024;`
+- L73: `export const TTF_CACHE_SLOT_DIM: i32 = 64;`
+- L74: `export const TTF_CACHE_SLOT_BYTES: i32 = TTF_CACHE_SLOT_DIM * TTF_CACHE_SLOT_DIM;`
+- L75: `export const TTF_CACHE_STORAGE_BYTES: i32 = TTF_CACHE_ENTRY_CAPACITY * TTF_CACHE_SLOT_BYTES;`
+- L76: `export const SYSTEM_UI_FONT_SLOT_CAPACITY: i32 = 16;`
+- L78: `export enum TextAlign {`
+- L84: `export enum FontBitmapFormat {`
+- L90: `export enum FontRenderKind {`
+- L102: `export struct Glyph {`
+- L117: `export struct GlyphLookupEntry {`
+- L122: `export struct GlyphLookupTable {`
+- L129: `export struct KerningPair {`
+- L135: `export struct Font {`
+- L156: `export struct BitmapFontAsset {`
+- L202: `export struct TtfFontAsset {`
+- L1782: `export fn ttf_cache_reset() void {`
   说明: 重置运行时 TTF 字形缓存统计与内容。
-- L1803: `export fn ttf_cache_hit_count() u32 {`
+- L1805: `export fn ttf_cache_hit_count() u32 {`
   说明: 返回当前 TTF 字形缓存命中次数。
-- L1808: `export fn ttf_cache_miss_count() u32 {`
+- L1810: `export fn ttf_cache_miss_count() u32 {`
   说明: 返回当前 TTF 字形缓存未命中次数。
-- L1882: `export fn ttf_font_set_hinting(asset: &TtfFontAsset, enabled: bool) void {`
+- L1884: `export fn ttf_font_set_hinting(asset: &TtfFontAsset, enabled: bool) void {`
   说明: 切换指定 TTF 字体资产的 hinting 开关。
-- L1998: `export fn ttf_font_asset_new() TtfFontAsset {`
+- L2000: `export fn ttf_font_asset_new() TtfFontAsset {`
   说明: 创建空的 TTF 字体资产对象。
-- L2073: `export fn ttf_font_native_backend_is_c() bool {`
+- L2075: `export fn ttf_font_native_backend_is_c() bool {`
   说明: 判断当前默认 TTF 后端是否使用 C 实现。
-- L2078: `export fn ttf_font_set_default_native_backend_c(enabled: bool) void {`
+- L2080: `export fn ttf_font_set_default_native_backend_c(enabled: bool) void {`
   说明: 设置默认 TTF 后端是否优先使用 C 实现。
-- L2934: `export fn ttf_font_load_memory(asset: &TtfFontAsset, name: &const byte, data: &const byte, len: usize, pixel_height: u16) bool {`
+- L2936: `export fn ttf_font_load_memory(asset: &TtfFontAsset, name: &const byte, data: &const byte, len: usize, pixel_height: u16) bool {`
   说明: 从内存字节中加载一份 TTF 字体资产。
-- L3073: `export fn bitmap_font_asset_new() BitmapFontAsset {`
+- L3075: `export fn bitmap_font_asset_new() BitmapFontAsset {`
   说明: 创建空的位图字体资产对象。
-- L3094: `export fn bitmap_font_load_bmfont(asset: &BitmapFontAsset, desc: &const byte, len: usize, bitmap_data: &const byte, bitmap_stride: u16) bool {`
+- L3096: `export fn bitmap_font_load_bmfont(asset: &BitmapFontAsset, desc: &const byte, len: usize, bitmap_data: &const byte, bitmap_stride: u16) bool {`
   说明: 从 BMFont 描述文本和位图数据加载位图字体。
-- L3200: `export fn font_system_default() Font {`
+- L3202: `export fn font_system_default() Font {`
   说明: 返回默认系统字体。
-- L3225: `export fn font_system_compact() Font {`
+- L3227: `export fn font_system_compact() Font {`
   说明: 返回更紧凑的系统字体。
-- L3250: `export fn font_system_vector() Font {`
+- L3252: `export fn font_system_vector() Font {`
   说明: 返回矢量系统字体。
-- L3275: `export fn font_ui_default_ref(pixel_height: u8) &Font {`
+- L3277: `export fn font_ui_default_ref(pixel_height: u8) &Font {`
   说明: 返回按像素高度解析后的默认 UI 字体引用。
-- L3318: `export fn font_system_ui_ref(pixel_height: u8) &Font {`
+- L3320: `export fn font_system_ui_ref(pixel_height: u8) &Font {`
   说明: 返回按像素高度解析后的系统 UI 字体引用。
-- L3363: `export fn font_ui_set_dpi(dpi: u16) void {`
+- L3365: `export fn font_ui_set_dpi(dpi: u16) void {`
   说明: 设置 UI 字体逻辑到像素的 DPI 标尺。
-- L3372: `export fn font_ui_dpi() u16 {`
+- L3374: `export fn font_ui_dpi() u16 {`
   说明: 返回当前 UI 字体 DPI 标尺。
-- L3377: `export fn font_ui_pixel_height(logical_height: u8) u8 {`
+- L3379: `export fn font_ui_pixel_height(logical_height: u8) u8 {`
   说明: 将逻辑字号换算为运行时像素高度。
-- L3385: `export fn font_ui_reset_runtime() void {`
+- L3387: `export fn font_ui_reset_runtime() void {`
   说明: 重置 UI 字体运行时缓存和 DPI 状态。
-- L3390: `export fn font_default() Font {`
+- L3392: `export fn font_default() Font {`
   说明: 返回默认字体值。
-- L3395: `export fn glyph_for_char(font: &Font, code: u8) Glyph {`
+- L3397: `export fn glyph_for_char(font: &Font, code: u8) Glyph {`
   说明: 根据 ASCII 码点返回对应字形。
-- L3400: `export fn text_width(text: &const byte, len: usize, font: &Font) i16 {`
+- L3402: `export fn text_width(text: &const byte, len: usize, font: &Font) i16 {`
   说明: 计算指定文本在给定字体下的显示宽度。
-- L3405: `export fn draw_text(ctx: &RenderCtx, x: i16, y: i16, text: &const byte, len: usize, font: &Font, color: Color) void {`
+- L3407: `export fn draw_text(ctx: &RenderCtx, x: i16, y: i16, text: &const byte, len: usize, font: &Font, color: Color) void {`
   说明: 在渲染上下文中绘制一段文本。
-- L3435: `export fn draw_text_aligned(ctx: &RenderCtx, rect: Rect, text: &const byte, len: usize, font: &Font, color: Color, align: TextAlign) void {`
+- L3445: `export fn draw_text_aligned(ctx: &RenderCtx, rect: Rect, text: &const byte, len: usize, font: &Font, color: Color, align: TextAlign) void {`
   说明: 在指定矩形内按对齐方式绘制文本。
 
 ## `gui/render/gpu.uya`
 
-- L10: `export interface IGpuCtx {`
-- L17: `export struct SoftwareGpuCtx : IGpuCtx {`
-- L58: `export fn software_gpu_new(ctx: &RenderCtx) SoftwareGpuCtx {`
-  说明: 创建软件 GPU 上下文实例。
-- L66: `export fn gpu_execute_batch(gpu: &IGpuCtx, ctx: &RenderCtx, batch: &DrawBatch) void {`
+- L8: `export struct GpuFillRectCmd {`
+- L13: `export struct GpuStrokeRectCmd {`
+- L19: `export struct GpuLineCmd {`
+- L28: `export struct GpuImageCmd {`
+- L78: `export interface IGpuCtx {`
+- L99: `export fn gpu_execute_batch(gpu: &IGpuCtx, batch: &DrawBatch) void {`
   说明: 通过 GPU 接口执行一批绘制命令。
+
+## `gui/render/gpu_software.uya`
+
+- L14: `export struct SoftwareGpuCtx : IGpuCtx {`
+- L141: `export fn software_gpu_new(ctx: &RenderCtx) SoftwareGpuCtx {`
+  说明: 创建软件 GPU 上下文实例。
 
 ## `gui/render/img.uya`
 
-- L113: `export struct ImageData {`
-- L122: `export fn image_data_new(pixels: &byte, w: u16, h: u16, stride: u16, format: PixelFormat) ImageData {`
+- L194: `export struct ImageData {`
+- L203: `export fn image_data_new(pixels: &byte, w: u16, h: u16, stride: u16, format: PixelFormat) ImageData {`
   说明: 根据像素指针和尺寸信息构造图像描述符。
-- L133: `export fn empty_image() ImageData {`
+- L214: `export fn empty_image() ImageData {`
   说明: 返回空的图像描述符。
-- L144: `export fn image_size_bytes(img: &ImageData) u32 {`
+- L225: `export fn image_size_bytes(img: &ImageData) u32 {`
   说明: 返回图像像素数据占用的字节数。
-- L155: `export fn image_retain(img: &ImageData) void {`
+- L236: `export fn image_retain(img: &ImageData) void {`
   说明: 增加图像的引用计数。
-- L160: `export fn image_release(img: &ImageData) void {`
+- L241: `export fn image_release(img: &ImageData) void {`
   说明: 释放图像的一次引用。
-- L167: `export fn draw_image(ctx: &RenderCtx, x: i16, y: i16, img: &ImageData) void {`
+- L248: `export fn draw_image(ctx: &RenderCtx, x: i16, y: i16, img: &ImageData) void {`
   说明: 在指定坐标绘制原始图像。
-- L199: `export fn draw_image_scaled(ctx: &RenderCtx, rect: Rect, img: &ImageData) void {`
+- L293: `export fn draw_image_scaled(ctx: &RenderCtx, rect: Rect, img: &ImageData) void {`
   说明: 按目标矩形缩放绘制图像。
-- L229: `export fn draw_image_clipped(ctx: &RenderCtx, dst_rect: Rect, img: &ImageData, src_rect: Rect) void {`
+- L357: `export fn draw_image_clipped(ctx: &RenderCtx, dst_rect: Rect, img: &ImageData, src_rect: Rect) void {`
   说明: 按源矩形裁剪后绘制图像。
-- L259: `export fn draw_image_rotated(ctx: &RenderCtx, x: i16, y: i16, img: &ImageData, angle_deg: i16) void {`
+- L405: `export fn draw_image_rotated(ctx: &RenderCtx, x: i16, y: i16, img: &ImageData, angle_deg: i16) void {`
   说明: 按指定角度旋转绘制图像。
 
 ## `gui/render/scheduler.uya`
 
-- L12: `export enum RenderPresentMode {`
-- L18: `export interface IRenderScheduleFullCallback {`
-- L22: `export interface IRenderScheduleOverlayCallback {`
-- L26: `export struct RenderFrameResult {`
-- L63: `export fn render_frame_result_idle() RenderFrameResult {`
+- L13: `export enum RenderPresentMode {`
+- L19: `export interface IRenderScheduleFullCallback {`
+- L23: `export interface IRenderScheduleOverlayCallback {`
+- L27: `export struct RenderFrameResult {`
+- L64: `export fn render_frame_result_idle() RenderFrameResult {`
   说明: 将 `frame_result_idle` 渲染到指定上下文。
-- L152: `export fn render_schedule_tree_frame(`
+- L153: `export fn render_schedule_tree_frame(`
   说明: 将 `schedule_tree_frame` 渲染到指定上下文。
-- L205: `export struct RenderFramePacer {`
-- L298: `export fn render_frame_pacer_new(target_fps: u8, vsync_enabled: bool, adaptive: bool) RenderFramePacer {`
+- L209: `export struct RenderFramePacer {`
+- L302: `export fn render_frame_pacer_new(target_fps: u8, vsync_enabled: bool, adaptive: bool) RenderFramePacer {`
   说明: 将 `frame_pacer_new` 渲染到指定上下文。
-- L315: `export fn render_scheduler_default_clear_color() Color {`
+- L319: `export fn render_scheduler_default_clear_color() Color {`
   说明: 将 `scheduler_default_clear_color` 渲染到指定上下文。
 
 ## `gui/render/zerocopy.uya`
@@ -824,8 +890,8 @@
 
 ## `gui/sim/app.uya`
 
-- L197: `export struct SimApp {`
-- L2155: `export fn sim_app_new() SimApp {`
+- L209: `export struct SimApp {`
+- L2254: `export fn sim_app_new() SimApp {`
   说明: 创建模拟器应用状态对象。
 
 ## `gui/sim/common.uya`
@@ -871,25 +937,27 @@
 
 ## `gui/sim/config.uya`
 
-- L17: `export enum SimDemoKind {`
-- L31: `export enum SimBackendKind {`
-- L36: `export enum SimGpuKind {`
-- L42: `export struct SimConfig {`
-- L69: `export fn sim_demo_name(kind: SimDemoKind) &const byte {`
+- L19: `export enum SimDemoKind {`
+- L34: `export enum SimBackendKind {`
+- L39: `export enum SimGpuKind {`
+- L45: `export struct SimConfig {`
+- L73: `export fn sim_demo_name(kind: SimDemoKind) &const byte {`
   说明: 返回指定 demo 的显示名称。
-- L104: `export fn sim_demo_default_width(kind: SimDemoKind) u16 {`
+- L111: `export fn sim_demo_default_width(kind: SimDemoKind) u16 {`
   说明: 返回指定 demo 的默认宽度。
-- L110: `export fn sim_demo_default_height(kind: SimDemoKind) u16 {`
+- L117: `export fn sim_demo_default_height(kind: SimDemoKind) u16 {`
   说明: 返回指定 demo 的默认高度。
-- L116: `export fn sim_demo_is_phase(kind: SimDemoKind) bool {`
+- L123: `export fn sim_demo_is_phase(kind: SimDemoKind) bool {`
   说明: 判断指定 demo 是否属于 phase 首页场景。
-- L121: `export fn sim_backend_name(kind: SimBackendKind) &const byte {`
+- L128: `export fn sim_backend_name(kind: SimBackendKind) &const byte {`
   说明: 返回指定模拟器后端的显示名称。
-- L129: `export fn sim_gpu_name(kind: SimGpuKind) &const byte {`
+- L136: `export fn sim_gpu_name(kind: SimGpuKind) &const byte {`
   说明: 返回指定 GPU 模式的显示名称。
-- L140: `export fn sim_config_default() SimConfig {`
+- L147: `export fn sim_cpu_backend_name(kind: CpuRenderBackendKind) &const byte {`
+  说明: 返回指定 CPU 渲染后端的显示名称。
+- L159: `export fn sim_config_default() SimConfig {`
   说明: 返回默认的模拟器配置。
-- L169: `export fn sim_config_from_runtime() SimConfig {`
+- L189: `export fn sim_config_from_runtime() SimConfig {`
   说明: 从环境变量和命令行参数构建模拟器配置。
 
 ## `gui/sim/dashboard_compare.uya`
@@ -925,7 +993,7 @@
 
 ## `gui/sim/runner.uya`
 
-- L345: `export fn run_simulator() i32 {`
+- L428: `export fn run_simulator() i32 {`
   说明: 启动模拟器主循环并返回退出码。
 
 ## `gui/sim/screenshot.uya`
@@ -1039,7 +1107,7 @@
 
 ## `gui/tests/test_phase6_examples.uya`
 
-- L18: `export const TEST_PHASE6_EXAMPLES_MODULE: i32 = 1;`
+- L19: `export const TEST_PHASE6_EXAMPLES_MODULE: i32 = 1;`
 
 ## `gui/tests/test_pool.uya`
 
@@ -1059,7 +1127,7 @@
 
 ## `gui/tests/test_render_pipeline.uya`
 
-- L24: `export const TEST_RENDER_PIPELINE_MODULE: i32 = 1;`
+- L30: `export const TEST_RENDER_PIPELINE_MODULE: i32 = 1;`
 
 ## `gui/tests/test_render_scheduler.uya`
 
@@ -1067,7 +1135,7 @@
 
 ## `gui/tests/test_sim_app.uya`
 
-- L43: `export const TEST_SIM_APP_MODULE: i32 = 1;`
+- L53: `export const TEST_SIM_APP_MODULE: i32 = 1;`
 
 ## `gui/tests/test_sim_tools.uya`
 
@@ -1161,7 +1229,7 @@
 
 ## `gui/widget/canvas.uya`
 
-- L26: `export struct Canvas {`
+- L27: `export struct Canvas {`
 
 ## `gui/widget/chart.uya`
 

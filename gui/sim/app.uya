@@ -1301,7 +1301,7 @@ SimApp {
         }
 
         dashboard_retained_init(&self.dashboard_retained);
-        self.dashboard_retained.page.widget.at(0, 0);
+        self.dashboard_retained.page.widget.at(self.current_demo_origin_x(), self.current_demo_origin_y());
 
         const cpu_area: Rect = self.dashboard_retained.cpu.widget.base.screen_area();
         if cpu_area.contains(local) {

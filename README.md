@@ -54,6 +54,7 @@ make bench-json
 make bench-verify
 make dashboard-compare-report
 make docs-api
+make release
 ```
 
 说明：
@@ -66,6 +67,7 @@ make docs-api
 - `make bench-verify`：按 `gui/benchmarks/phase5_bench_baseline.json` 校验 benchmark 阈值
 - `make dashboard-compare-report`：生成 `build/dashboard_compare/dashboard_compare_report.{md,json}`
 - `make docs-api`：生成 API 索引文档 `docs/gui_uya_api_reference.md`
+- `make release`：执行 `ci` 后打包发布产物到 `build/release/uyagui-<version>.tar.gz`，并生成 `.sha256` 校验文件
 
 ### 3. 启用仓库 hooks
 

@@ -342,7 +342,20 @@ test "standalone dashboard and 2048 demos react to touch and playback taps" {
     cfg.height = SIM_DEFAULT_RES_HEIGHT;
     try assert_eq_bool(app.init(cfg), true);
 
-    var dashboard_click: Event = event_point(EventType.Click, InputDev.Touch, -1, 40u32, Point{ x: sim_layout_x(504), y: sim_layout_y(228) });
+    const pixels_len: usize = framebuffer_required_bytes(cfg.width, cfg.height, PixelFormat.ARGB8888);
+    const pixels: &byte = malloc(pixels_len) as &byte;
+    if pixels == null {
+        try assert_eq_bool(false, true);
+        return;
+    }
+    defer {
+        free(pixels as &void);
+    }
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(pixels, cfg.width, cfg.height, cfg.width * 4u16, PixelFormat.ARGB8888));
+    app.render(&ctx);
+
+    const net_area: Rect = app.dashboard_retained.net.widget.base.screen_area();
+    var dashboard_click: Event = event_point(EventType.Click, InputDev.Touch, -1, 40u32, Point{ x: net_area.x + net_area.w as i16 / 2, y: net_area.y + net_area.h as i16 / 2 });
     app.handle_translated_event(&dashboard_click);
     try assert_eq_i32(app.dashboard_metric, 1);
 
