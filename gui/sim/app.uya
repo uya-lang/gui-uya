@@ -37,6 +37,7 @@ use examples.demo_custom.render_demo_custom_state;
 use examples.demo_doudizhu.DdzPageRetained;
 use examples.demo_doudizhu.doudizhu_page_retained_handle_touch;
 use examples.demo_doudizhu.doudizhu_page_retained_init;
+use examples.demo_doudizhu.doudizhu_page_retained_next_wake_delay_ms;
 use examples.demo_doudizhu.doudizhu_page_retained_new;
 use examples.demo_doudizhu.doudizhu_page_retained_toggle_autoplay;
 use examples.demo_doudizhu.doudizhu_page_retained_update;
@@ -1811,6 +1812,9 @@ SimApp {
         }
         if self.config.demo == SimDemoKind.Novel && self.novel_demo.auto_scroll {
             next_delay = sim_min_positive_delay(next_delay, sim_next_due_delay(now_ms, self.novel_demo.last_auto_tick_ms, 48u32));
+        }
+        if self.config.demo == SimDemoKind.Doudizhu {
+            next_delay = sim_min_positive_delay(next_delay, doudizhu_page_retained_next_wake_delay_ms(&self.doudizhu_page, now_ms));
         }
         next_delay = sim_min_positive_delay(next_delay, self.recorder.next_due_in(now_ms));
         return next_delay;

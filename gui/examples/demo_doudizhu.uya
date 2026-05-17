@@ -36,6 +36,8 @@ use examples.doudizhu.rules.ddz_game_restart;
 use examples.doudizhu.rules.ddz_generate_bid_actions;
 use examples.doudizhu.rules.ddz_generate_play_actions;
 use examples.doudizhu.rules.ddz_rank_name;
+use libc.stderr;
+use libc.fprintf;
 use libc.getenv;
 use libc.snprintf;
 use platform.disp.PixelFormat;
@@ -93,6 +95,7 @@ export struct DdzPageRetained {
     played_cards: [DdzCard: 60],
     played_counts: [i32: 3],
     last_play_player: i32,
+    ai_pending_since_ms: [u32: 3],
 }
 
 fn ddz_demo_font(size: u8) &Font {
@@ -1072,6 +1075,7 @@ export fn doudizhu_page_retained_new() DdzPageRetained {
         played_cards: [],
         played_counts: [],
         last_play_player: DDZ_NO_PLAYER,
+        ai_pending_since_ms: [],
     };
 }
 
@@ -1087,7 +1091,6 @@ export fn doudizhu_page_retained_init(page: &DdzPageRetained) void {
 }
 
 export fn doudizhu_page_retained_update(page: &DdzPageRetained, now_ms: u32) void {
-    _ = now_ms;
     if page == null {
         return;
     }
@@ -1097,7 +1100,7 @@ export fn doudizhu_page_retained_update(page: &DdzPageRetained, now_ms: u32) voi
     }
     if page.game.current_player == 0 {
         if page.auto_play_human {
-            _ = doudizhu_page_retained_autoplay_step(page);
+            _ = doudizhu_page_retained_autoplay_step(page, now_ms);
         }
         return;
     }
@@ -1124,8 +1127,17 @@ export fn doudizhu_page_retained_update(page: &DdzPageRetained, now_ms: u32) voi
         decision = ddz_ai_step_action(&page.ai[2], &page.game, player);
     }
     if decision.status == DdzAiStatus.Pending {
+        if player >= 0 && player < DDZ_PLAYER_COUNT && page.ai_pending_since_ms[player as usize] == 0u32 {
+            page.ai_pending_since_ms[player as usize] = now_ms;
+        }
         ddz_demo_set_status(page, "AI OpenAI", "正在等待模型响应");
         return;
+    }
+    var openai_latency_ms: u32 = 0u32;
+    if player >= 0 && player < DDZ_PLAYER_COUNT && page.ai_pending_since_ms[player as usize] != 0u32 {
+        openai_latency_ms = now_ms - page.ai_pending_since_ms[player as usize];
+        page.ai_pending_since_ms[player as usize] = 0u32;
+        _ = fprintf(stderr, "[ddz timing] player=%d response_ms=%u source=%d status=%d\n" as &const byte, player, openai_latency_ms, decision.source as i32, decision.status as i32);
     }
     if decision.status != DdzAiStatus.Ok {
         ddz_demo_set_status(page, "AI 决策失败", "OpenAI 与本地回退都未成功");
@@ -1142,6 +1154,9 @@ export fn doudizhu_page_retained_update(page: &DdzPageRetained, now_ms: u32) voi
         hand_before = page.game.players[2];
     }
     if ddz_game_apply_action(&page.game, player, &decision.action) {
+        if openai_latency_ms > 0u32 {
+            _ = fprintf(stderr, "[ddz timing] player=%d final_play_ms=%u action=%s\n" as &const byte, player, openai_latency_ms, &decision.action.label[0]);
+        }
         ddz_demo_last_play_store(page, player, &hand_before, &decision.action);
         var buf: [byte: 96] = [];
         _ = snprintf(&buf[0], 96usize, "%s: %s" as &const byte, ddz_demo_player_role(&page.game, player), &decision.action.label[0]);
@@ -1165,7 +1180,7 @@ export fn doudizhu_page_retained_update(page: &DdzPageRetained, now_ms: u32) voi
     }
 }
 
-export fn doudizhu_page_retained_autoplay_step(page: &DdzPageRetained) bool {
+export fn doudizhu_page_retained_autoplay_step(page: &DdzPageRetained, now_ms: u32) bool {
     if page == null {
         return false;
     }
@@ -1175,12 +1190,24 @@ export fn doudizhu_page_retained_autoplay_step(page: &DdzPageRetained) bool {
     }
     const decision: DdzAiDecision = ddz_ai_step_action(&page.ai[0], &page.game, 0);
     if decision.status == DdzAiStatus.Pending {
+        if page.ai_pending_since_ms[0] == 0u32 {
+            page.ai_pending_since_ms[0] = now_ms;
+        }
         ddz_demo_set_status(page, "托管 OpenAI", "正在等待模型响应");
         return false;
+    }
+    var openai_latency_ms: u32 = 0u32;
+    if page.ai_pending_since_ms[0] != 0u32 {
+        openai_latency_ms = now_ms - page.ai_pending_since_ms[0];
+        page.ai_pending_since_ms[0] = 0u32;
+        _ = fprintf(stderr, "[ddz timing] player=0 response_ms=%u source=%d status=%d\n" as &const byte, openai_latency_ms, decision.source as i32, decision.status as i32);
     }
     if decision.status != DdzAiStatus.Ok {
         ddz_demo_set_status(page, "托管失败", "OpenAI 与本地回退都未成功");
         return false;
+    }
+    if openai_latency_ms > 0u32 {
+        _ = fprintf(stderr, "[ddz timing] player=0 final_play_ms=%u action=%s\n" as &const byte, openai_latency_ms, &decision.action.label[0]);
     }
     return ddz_demo_apply_human_auto_action(page, &decision.action, decision.source);
 }
@@ -1197,6 +1224,18 @@ export fn doudizhu_page_retained_toggle_autoplay(page: &DdzPageRetained) bool {
         ddz_demo_set_status(page, "托管已关闭", "恢复手动操作");
     }
     return page.auto_play_human;
+}
+
+export fn doudizhu_page_retained_next_wake_delay_ms(page: &DdzPageRetained, now_ms: u32) i32 {
+    _ = now_ms;
+    if page == null {
+        return -1;
+    }
+    doudizhu_page_retained_init(page);
+    if page.game.phase == DdzGamePhase.GameOver {
+        return -1;
+    }
+    return 16;
 }
 
 export fn doudizhu_page_retained_handle_touch(page: &DdzPageRetained, evt: &Event, local: Point) void {
@@ -1318,7 +1357,7 @@ export fn run_demo_doudizhu_full_round() i32 {
     var now_ms: u32 = 0u32;
     while step < 2048 && page.game.phase != DdzGamePhase.GameOver {
         if page.game.current_player == 0 {
-            if !doudizhu_page_retained_autoplay_step(&page) {
+            if !doudizhu_page_retained_autoplay_step(&page, now_ms) {
                 return 3;
             }
         } else {
