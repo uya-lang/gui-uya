@@ -463,13 +463,43 @@ test "standalone doudizhu demo reacts to bid click" {
         40u32,
         Point{
             x: sim_layout_x(156) + sim_layout_w(76u16) as i16 / 2 + sim_layout_x(84),
-            y: sim_layout_y(328) + sim_layout_h(34u16) as i16 / 2,
+            y: sim_layout_y(304) + sim_layout_h(34u16) as i16 / 2,
         }
     );
     app.handle_translated_event(&bid_click);
     try assert_eq_i32(app.doudizhu_page.game.bid_turns, 1);
     try assert_eq_i32(app.doudizhu_page.game.highest_bid, 1);
     try assert_eq_i32(app.doudizhu_page.game.current_player, 1);
+}
+
+test "standalone doudizhu demo resolves topmost bid before lower controls" {
+    const app: &SimApp = sim_app_alloc();
+    try assert_eq_bool(app != null, true);
+    defer {
+        sim_app_free(app);
+    }
+    var cfg: SimConfig = sim_config_default();
+    cfg.demo = SimDemoKind.Doudizhu;
+    cfg.width = SIM_DEFAULT_RES_WIDTH;
+    cfg.height = SIM_DEFAULT_RES_HEIGHT;
+    try assert_eq_bool(app.init(cfg), true);
+
+    var bid_click: Event = event_point(
+        EventType.Click,
+        InputDev.Touch,
+        -1,
+        40u32,
+        Point{
+            x: sim_layout_x(156) + sim_layout_w(76u16) as i16 / 2 + sim_layout_x(84) * 3,
+            y: sim_layout_y(304) + sim_layout_h(34u16) as i16 / 2,
+        }
+    );
+    app.handle_translated_event(&bid_click);
+
+    try assert_eq_i32(app.doudizhu_page.game.bid_turns, 1);
+    try assert_eq_i32(app.doudizhu_page.game.highest_bid, 3);
+    try assert_eq_i32(app.doudizhu_page.game.landlord, 0);
+    try assert_eq_i32(app.doudizhu_page.game.current_player, 0);
 }
 
 test "standalone doudizhu demo stays centered in larger window" {

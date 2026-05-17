@@ -176,7 +176,7 @@ fn ddz_demo_debug_show_hands() bool {
 }
 
 fn ddz_demo_bid_button_rect(index: i32) Rect {
-    const y: i16 = sim_layout_y(328);
+    const y: i16 = sim_layout_y(304);
     const x: i16 = sim_layout_x(156) + index as i16 * sim_layout_x(84);
     return Rect{ x: x, y: y, w: sim_layout_w(76u16), h: sim_layout_h(34u16) };
 }
@@ -202,6 +202,50 @@ fn ddz_demo_card_selected(page: &DdzPageRetained, card_id: i32) bool {
         i = i + 1;
     }
     return false;
+}
+
+fn ddz_demo_rect_hit(local: &Point, rect: Rect) bool {
+    return rect.contains(Point{ x: local.x, y: local.y });
+}
+
+fn ddz_demo_find_hit_button(local: &Point, first_index: i32, last_index: i32) i32 {
+    var index: i32 = last_index;
+    while index >= first_index {
+        if ddz_demo_rect_hit(local, ddz_demo_button_rect(index)) {
+            return index;
+        }
+        index = index - 1;
+    }
+    return -1;
+}
+
+fn ddz_demo_find_hit_bid(local: &Point) i32 {
+    var bid: i32 = 3;
+    while bid >= 0 {
+        if ddz_demo_rect_hit(local, ddz_demo_bid_button_rect(bid)) {
+            return bid;
+        }
+        bid = bid - 1;
+    }
+    return -1;
+}
+
+fn ddz_demo_find_hit_human_card(page: &DdzPageRetained, local: &Point) i32 {
+    if page == null {
+        return -1;
+    }
+    var i: i32 = page.game.players[0].count - 1;
+    while i >= 0 {
+        if i >= 0 && i < DDZ_MAX_CARDS_PER_HAND {
+            const card: DdzCard = page.game.players[0].cards[i as usize];
+            const selected: bool = ddz_demo_card_selected(page, card.id);
+            if ddz_demo_rect_hit(local, ddz_demo_human_card_rect(i, selected)) {
+                return i;
+            }
+        }
+        i = i - 1;
+    }
+    return -1;
 }
 
 fn ddz_demo_clear_selection(page: &DdzPageRetained) void {
@@ -1246,13 +1290,19 @@ export fn doudizhu_page_retained_handle_touch(page: &DdzPageRetained, evt: &Even
     if evt.event_type != EventType.Click {
         return;
     }
-    var rect: Rect = ddz_demo_button_rect(3);
-    if rect.contains(Point{ x: local.x, y: local.y }) {
+    if page.game.phase == DdzGamePhase.Bidding && page.game.current_player == 0 {
+        const bid_hit: i32 = ddz_demo_find_hit_bid(&local);
+        if bid_hit >= 0 {
+            ddz_demo_apply_human_bid(page, bid_hit);
+            return;
+        }
+    }
+    const utility_hit: i32 = ddz_demo_find_hit_button(&local, 3, 5);
+    if utility_hit == 3 {
         _ = doudizhu_page_retained_toggle_autoplay(page);
         return;
     }
-    rect = ddz_demo_button_rect(4);
-    if rect.contains(Point{ x: local.x, y: local.y }) {
+    if utility_hit == 4 {
         ddz_demo_restart(page, page.game.seed + 1u32);
         if uya_openai_chat_is_available() {
             ddz_demo_set_status(page, "已重开", "新的对局已开始，OpenAI 可用");
@@ -1261,53 +1311,32 @@ export fn doudizhu_page_retained_handle_touch(page: &DdzPageRetained, evt: &Even
         }
         return;
     }
-    rect = ddz_demo_button_rect(5);
-    if rect.contains(Point{ x: local.x, y: local.y }) {
+    if utility_hit == 5 {
         ddz_demo_clear_selection(page);
         ddz_demo_clear_hint(page);
         ddz_demo_set_status(page, "已清空选择", "可以重新点牌");
         return;
     }
-    if page.game.phase == DdzGamePhase.Bidding && page.game.current_player == 0 {
-        var bid: i32 = 0;
-        while bid <= 3 {
-            rect = ddz_demo_bid_button_rect(bid);
-            if rect.contains(Point{ x: local.x, y: local.y }) {
-                ddz_demo_apply_human_bid(page, bid);
-                return;
-            }
-            bid = bid + 1;
-        }
-    }
     if page.game.phase == DdzGamePhase.Playing && page.game.current_player == 0 {
-        rect = ddz_demo_button_rect(0);
-        if rect.contains(Point{ x: local.x, y: local.y }) {
+        const action_hit: i32 = ddz_demo_find_hit_button(&local, 0, 2);
+        if action_hit == 0 {
             ddz_demo_apply_hint(page);
             return;
         }
-        rect = ddz_demo_button_rect(1);
-        if rect.contains(Point{ x: local.x, y: local.y }) {
+        if action_hit == 1 {
             ddz_demo_apply_human_play(page);
             return;
         }
-        rect = ddz_demo_button_rect(2);
-        if rect.contains(Point{ x: local.x, y: local.y }) {
+        if action_hit == 2 {
             ddz_demo_apply_human_pass(page);
             return;
         }
-        var i: i32 = page.game.players[0].count - 1;
-        while i >= 0 {
-            if i >= 0 && i < DDZ_MAX_CARDS_PER_HAND {
-                const card: DdzCard = page.game.players[0].cards[i as usize];
-                const selected: bool = ddz_demo_card_selected(page, card.id);
-                rect = ddz_demo_human_card_rect(i, selected);
-                if rect.contains(Point{ x: local.x, y: local.y }) {
-                    ddz_demo_toggle_selected(page, card.id);
-                    ddz_demo_clear_hint(page);
-                    return;
-                }
-            }
-            i = i - 1;
+        const card_hit: i32 = ddz_demo_find_hit_human_card(page, &local);
+        if card_hit >= 0 && card_hit < DDZ_MAX_CARDS_PER_HAND {
+            const card: DdzCard = page.game.players[0].cards[card_hit as usize];
+            ddz_demo_toggle_selected(page, card.id);
+            ddz_demo_clear_hint(page);
+            return;
         }
     }
 }
