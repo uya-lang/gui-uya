@@ -38,6 +38,7 @@ use examples.demo_doudizhu.DdzPageRetained;
 use examples.demo_doudizhu.doudizhu_page_retained_handle_touch;
 use examples.demo_doudizhu.doudizhu_page_retained_init;
 use examples.demo_doudizhu.doudizhu_page_retained_new;
+use examples.demo_doudizhu.doudizhu_page_retained_toggle_autoplay;
 use examples.demo_doudizhu.doudizhu_page_retained_update;
 use examples.demo_doudizhu.render_demo_doudizhu_retained_state;
 use examples.demo_doudizhu.run_demo_doudizhu;
@@ -863,7 +864,7 @@ SimApp {
         _ = sim_copy_cstr(
             &self.help_text[0],
             SIM_TEXT_CAPACITY as usize,
-            "Esc退出 | P截图 | R录制 | L回放 | Z斗地主 | 首页点按钮 | Demo 左上角返回"
+            "Esc退出 | P截图 | R录制 | L回放 | Z斗地主 | T托管 | 首页点按钮 | Demo 左上角返回"
         );
         self.help_label.set_text(&self.help_text[0]);
     }
@@ -2141,6 +2142,12 @@ SimApp {
                     self.refresh_status_label("开始回放");
                 } else {
                     self.refresh_status_label("没有可用回放");
+                }
+            } else if (key_code == 't' as u16 || key_code == 'T' as u16) && self.config.demo == SimDemoKind.Doudizhu {
+                if doudizhu_page_retained_toggle_autoplay(&self.doudizhu_page) {
+                    self.refresh_status_label("斗地主托管已开启");
+                } else {
+                    self.refresh_status_label("斗地主托管已关闭");
                 }
             } else if key_code == '1' as u16 {
                 self.switch_demo(SimDemoKind.Phase4, "已切到阶段4");

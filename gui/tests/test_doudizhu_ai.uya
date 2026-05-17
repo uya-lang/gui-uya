@@ -1,9 +1,12 @@
 use examples.doudizhu.ai.DdzAiStatus;
 use examples.doudizhu.ai.DdzAiDecision;
+use examples.doudizhu.ai.DdzAiSource;
 use examples.doudizhu.ai.DdzAiState;
 use examples.doudizhu.ai.ddz_ai_bid_score;
 use examples.doudizhu.ai.ddz_ai_choose_action;
 use examples.doudizhu.ai.ddz_ai_state_new;
+use examples.doudizhu.rules.DdzAction;
+use examples.doudizhu.rules.DdzActionKind;
 use examples.doudizhu.rules.DDZ_NO_PLAYER;
 use examples.doudizhu.rules.DdzCard;
 use examples.doudizhu.rules.DdzCombo;
@@ -11,7 +14,9 @@ use examples.doudizhu.rules.DdzComboKind;
 use examples.doudizhu.rules.DdzGamePhase;
 use examples.doudizhu.rules.DdzGameState;
 use examples.doudizhu.rules.ddz_combo_detect;
+use examples.doudizhu.rules.ddz_game_apply_action;
 use examples.doudizhu.rules.ddz_game_new;
+use examples.doudizhu.rules.ddz_game_restart;
 use examples.doudizhu.rules.ddz_hand_recount;
 use std.testing.assert_eq_bool;
 use std.testing.assert_eq_i32;
@@ -112,4 +117,44 @@ test "doudizhu ai spends bomb when it can nearly finish" {
     try assert_eq_i32(decision.status as i32, DdzAiStatus.Ok as i32);
     try assert_eq_i32(decision.action.combo.kind as i32, DdzComboKind.Bomb as i32);
     try assert_eq_i32(decision.action.combo.main_rank, 6);
+}
+
+test "doudizhu ai self play reaches game over across seeds" {
+    var seeds: [u32: 6] = [7u32, 19u32, 101u32, 20260517u32, 20260518u32, 20260519u32];
+    var si: i32 = 0;
+    while si < 6 {
+        var game: DdzGameState = ddz_game_new();
+        try assert_eq_bool(ddz_game_restart(&game, seeds[si as usize]), true);
+        var ai0: DdzAiState = ddz_ai_state_new();
+        var ai1: DdzAiState = ddz_ai_state_new();
+        var ai2: DdzAiState = ddz_ai_state_new();
+        var guard: i32 = 0;
+        while guard < 2048 && game.phase != DdzGamePhase.GameOver {
+            var decision: DdzAiDecision = DdzAiDecision{
+                status: DdzAiStatus.NoLegalActions,
+                source: 0 as DdzAiSource,
+                action_index: -1,
+                action: DdzAction{
+                    kind: 0 as DdzActionKind,
+                    bid: 0,
+                    combo: DdzCombo{ kind: DdzComboKind.Invalid, main_rank: -1, card_count: 0, kick_rank: -1, chain_len: 0, ranks: [], rank_count: 0 },
+                    card_ids: [],
+                    card_count: 0,
+                    label: [],
+                },
+            };
+            if game.current_player == 0 {
+                decision = ddz_ai_choose_action(&ai0, &game, 0);
+            } else if game.current_player == 1 {
+                decision = ddz_ai_choose_action(&ai1, &game, 1);
+            } else {
+                decision = ddz_ai_choose_action(&ai2, &game, 2);
+            }
+            try assert_eq_i32(decision.status as i32, DdzAiStatus.Ok as i32);
+            try assert_eq_bool(ddz_game_apply_action(&game, game.current_player, &decision.action), true);
+            guard = guard + 1;
+        }
+        try assert_eq_i32(game.phase as i32, DdzGamePhase.GameOver as i32);
+        si = si + 1;
+    }
 }

@@ -74,6 +74,7 @@ export struct DdzPageRetained {
     status_text: [byte: 160],
     detail_text: [byte: 160],
     ready: bool,
+    auto_play_human: bool,
     selected_ids: [i32: 20],
     selected_count: i32,
     hint_ids: [i32: 20],
@@ -117,6 +118,22 @@ fn ddz_demo_draw_center_text(ctx: &RenderCtx, rect: Rect, text: &const byte, siz
     const tx: i16 = rect.x + ((rect.w as i32 - tw as i32) / 2) as i16;
     const ty: i16 = rect.y + ((rect.h as i32 - font.glyph_height as i32) / 2) as i16;
     draw_text(ctx, tx, ty, text, ddz_demo_text_len(text), font, color);
+}
+
+fn ddz_demo_offset_rect(rect: Rect, origin_x: i16, origin_y: i16) Rect {
+    return Rect{
+        x: (rect.x as i32 + origin_x as i32) as i16,
+        y: (rect.y as i32 + origin_y as i32) as i16,
+        w: rect.w,
+        h: rect.h,
+    };
+}
+
+fn ddz_demo_invalidate(page: &DdzPageRetained) void {
+    if page == null || !page.ready {
+        return;
+    }
+    page.page.widget.base.invalidate();
 }
 
 fn ddz_demo_button_rect(index: i32) Rect {
@@ -175,6 +192,7 @@ fn ddz_demo_clear_selection(page: &DdzPageRetained) void {
         i = i + 1;
     }
     page.selected_count = 0;
+    ddz_demo_invalidate(page);
 }
 
 fn ddz_demo_clear_hint(page: &DdzPageRetained) void {
@@ -187,6 +205,7 @@ fn ddz_demo_clear_hint(page: &DdzPageRetained) void {
         i = i + 1;
     }
     page.hint_count = 0;
+    ddz_demo_invalidate(page);
 }
 
 fn ddz_demo_toggle_selected(page: &DdzPageRetained, card_id: i32) void {
@@ -201,6 +220,7 @@ fn ddz_demo_toggle_selected(page: &DdzPageRetained, card_id: i32) void {
                 i = i + 1;
             }
             page.selected_count = page.selected_count - 1;
+            ddz_demo_invalidate(page);
             return;
         }
         i = i + 1;
@@ -208,6 +228,7 @@ fn ddz_demo_toggle_selected(page: &DdzPageRetained, card_id: i32) void {
     if page.selected_count < DDZ_MAX_CARDS_PER_HAND {
         page.selected_ids[page.selected_count as usize] = card_id;
         page.selected_count = page.selected_count + 1;
+        ddz_demo_invalidate(page);
     }
 }
 
@@ -217,6 +238,7 @@ fn ddz_demo_set_status(page: &DdzPageRetained, status: &const byte, detail: &con
     }
     _ = snprintf(&page.status_text[0], 160usize, "%s" as &const byte, status);
     _ = snprintf(&page.detail_text[0], 160usize, "%s" as &const byte, detail);
+    ddz_demo_invalidate(page);
 }
 
 fn ddz_demo_player_role(game: &DdzGameState, player: i32) &const byte {
@@ -250,6 +272,7 @@ fn ddz_demo_restart(page: &DdzPageRetained, seed: u32) void {
     ddz_demo_clear_selection(page);
     ddz_demo_clear_hint(page);
     ddz_demo_set_status(page, "离线模式", "等待你叫分");
+    ddz_demo_invalidate(page);
 }
 
 fn ddz_demo_describe_last_combo(page: &DdzPageRetained, buf: &byte, cap: usize) void {
@@ -320,71 +343,69 @@ fn ddz_demo_draw_player_badge(ctx: &RenderCtx, rect: Rect, title: &const byte, h
 }
 
 fn ddz_demo_render_state(page: &DdzPageRetained, ctx: &RenderCtx, origin_x: i16, origin_y: i16) void {
-    _ = origin_x;
-    _ = origin_y;
-    ctx.fill_linear_gradient(Rect{ x: 0, y: 0, w: DDZ_DEMO_W, h: DDZ_DEMO_H }, Color{ r: 23, g: 117, b: 64, a: 255 }, Color{ r: 10, g: 70, b: 38, a: 255 }, false);
-    ctx.fill_radial_gradient(Rect{ x: sim_layout_x(190), y: sim_layout_y(56), w: sim_layout_w(260u16), h: sim_layout_h(180u16) }, Color{ r: 246, g: 214, b: 138, a: 58 }, Color{ r: 0, g: 0, b: 0, a: 0 });
-    ctx.fill_round_rect(Rect{ x: sim_layout_x(26), y: sim_layout_y(20), w: sim_layout_w(588u16), h: sim_layout_h(72u16) }, sim_layout_font(18u8), Color{ r: 247, g: 241, b: 223, a: 220 });
-    ctx.draw_round_rect(Rect{ x: sim_layout_x(26), y: sim_layout_y(20), w: sim_layout_w(588u16), h: sim_layout_h(72u16) }, sim_layout_font(18u8), Color{ r: 129, g: 89, b: 39, a: 200 }, 1u8);
+    ctx.fill_linear_gradient(ddz_demo_offset_rect(Rect{ x: 0, y: 0, w: DDZ_DEMO_W, h: DDZ_DEMO_H }, origin_x, origin_y), Color{ r: 23, g: 117, b: 64, a: 255 }, Color{ r: 10, g: 70, b: 38, a: 255 }, false);
+    ctx.fill_radial_gradient(ddz_demo_offset_rect(Rect{ x: sim_layout_x(190), y: sim_layout_y(56), w: sim_layout_w(260u16), h: sim_layout_h(180u16) }, origin_x, origin_y), Color{ r: 246, g: 214, b: 138, a: 58 }, Color{ r: 0, g: 0, b: 0, a: 0 });
+    ctx.fill_round_rect(ddz_demo_offset_rect(Rect{ x: sim_layout_x(26), y: sim_layout_y(20), w: sim_layout_w(588u16), h: sim_layout_h(72u16) }, origin_x, origin_y), sim_layout_font(18u8), Color{ r: 247, g: 241, b: 223, a: 220 });
+    ctx.draw_round_rect(ddz_demo_offset_rect(Rect{ x: sim_layout_x(26), y: sim_layout_y(20), w: sim_layout_w(588u16), h: sim_layout_h(72u16) }, origin_x, origin_y), sim_layout_font(18u8), Color{ r: 129, g: 89, b: 39, a: 200 }, 1u8);
 
-    ddz_demo_draw_text(ctx, sim_layout_x(42), sim_layout_y(34), "斗地主 离线 MVP", 24u8, Color{ r: 81, g: 43, b: 19, a: 255 });
-    ddz_demo_draw_text(ctx, sim_layout_x(42), sim_layout_y(62), &page.status_text[0], 14u8, Color{ r: 88, g: 60, b: 28, a: 255 });
-    ddz_demo_draw_text(ctx, sim_layout_x(276), sim_layout_y(62), &page.detail_text[0], 14u8, Color{ r: 88, g: 60, b: 28, a: 255 });
+    ddz_demo_draw_text(ctx, origin_x + sim_layout_x(42), origin_y + sim_layout_y(34), "斗地主 离线 MVP", 24u8, Color{ r: 81, g: 43, b: 19, a: 255 });
+    ddz_demo_draw_text(ctx, origin_x + sim_layout_x(42), origin_y + sim_layout_y(62), &page.status_text[0], 14u8, Color{ r: 88, g: 60, b: 28, a: 255 });
+    ddz_demo_draw_text(ctx, origin_x + sim_layout_x(276), origin_y + sim_layout_y(62), &page.detail_text[0], 14u8, Color{ r: 88, g: 60, b: 28, a: 255 });
 
     ddz_demo_draw_player_badge(
         ctx,
-        Rect{ x: sim_layout_x(60), y: sim_layout_y(118), w: sim_layout_w(126u16), h: sim_layout_h(48u16) },
+        ddz_demo_offset_rect(Rect{ x: sim_layout_x(60), y: sim_layout_y(118), w: sim_layout_w(126u16), h: sim_layout_h(48u16) }, origin_x, origin_y),
         ddz_demo_player_role(&page.game, 1),
         page.game.players[1].count,
         page.game.current_player == 1 && page.game.phase != DdzGamePhase.GameOver
     );
     ddz_demo_draw_player_badge(
         ctx,
-        Rect{ x: sim_layout_x(454), y: sim_layout_y(118), w: sim_layout_w(126u16), h: sim_layout_h(48u16) },
+        ddz_demo_offset_rect(Rect{ x: sim_layout_x(454), y: sim_layout_y(118), w: sim_layout_w(126u16), h: sim_layout_h(48u16) }, origin_x, origin_y),
         ddz_demo_player_role(&page.game, 2),
         page.game.players[2].count,
         page.game.current_player == 2 && page.game.phase != DdzGamePhase.GameOver
     );
     ddz_demo_draw_player_badge(
         ctx,
-        Rect{ x: sim_layout_x(246), y: sim_layout_y(276), w: sim_layout_w(134u16), h: sim_layout_h(44u16) },
+        ddz_demo_offset_rect(Rect{ x: sim_layout_x(246), y: sim_layout_y(276), w: sim_layout_w(134u16), h: sim_layout_h(44u16) }, origin_x, origin_y),
         ddz_demo_player_role(&page.game, 0),
         page.game.players[0].count,
         page.game.current_player == 0 && page.game.phase != DdzGamePhase.GameOver
     );
 
-    ctx.fill_round_rect(Rect{ x: sim_layout_x(238), y: sim_layout_y(108), w: sim_layout_w(164u16), h: sim_layout_h(62u16) }, sim_layout_font(16u8), Color{ r: 248, g: 237, b: 206, a: 235 });
-    ctx.draw_round_rect(Rect{ x: sim_layout_x(238), y: sim_layout_y(108), w: sim_layout_w(164u16), h: sim_layout_h(62u16) }, sim_layout_font(16u8), Color{ r: 125, g: 88, b: 31, a: 220 }, 1u8);
-    ddz_demo_draw_text(ctx, sim_layout_x(288), sim_layout_y(116), "底牌", 14u8, Color{ r: 95, g: 55, b: 21, a: 255 });
+    ctx.fill_round_rect(ddz_demo_offset_rect(Rect{ x: sim_layout_x(238), y: sim_layout_y(108), w: sim_layout_w(164u16), h: sim_layout_h(62u16) }, origin_x, origin_y), sim_layout_font(16u8), Color{ r: 248, g: 237, b: 206, a: 235 });
+    ctx.draw_round_rect(ddz_demo_offset_rect(Rect{ x: sim_layout_x(238), y: sim_layout_y(108), w: sim_layout_w(164u16), h: sim_layout_h(62u16) }, origin_x, origin_y), sim_layout_font(16u8), Color{ r: 125, g: 88, b: 31, a: 220 }, 1u8);
+    ddz_demo_draw_text(ctx, origin_x + sim_layout_x(288), origin_y + sim_layout_y(116), "底牌", 14u8, Color{ r: 95, g: 55, b: 21, a: 255 });
 
     var b: i32 = 0;
     while b < DDZ_BOTTOM_COUNT {
         const bx: i16 = sim_layout_x(254) + b as i16 * sim_layout_x(48);
         const face_up: bool = page.game.phase != DdzGamePhase.Bidding;
-        ddz_demo_draw_card(ctx, Rect{ x: bx, y: sim_layout_y(132), w: sim_layout_w(DDZ_CARD_W), h: sim_layout_h(DDZ_CARD_H) }, page.game.bottom[b as usize].rank, false, face_up);
+        ddz_demo_draw_card(ctx, ddz_demo_offset_rect(Rect{ x: bx, y: sim_layout_y(132), w: sim_layout_w(DDZ_CARD_W), h: sim_layout_h(DDZ_CARD_H) }, origin_x, origin_y), page.game.bottom[b as usize].rank, false, face_up);
         b = b + 1;
     }
 
     var last_buf: [byte: 96] = [];
     ddz_demo_describe_last_combo(page, &last_buf[0], 96usize);
-    ddz_demo_draw_text(ctx, sim_layout_x(190), sim_layout_y(214), &last_buf[0], 15u8, Color{ r: 244, g: 235, b: 214, a: 255 });
+    ddz_demo_draw_text(ctx, origin_x + sim_layout_x(190), origin_y + sim_layout_y(214), &last_buf[0], 15u8, Color{ r: 244, g: 235, b: 214, a: 255 });
 
     var i: i32 = 0;
     while i < page.game.players[0].count {
         const card: DdzCard = page.game.players[0].cards[i as usize];
         const selected: bool = ddz_demo_card_selected(page, card.id);
-        ddz_demo_draw_card(ctx, ddz_demo_human_card_rect(i, selected), card.rank, selected, true);
+        ddz_demo_draw_card(ctx, ddz_demo_offset_rect(ddz_demo_human_card_rect(i, selected), origin_x, origin_y), card.rank, selected, true);
         i = i + 1;
     }
 
     const can_hint: bool = page.game.phase == DdzGamePhase.Playing && page.game.current_player == 0;
     const can_play: bool = can_hint;
     const can_pass: bool = can_hint;
-    ddz_demo_draw_button(ctx, ddz_demo_button_rect(0), "提示", can_hint);
-    ddz_demo_draw_button(ctx, ddz_demo_button_rect(1), "出牌", can_play);
-    ddz_demo_draw_button(ctx, ddz_demo_button_rect(2), "不要", can_pass);
-    ddz_demo_draw_button(ctx, ddz_demo_button_rect(3), "重开", true);
-    ddz_demo_draw_button(ctx, ddz_demo_button_rect(4), "清空", true);
+    ddz_demo_draw_button(ctx, ddz_demo_offset_rect(ddz_demo_button_rect(0), origin_x, origin_y), "提示", can_hint);
+    ddz_demo_draw_button(ctx, ddz_demo_offset_rect(ddz_demo_button_rect(1), origin_x, origin_y), "出牌", can_play);
+    ddz_demo_draw_button(ctx, ddz_demo_offset_rect(ddz_demo_button_rect(2), origin_x, origin_y), "不要", can_pass);
+    ddz_demo_draw_button(ctx, ddz_demo_offset_rect(ddz_demo_button_rect(3), origin_x, origin_y), "重开", true);
+    ddz_demo_draw_button(ctx, ddz_demo_offset_rect(ddz_demo_button_rect(4), origin_x, origin_y), "清空", true);
 
     if page.game.phase == DdzGamePhase.Bidding && page.game.current_player == 0 {
         var bid: i32 = 0;
@@ -395,17 +416,17 @@ fn ddz_demo_render_state(page: &DdzPageRetained, ctx: &RenderCtx, origin_x: i16,
             } else {
                 _ = snprintf(&text[0], 16usize, "%d分" as &const byte, bid);
             }
-            ddz_demo_draw_button(ctx, ddz_demo_bid_button_rect(bid), &text[0], bid == 0 || bid > page.game.highest_bid);
+            ddz_demo_draw_button(ctx, ddz_demo_offset_rect(ddz_demo_bid_button_rect(bid), origin_x, origin_y), &text[0], bid == 0 || bid > page.game.highest_bid);
             bid = bid + 1;
         }
     }
 
     if page.game.phase == DdzGamePhase.GameOver {
-        ctx.fill_round_rect(Rect{ x: sim_layout_x(184), y: sim_layout_y(166), w: sim_layout_w(272u16), h: sim_layout_h(96u16) }, sim_layout_font(20u8), Color{ r: 35, g: 25, b: 14, a: 190 });
+        ctx.fill_round_rect(ddz_demo_offset_rect(Rect{ x: sim_layout_x(184), y: sim_layout_y(166), w: sim_layout_w(272u16), h: sim_layout_h(96u16) }, origin_x, origin_y), sim_layout_font(20u8), Color{ r: 35, g: 25, b: 14, a: 190 });
         var win_buf: [byte: 72] = [];
         _ = snprintf(&win_buf[0], 72usize, "%s 获胜" as &const byte, ddz_demo_player_role(&page.game, page.game.winner));
-        ddz_demo_draw_center_text(ctx, Rect{ x: sim_layout_x(184), y: sim_layout_y(182), w: sim_layout_w(272u16), h: sim_layout_h(28u16) }, &win_buf[0], 20u8, Color{ r: 247, g: 236, b: 214, a: 255 });
-        ddz_demo_draw_center_text(ctx, Rect{ x: sim_layout_x(184), y: sim_layout_y(214), w: sim_layout_w(272u16), h: sim_layout_h(18u16) }, "点击重开继续下一局", 14u8, Color{ r: 239, g: 211, b: 157, a: 255 });
+        ddz_demo_draw_center_text(ctx, ddz_demo_offset_rect(Rect{ x: sim_layout_x(184), y: sim_layout_y(182), w: sim_layout_w(272u16), h: sim_layout_h(28u16) }, origin_x, origin_y), &win_buf[0], 20u8, Color{ r: 247, g: 236, b: 214, a: 255 });
+        ddz_demo_draw_center_text(ctx, ddz_demo_offset_rect(Rect{ x: sim_layout_x(184), y: sim_layout_y(214), w: sim_layout_w(272u16), h: sim_layout_h(18u16) }, origin_x, origin_y), "点击重开继续下一局", 14u8, Color{ r: 239, g: 211, b: 157, a: 255 });
     }
 }
 
@@ -556,6 +577,38 @@ fn ddz_demo_apply_human_pass(page: &DdzPageRetained) void {
     ddz_demo_set_status(page, "当前不能不要", "你需要先出牌");
 }
 
+fn ddz_demo_apply_human_auto_action(page: &DdzPageRetained, action: &DdzAction, source: DdzAiSource) bool {
+    if page == null || action == null || page.game.current_player != 0 || page.game.phase == DdzGamePhase.GameOver {
+        return false;
+    }
+    if !ddz_game_apply_action(&page.game, 0, action) {
+        ddz_demo_set_status(page, "托管失败", "动作未通过规则校验");
+        return false;
+    }
+    ddz_demo_clear_selection(page);
+    ddz_demo_clear_hint(page);
+    var prefix: &const byte = "托管 Local";
+    if source == DdzAiSource.Fallback {
+        prefix = "托管 Fallback" as &const byte;
+    }
+    if action.kind == DdzActionKind.Bid {
+        if action.bid == 0 {
+            ddz_demo_set_status(page, prefix, "你选择不叫");
+        } else {
+            var bid_buf: [byte: 64] = [];
+            _ = snprintf(&bid_buf[0], 64usize, "你叫了 %d 分" as &const byte, action.bid);
+            ddz_demo_set_status(page, prefix, &bid_buf[0]);
+        }
+        return true;
+    }
+    if action.combo.kind == DdzComboKind.Pass {
+        ddz_demo_set_status(page, prefix, "你选择不要");
+        return true;
+    }
+    ddz_demo_set_status(page, prefix, &action.label[0]);
+    return true;
+}
+
 export fn doudizhu_page_retained_new() DdzPageRetained {
     return DdzPageRetained{
         tree: obj_tree_new(),
@@ -565,6 +618,7 @@ export fn doudizhu_page_retained_new() DdzPageRetained {
         status_text: [],
         detail_text: [],
         ready: false,
+        auto_play_human: false,
         selected_ids: [],
         selected_count: 0,
         hint_ids: [],
@@ -597,7 +651,13 @@ export fn doudizhu_page_retained_update(page: &DdzPageRetained, now_ms: u32) voi
         return;
     }
     doudizhu_page_retained_init(page);
-    if page.game.phase == DdzGamePhase.GameOver || page.game.current_player == 0 {
+    if page.game.phase == DdzGamePhase.GameOver {
+        return;
+    }
+    if page.game.current_player == 0 {
+        if page.auto_play_human {
+            _ = doudizhu_page_retained_autoplay_step(page);
+        }
         return;
     }
     const player: i32 = page.game.current_player;
@@ -645,6 +705,36 @@ export fn doudizhu_page_retained_update(page: &DdzPageRetained, now_ms: u32) voi
     } else {
         ddz_demo_set_status(page, "AI 动作非法", "规则层拒绝执行");
     }
+}
+
+export fn doudizhu_page_retained_autoplay_step(page: &DdzPageRetained) bool {
+    if page == null {
+        return false;
+    }
+    doudizhu_page_retained_init(page);
+    if page.game.phase == DdzGamePhase.GameOver || page.game.current_player != 0 {
+        return false;
+    }
+    const decision: DdzAiDecision = ddz_ai_choose_action(&page.ai[0], &page.game, 0);
+    if decision.status != DdzAiStatus.Ok {
+        ddz_demo_set_status(page, "托管失败", "没有可用动作");
+        return false;
+    }
+    return ddz_demo_apply_human_auto_action(page, &decision.action, decision.source);
+}
+
+export fn doudizhu_page_retained_toggle_autoplay(page: &DdzPageRetained) bool {
+    if page == null {
+        return false;
+    }
+    doudizhu_page_retained_init(page);
+    page.auto_play_human = !page.auto_play_human;
+    if page.auto_play_human {
+        ddz_demo_set_status(page, "托管已开启", "你的回合将自动执行");
+    } else {
+        ddz_demo_set_status(page, "托管已关闭", "恢复手动操作");
+    }
+    return page.auto_play_human;
 }
 
 export fn doudizhu_page_retained_handle_touch(page: &DdzPageRetained, evt: &Event, local: Point) void {
@@ -718,6 +808,7 @@ export fn render_demo_doudizhu_retained_state(page: &DdzPageRetained, ctx: &Rend
         return;
     }
     doudizhu_page_retained_init(page);
+    page.page.widget.at(origin_x, origin_y);
     ddz_demo_render_state(page, ctx, origin_x, origin_y);
 }
 
@@ -736,6 +827,45 @@ export fn run_demo_doudizhu() i32 {
     render_demo_doudizhu_retained_state(&page, &ctx, 0, 0);
     if ctx.stats.text_ops == 0u32 || ctx.stats.rect_ops == 0u32 {
         return 1;
+    }
+    return 0;
+}
+
+export fn run_demo_doudizhu_full_round() i32 {
+    const bytes_len: usize = framebuffer_required_bytes(DDZ_DEMO_W, DDZ_DEMO_H, PixelFormat.ARGB8888);
+    const bytes: &byte = malloc(bytes_len) as &byte;
+    if bytes == null {
+        return 2;
+    }
+    defer {
+        free(bytes as &void);
+    }
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(bytes, DDZ_DEMO_W, DDZ_DEMO_H, DDZ_DEMO_W * 4u16, PixelFormat.ARGB8888));
+    var page: DdzPageRetained = doudizhu_page_retained_new();
+    doudizhu_page_retained_init(&page);
+
+    var step: i32 = 0;
+    var now_ms: u32 = 0u32;
+    while step < 2048 && page.game.phase != DdzGamePhase.GameOver {
+        if page.game.current_player == 0 {
+            if !doudizhu_page_retained_autoplay_step(&page) {
+                return 3;
+            }
+        } else {
+            doudizhu_page_retained_update(&page, now_ms);
+        }
+        render_demo_doudizhu_retained_state(&page, &ctx, 0, 0);
+        step = step + 1;
+        now_ms = now_ms + 16u32;
+    }
+    if page.game.phase != DdzGamePhase.GameOver {
+        return 4;
+    }
+    if page.game.winner < 0 || page.game.winner >= DDZ_PLAYER_COUNT {
+        return 5;
+    }
+    if ctx.stats.text_ops == 0u32 || ctx.stats.rect_ops == 0u32 {
+        return 6;
     }
     return 0;
 }

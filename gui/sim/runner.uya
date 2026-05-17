@@ -142,6 +142,7 @@ fn run_simulator_sdl(cfg: SimConfig) i32 {
         pending_seed_present = !direct_gles2;
     }
     var last_tick_ms: u32 = get_tick_ms();
+    var loop_frame_count: u32 = 0u32;
     while true {
         if cfg.max_frames == 0u32 && !input.pointer_down {
             const idle_delay_ms: i32 = app.next_wake_delay_ms(get_tick_ms());
@@ -265,11 +266,12 @@ fn run_simulator_sdl(cfg: SimConfig) i32 {
             after_present_ms - after_render_ms,
             after_present_ms - frame_start_ms
         );
+        loop_frame_count = loop_frame_count + 1u32;
 
         if input.quit_requested || app.should_exit() {
             break;
         }
-        if cfg.max_frames > 0u32 && display.ctx.frame_id >= cfg.max_frames {
+        if cfg.max_frames > 0u32 && loop_frame_count >= cfg.max_frames {
             break;
         }
 
@@ -343,6 +345,7 @@ fn run_simulator_fb(cfg_in: SimConfig) i32 {
         pending_seed_present = true;
     }
     var last_tick_ms: u32 = get_tick_ms();
+    var loop_frame_count: u32 = 0u32;
     while true {
         const frame_start_ms: u32 = get_tick_ms();
         const delta_ms: u32 = frame_start_ms - last_tick_ms;
@@ -423,8 +426,9 @@ fn run_simulator_fb(cfg_in: SimConfig) i32 {
             after_present_ms - after_render_ms,
             after_present_ms - frame_start_ms
         );
+        loop_frame_count = loop_frame_count + 1u32;
 
-        if app.should_exit() || display.ctx.frame_id >= cfg.max_frames {
+        if app.should_exit() || loop_frame_count >= cfg.max_frames {
             break;
         }
 

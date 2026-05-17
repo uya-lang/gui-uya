@@ -1,6 +1,6 @@
 # OpenAI Chat 人机斗地主 Demo 详细设计文档
 
-> 状态：阶段 A 主体实现、默认测试与 headless smoke 已完成；仍缺 `sim-run` 手工完整对局收口  
+> 状态：阶段 A 主体实现、默认测试、headless smoke 与 `sim-run` 启动链路验证已完成；仍缺手工完整对局收口  
 > 推荐交付顺序：先完成阶段 A 离线 MVP，再进入阶段 B OpenAI 接入。  
 > 核心要求：阶段 A 必须真实可玩、可测、可 smoke，不能靠文档或占位代码假装完成。
 
@@ -10,7 +10,8 @@
 - 当前仍以离线路径为唯一完成口径；OpenAI 相关文件尚未开始。
 - 已真实通过默认测试链路：`./uya/bin/uya test gui/test_suite.uya -O0 --stack-size 65536`、`make test`。
 - 已真实通过 headless smoke，并产出/核对 `build/sim/doudizhu.bmp` 截图。
-- 文档中仍保留未完成的只有 `sim-run` 手工可玩与完整打一局相关项。
+- 已修复 simulator 窗口路径下 `--max-frames` 对静态 retained 页面不退出的问题，并真实通过 `make sim-run SIM_ARGS="--demo doudizhu --max-frames 3 --screenshot build/sim/doudizhu_simrun_check.bmp"`。
+- 文档中仍保留未完成的只有手工可玩与完整打一局相关项。
 
 ## 1. 项目背景
 
