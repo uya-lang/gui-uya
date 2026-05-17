@@ -372,13 +372,42 @@ fn ddz_demo_last_play_token_rect(player: i32, index: i32) Rect {
     };
 }
 
+fn ddz_demo_small_card_suit_text(rank: i32, suit: i32) &const byte {
+    if rank == 13 {
+        return "BJ" as &const byte;
+    }
+    if rank == 14 {
+        return "RJ" as &const byte;
+    }
+    if suit == 0 {
+        return "C" as &const byte;
+    }
+    if suit == 1 {
+        return "D" as &const byte;
+    }
+    if suit == 2 {
+        return "H" as &const byte;
+    }
+    if suit == 3 {
+        return "S" as &const byte;
+    }
+    return "" as &const byte;
+}
+
 fn ddz_demo_draw_last_play_token(ctx: &RenderCtx, rect: Rect, rank: i32, suit: i32) void {
     if ctx == null {
         return;
     }
     ctx.fill_round_rect(Rect{ x: rect.x, y: rect.y, w: rect.w, h: rect.h }, sim_layout_font(6u8), Color{ r: 251, g: 245, b: 231, a: 242 });
     ctx.draw_round_rect(Rect{ x: rect.x, y: rect.y, w: rect.w, h: rect.h }, sim_layout_font(6u8), Color{ r: 143, g: 99, b: 48, a: 180 }, 1u8);
-    ddz_demo_draw_center_text(ctx, Rect{ x: rect.x, y: rect.y, w: rect.w, h: rect.h }, ddz_rank_name(rank), 10u8, ddz_demo_card_center_color(rank, suit));
+    ddz_demo_draw_text(ctx, rect.x + sim_layout_x(4), rect.y + sim_layout_y(2), ddz_rank_name(rank), 9u8, ddz_demo_card_center_color(rank, suit));
+    ddz_demo_draw_center_text(
+        ctx,
+        Rect{ x: rect.x, y: rect.y + sim_layout_y(6), w: rect.w, h: sim_layout_h(8u16) },
+        ddz_demo_small_card_suit_text(rank, suit),
+        8u8,
+        ddz_demo_card_center_color(rank, suit)
+    );
 }
 
 fn ddz_demo_draw_player_last_play(ctx: &RenderCtx, page: &DdzPageRetained, player: i32, origin_x: i16, origin_y: i16) void {
@@ -449,6 +478,50 @@ fn ddz_demo_draw_last_combo(ctx: &RenderCtx, page: &DdzPageRetained, origin_x: i
             Color{ r: 228, g: 219, b: 192, a: 220 }
         );
         return;
+    }
+
+    var played_count: i32 = 0;
+    if page.last_play_player == 0 {
+        played_count = page.played_counts[0];
+    } else if page.last_play_player == 1 {
+        played_count = page.played_counts[1];
+    } else {
+        played_count = page.played_counts[2];
+    }
+
+    var show_count: i32 = page.game.last_combo.card_count;
+    if show_count > played_count {
+        show_count = played_count;
+    }
+    if show_count <= 0 {
+        return;
+    }
+
+    const card_w: u16 = sim_layout_w(32u16);
+    const card_h: u16 = sim_layout_h(46u16);
+    const step_x: i16 = sim_layout_x(34);
+    const total_w: i16 = (show_count - 1) as i16 * step_x + card_w as i16;
+    const start_x: i16 = origin_x + sim_layout_x(320) - total_w / 2;
+    const start_y: i16 = origin_y + sim_layout_y(220);
+    const slice_base: i32 = page.last_play_player * DDZ_MAX_CARDS_PER_HAND + (played_count - show_count);
+
+    var i: i32 = 0;
+    while i < show_count {
+        const card: DdzCard = page.played_cards[(slice_base + i) as usize];
+        ddz_demo_draw_card(
+            ctx,
+            Rect{
+                x: start_x + i as i16 * step_x,
+                y: start_y,
+                w: card_w,
+                h: card_h,
+            },
+            card.rank,
+            card.suit,
+            false,
+            true
+        );
+        i = i + 1;
     }
 }
 
