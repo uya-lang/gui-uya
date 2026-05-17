@@ -29,6 +29,7 @@ export enum SimDemoKind {
     Novel,
     Widgets,
     Custom,
+    Doudizhu,
 }
 
 export enum SimBackendKind {
@@ -103,6 +104,9 @@ export fn sim_demo_name(kind: SimDemoKind) &const byte {
     }
     if kind == SimDemoKind.Custom {
         return "自定义控件" as &const byte;
+    }
+    if kind == SimDemoKind.Doudizhu {
+        return "斗地主" as &const byte;
     }
     return "阶段4" as &const byte;
 }
@@ -248,6 +252,8 @@ export fn sim_config_from_runtime() SimConfig {
                     cfg.demo = SimDemoKind.Widgets;
                 } else if sim_cstr_eq(next as &const byte, "custom") {
                     cfg.demo = SimDemoKind.Custom;
+                } else if sim_cstr_eq(next as &const byte, "doudizhu") {
+                    cfg.demo = SimDemoKind.Doudizhu;
                 } else {
                     cfg.demo = SimDemoKind.Phase4;
                 }

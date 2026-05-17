@@ -1,9 +1,17 @@
 # OpenAI Chat 人机斗地主 Demo TODO
 
 > 配套设计文档：`docs/openai_doudizhu_demo_design.md`  
-> 当前状态：未开始实现  
+> 当前状态：阶段 A 已完成主体实现，正在补最后一轮测试/Smoke 收口  
 > 执行原则：先完整做完离线 MVP，再开始 OpenAI 接入。  
 > 纪律：未写代码、未跑测试、未跑 smoke、未产出截图，不得勾选完成。
+
+## 当前进展
+
+- 已新增 `gui/examples/doudizhu/rules.uya`、`gui/examples/doudizhu/ai.uya`、`gui/examples/demo_doudizhu.uya`。
+- 已修改 `gui/sim/config.uya`、`gui/sim/app.uya`，接入 `--demo doudizhu` 和 `Z` 热键。
+- 已新增 `gui/tests/test_doudizhu_rules.uya`、`gui/tests/test_doudizhu_ai.uya`，并接入 `gui/test_suite.uya`。
+- 已补 `phase6` demo 渲染测试入口。
+- 当前文档勾选只反映“代码已落地”的项；凡是需要全量测试、`sim-run`、`sim-headless`、截图人工核对的项，仍保持未完成。
 
 ## 0. 交付策略
 
@@ -35,10 +43,10 @@
 
 ### A0. 开工前确认
 
-- [ ] 确认 MVP 不实现飞机、四带二、完整积分倍数。
-- [ ] 确认电脑决策先只走本地启发式 AI。
-- [ ] 确认默认测试不访问网络。
-- [ ] 确认文档、命令示例、验收口径全部以离线路径优先。
+- [x] 确认 MVP 不实现飞机、四带二、完整积分倍数。
+- [x] 确认电脑决策先只走本地启发式 AI。
+- [x] 确认默认测试不访问网络。
+- [x] 确认文档、命令示例、验收口径全部以离线路径优先。
 
 验收：
 
@@ -46,21 +54,21 @@
 
 ### A1. 规则层
 
-- [ ] 新建 `gui/examples/doudizhu/rules.uya`。
-- [ ] 定义 rank、card、hand、combo、action、game phase、game state。
-- [ ] 实现 `ddz_deck_init()`，生成 54 张唯一牌。
-- [ ] 实现 `ddz_deck_shuffle()`，使用可重复 seed。
-- [ ] 实现 `ddz_game_deal()`，分发 `17/17/17 + 3`。
-- [ ] 实现 `ddz_hand_sort()`。
-- [ ] 实现 `ddz_hand_recount()`。
-- [ ] 实现 `ddz_combo_detect()`。
-- [ ] 实现 `ddz_combo_can_beat()`。
-- [ ] 实现 `ddz_generate_bid_actions()`。
-- [ ] 实现 `ddz_generate_play_actions()`。
-- [ ] 实现 `ddz_game_apply_bid()`。
-- [ ] 实现 `ddz_game_apply_action()`。
-- [ ] 实现 `ddz_game_restart()`。
-- [ ] 实现 action label 格式化。
+- [x] 新建 `gui/examples/doudizhu/rules.uya`。
+- [x] 定义 rank、card、hand、combo、action、game phase、game state。
+- [x] 实现 `ddz_deck_init()`，生成 54 张唯一牌。
+- [x] 实现 `ddz_deck_shuffle()`，使用可重复 seed。
+- [x] 实现 `ddz_game_deal()`，分发 `17/17/17 + 3`。
+- [x] 实现 `ddz_hand_sort()`。
+- [x] 实现 `ddz_hand_recount()`。
+- [x] 实现 `ddz_combo_detect()`。
+- [x] 实现 `ddz_combo_can_beat()`。
+- [x] 实现 `ddz_generate_bid_actions()`。
+- [x] 实现 `ddz_generate_play_actions()`。
+- [x] 实现 `ddz_game_apply_bid()`。
+- [x] 实现 `ddz_game_apply_action()`。
+- [x] 实现 `ddz_game_restart()`。
+- [x] 实现 action label 格式化。
 
 验收：
 
@@ -83,15 +91,15 @@
 
 ### A2. 本地启发式 AI
 
-- [ ] 新建 `gui/examples/doudizhu/ai.uya`。
-- [ ] 定义 `DdzAiSource`：`Local | Fallback`。
-- [ ] 定义离线 AI 决策状态。
-- [ ] 实现叫分评分函数。
-- [ ] 实现主动出牌启发式。
-- [ ] 实现跟牌启发式。
-- [ ] 实现炸弹/火箭保守使用策略。
-- [ ] 实现 action id 校验函数。
-- [ ] 保证同一 seed 和同一局面下结果稳定。
+- [x] 新建 `gui/examples/doudizhu/ai.uya`。
+- [x] 定义 `DdzAiSource`：`Local | Fallback`。
+- [x] 定义离线 AI 决策状态。
+- [x] 实现叫分评分函数。
+- [x] 实现主动出牌启发式。
+- [x] 实现跟牌启发式。
+- [x] 实现炸弹/火箭保守使用策略。
+- [x] 实现 action id 校验函数。
+- [x] 保证同一 seed 和同一局面下结果稳定。
 
 验收：
 
@@ -110,23 +118,23 @@
 
 ### A3. 离线 UI Demo
 
-- [ ] 新建 `gui/examples/demo_doudizhu.uya`。
-- [ ] 定义 `DdzPageRetained`。
-- [ ] 实现 demo 初始化和资源分配。
-- [ ] 实现 Canvas 桌面背景绘制。
-- [ ] 实现玩家区域绘制。
-- [ ] 实现底牌区绘制。
-- [ ] 实现上一手牌绘制。
-- [ ] 实现人类手牌绘制。
-- [ ] 实现选中牌上移效果。
-- [ ] 实现叫分按钮。
-- [ ] 实现 `提示`、`出牌`、`不要`、`重开` 按钮。
-- [ ] 实现点击手牌命中检测。
-- [ ] 实现人类叫分交互。
-- [ ] 实现人类出牌交互。
-- [ ] 实现 AI 自动叫分和出牌。
-- [ ] 实现状态文案。
-- [ ] 实现重开时清理选牌和 AI 状态。
+- [x] 新建 `gui/examples/demo_doudizhu.uya`。
+- [x] 定义 `DdzPageRetained`。
+- [x] 实现 demo 初始化和资源分配。
+- [x] 实现 Canvas 桌面背景绘制。
+- [x] 实现玩家区域绘制。
+- [x] 实现底牌区绘制。
+- [x] 实现上一手牌绘制。
+- [x] 实现人类手牌绘制。
+- [x] 实现选中牌上移效果。
+- [x] 实现叫分按钮。
+- [x] 实现 `提示`、`出牌`、`不要`、`重开` 按钮。
+- [x] 实现点击手牌命中检测。
+- [x] 实现人类叫分交互。
+- [x] 实现人类出牌交互。
+- [x] 实现 AI 自动叫分和出牌。
+- [x] 实现状态文案。
+- [x] 实现重开时清理选牌和 AI 状态。
 
 验收：
 
@@ -137,14 +145,14 @@
 
 ### A4. 模拟器接入
 
-- [ ] 修改 `gui/sim/config.uya`，新增 `SimDemoKind.Doudizhu`。
-- [ ] 修改 `sim_demo_name()`，返回 `斗地主`。
-- [ ] 修改命令行解析，支持 `--demo doudizhu`。
-- [ ] 修改 `gui/sim/app.uya`，添加 retained state。
-- [ ] 修改 `gui/sim/app.uya`，接入 render/update。
-- [ ] 修改 `gui/sim/app.uya`，接入输入事件。
-- [ ] 增加热键 `Z` 切换到斗地主。
-- [ ] 更新 simulator help 文案。
+- [x] 修改 `gui/sim/config.uya`，新增 `SimDemoKind.Doudizhu`。
+- [x] 修改 `sim_demo_name()`，返回 `斗地主`。
+- [x] 修改命令行解析，支持 `--demo doudizhu`。
+- [x] 修改 `gui/sim/app.uya`，添加 retained state。
+- [x] 修改 `gui/sim/app.uya`，接入 render/update。
+- [x] 修改 `gui/sim/app.uya`，接入输入事件。
+- [x] 增加热键 `Z` 切换到斗地主。
+- [x] 更新 simulator help 文案。
 
 验收：
 
@@ -154,10 +162,10 @@
 
 ### A5. 测试接入
 
-- [ ] 新建 `gui/tests/test_doudizhu_rules.uya`。
-- [ ] 新建 `gui/tests/test_doudizhu_ai.uya`。
-- [ ] 修改 `gui/test_suite.uya` 聚合新测试。
-- [ ] 如需快速 smoke，补 `gui/examples` demo 渲染测试。
+- [x] 新建 `gui/tests/test_doudizhu_rules.uya`。
+- [x] 新建 `gui/tests/test_doudizhu_ai.uya`。
+- [x] 修改 `gui/test_suite.uya` 聚合新测试。
+- [x] 如需快速 smoke，补 `gui/examples` demo 渲染测试。
 
 验收：
 
@@ -166,10 +174,10 @@
 
 ### A6. 文档先写离线路径
 
-- [ ] 设计文档开头明确“阶段 A 先离线完成”。
-- [ ] 运行文档先给出离线启动命令。
-- [ ] 验收文档先给出离线 smoke 命令。
-- [ ] 明确阶段 A 不要求 API Key、libcurl、联网。
+- [x] 设计文档开头明确“阶段 A 先离线完成”。
+- [x] 运行文档先给出离线启动命令。
+- [x] 验收文档先给出离线 smoke 命令。
+- [x] 明确阶段 A 不要求 API Key、libcurl、联网。
 
 ### A7. 阶段 A 真实 smoke
 

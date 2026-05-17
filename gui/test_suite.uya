@@ -17,6 +17,8 @@ use tests.test_sim_app;
 use tests.test_sim_tools;
 use tests.test_style;
 use tests.test_dirty_region;
+use tests.test_doudizhu_ai;
+use tests.test_doudizhu_rules;
 use tests.test_widgets;
 
 test "phase4 suite loads" {
@@ -39,6 +41,8 @@ test "phase4 suite loads" {
         + TEST_SIM_TOOLS_MODULE
         + TEST_STYLE_MODULE
         + TEST_DIRTY_REGION_MODULE
+        + TEST_DOUDIZHU_AI_MODULE
+        + TEST_DOUDIZHU_RULES_MODULE
         + TEST_WIDGET_MODULE;
     _ = sentinel;
 }

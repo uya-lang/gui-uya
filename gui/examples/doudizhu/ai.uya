@@ -1,0 +1,409 @@
+use examples.doudizhu.rules.DDZ_MAX_ACTIONS;
+use examples.doudizhu.rules.DDZ_NO_PLAYER;
+use examples.doudizhu.rules.DDZ_PLAYER_COUNT;
+use examples.doudizhu.rules.DDZ_RANK_2;
+use examples.doudizhu.rules.DDZ_RANK_BJ;
+use examples.doudizhu.rules.DDZ_RANK_RJ;
+use examples.doudizhu.rules.DdzAction;
+use examples.doudizhu.rules.DdzActionKind;
+use examples.doudizhu.rules.DdzActionList;
+use examples.doudizhu.rules.DdzCombo;
+use examples.doudizhu.rules.DdzComboKind;
+use examples.doudizhu.rules.DdzGamePhase;
+use examples.doudizhu.rules.DdzGameState;
+use examples.doudizhu.rules.DdzHand;
+use examples.doudizhu.rules.ddz_action_list_new;
+use examples.doudizhu.rules.ddz_combo_invalid;
+use examples.doudizhu.rules.ddz_generate_bid_actions;
+use examples.doudizhu.rules.ddz_generate_play_actions;
+
+export enum DdzAiSource {
+    Local,
+    Fallback,
+}
+
+export enum DdzAiStatus {
+    Ok,
+    NoLegalActions,
+    InvalidActionId,
+}
+
+export struct DdzAiDecision {
+    status: DdzAiStatus,
+    source: DdzAiSource,
+    action_index: i32,
+    action: DdzAction,
+}
+
+export struct DdzAiState {
+    last_source: DdzAiSource,
+    turn_count: i32,
+}
+
+fn ddz_ai_rank_weight(rank: i32) i32 {
+    if rank == DDZ_RANK_BJ {
+        return 6;
+    }
+    if rank == DDZ_RANK_RJ {
+        return 8;
+    }
+    if rank == DDZ_RANK_2 {
+        return 5;
+    }
+    if rank >= 9 {
+        return 3;
+    }
+    return 1;
+}
+
+fn ddz_ai_bomb_count(hand: &DdzHand) i32 {
+    if hand == null {
+        return 0;
+    }
+    var total: i32 = 0;
+    var rank: i32 = 0;
+    while rank <= DDZ_RANK_2 {
+        if hand.rank_counts[rank as usize] >= 4 {
+            total = total + 1;
+        }
+        rank = rank + 1;
+    }
+    if hand.rank_counts[DDZ_RANK_BJ as usize] > 0 && hand.rank_counts[DDZ_RANK_RJ as usize] > 0 {
+        total = total + 1;
+    }
+    return total;
+}
+
+fn ddz_ai_high_card_count(hand: &DdzHand) i32 {
+    if hand == null {
+        return 0;
+    }
+    var total: i32 = 0;
+    var rank: i32 = 9;
+    while rank < 15 {
+        total = total + hand.rank_counts[rank as usize];
+        rank = rank + 1;
+    }
+    return total;
+}
+
+export fn ddz_ai_state_new() DdzAiState {
+    return DdzAiState{
+        last_source: DdzAiSource.Local,
+        turn_count: 0,
+    };
+}
+
+export fn ddz_ai_bid_score(hand: &DdzHand) i32 {
+    if hand == null {
+        return 0;
+    }
+    var score: i32 = 0;
+    var rank: i32 = 0;
+    while rank < 15 {
+        score = score + hand.rank_counts[rank as usize] * ddz_ai_rank_weight(rank);
+        if hand.rank_counts[rank as usize] >= 3 {
+            score = score + 2;
+        }
+        if hand.rank_counts[rank as usize] >= 4 {
+            score = score + 6;
+        }
+        rank = rank + 1;
+    }
+    if hand.rank_counts[DDZ_RANK_BJ as usize] > 0 && hand.rank_counts[DDZ_RANK_RJ as usize] > 0 {
+        score = score + 8;
+    }
+    if score >= 38 {
+        return 3;
+    }
+    if score >= 28 {
+        return 2;
+    }
+    if score >= 20 {
+        return 1;
+    }
+    return 0;
+}
+
+fn ddz_ai_is_bomb_like(action: &DdzAction) bool {
+    if action == null {
+        return false;
+    }
+    return action.combo.kind == DdzComboKind.Bomb || action.combo.kind == DdzComboKind.Rocket;
+}
+
+fn ddz_ai_low_card_bonus(action: &DdzAction) i32 {
+    if action == null {
+        return 0;
+    }
+    return 20 - action.combo.main_rank;
+}
+
+fn ddz_ai_preserve_bonus(action: &DdzAction) i32 {
+    if action == null {
+        return 0;
+    }
+    if action.combo.kind == DdzComboKind.TriplePair || action.combo.kind == DdzComboKind.TripleSingle {
+        return 8;
+    }
+    if action.combo.kind == DdzComboKind.Straight || action.combo.kind == DdzComboKind.StraightPairs {
+        return 6 + action.card_count;
+    }
+    if action.combo.kind == DdzComboKind.Triple {
+        return 5;
+    }
+    if action.combo.kind == DdzComboKind.Pair {
+        return 2;
+    }
+    return 0;
+}
+
+fn ddz_ai_finish_bonus(action: &DdzAction, hand_count: i32) i32 {
+    if action == null {
+        return 0;
+    }
+    if action.card_count == hand_count {
+        return 1000;
+    }
+    if hand_count - action.card_count <= 2 {
+        return 80;
+    }
+    return 0;
+}
+
+fn ddz_ai_should_spend_bomb(game: &DdzGameState, player: i32) bool {
+    if game == null || player < 0 || player >= DDZ_PLAYER_COUNT {
+        return false;
+    }
+    var hand_count: i32 = 0;
+    if player == 0 {
+        hand_count = game.players[0].count;
+    } else if player == 1 {
+        hand_count = game.players[1].count;
+    } else {
+        hand_count = game.players[2].count;
+    }
+    if hand_count <= 4 {
+        return true;
+    }
+    var opp: i32 = 0;
+    while opp < DDZ_PLAYER_COUNT {
+        if opp != player && game.players[opp as usize].count <= 2 {
+            return true;
+        }
+        opp = opp + 1;
+    }
+    return false;
+}
+
+fn ddz_ai_score_lead_action(game: &DdzGameState, player: i32, action: &DdzAction) i32 {
+    if game == null || action == null {
+        return -100000;
+    }
+    var hand_count: i32 = 0;
+    if player == 0 {
+        hand_count = game.players[0].count;
+    } else if player == 1 {
+        hand_count = game.players[1].count;
+    } else {
+        hand_count = game.players[2].count;
+    }
+    var score: i32 = ddz_ai_finish_bonus(action, hand_count);
+    score = score + ddz_ai_low_card_bonus(action);
+    score = score + ddz_ai_preserve_bonus(action);
+    if ddz_ai_is_bomb_like(action) {
+        if ddz_ai_should_spend_bomb(game, player) {
+            score = score + 30;
+        } else {
+            score = score - 120;
+        }
+    }
+    if action.combo.kind == DdzComboKind.Single {
+        score = score + 3;
+    }
+    if action.combo.kind == DdzComboKind.Pair {
+        score = score + 2;
+    }
+    return score;
+}
+
+fn ddz_ai_score_follow_action(game: &DdzGameState, player: i32, action: &DdzAction) i32 {
+    if game == null || action == null {
+        return -100000;
+    }
+    if action.combo.kind == DdzComboKind.Pass {
+        if ddz_ai_should_spend_bomb(game, player) {
+            return -20;
+        }
+        return 15;
+    }
+    var hand_count: i32 = 0;
+    if player == 0 {
+        hand_count = game.players[0].count;
+    } else if player == 1 {
+        hand_count = game.players[1].count;
+    } else {
+        hand_count = game.players[2].count;
+    }
+    var score: i32 = ddz_ai_finish_bonus(action, hand_count);
+    score = score + 200 - action.combo.main_rank * 8;
+    score = score - action.card_count * 2;
+    if action.combo.kind == DdzComboKind.Bomb || action.combo.kind == DdzComboKind.Rocket {
+        if ddz_ai_should_spend_bomb(game, player) {
+            score = score + 50;
+        } else {
+            score = score - 300;
+        }
+    }
+    return score;
+}
+
+export fn ddz_ai_action_id_valid(legal: &DdzActionList, action_index: i32) bool {
+    if legal == null {
+        return false;
+    }
+    return action_index >= 0 && action_index < legal.count && action_index < DDZ_MAX_ACTIONS;
+}
+
+fn ddz_ai_pick_best_bid(legal: &DdzActionList, desired_score: i32) i32 {
+    if legal == null || legal.count <= 0 {
+        return -1;
+    }
+    var best_idx: i32 = 0;
+    var best_bid: i32 = legal.items[0].bid;
+    var i: i32 = 0;
+    while i < legal.count {
+        const bid: i32 = legal.items[i as usize].bid;
+        if bid <= desired_score && bid >= best_bid {
+            best_bid = bid;
+            best_idx = i;
+        }
+        i = i + 1;
+    }
+    return best_idx;
+}
+
+fn ddz_ai_pick_best_play(game: &DdzGameState, player: i32, legal: &DdzActionList) i32 {
+    if game == null || legal == null || legal.count <= 0 {
+        return -1;
+    }
+    var best_idx: i32 = -1;
+    var best_score: i32 = -1000000;
+    var i: i32 = 0;
+    const leading: bool = game.last_combo.kind == DdzComboKind.Invalid
+        || game.last_combo.kind == DdzComboKind.Pass
+        || game.last_combo_player == player
+        || game.last_combo_player == DDZ_NO_PLAYER;
+    var has_non_bomb_response: bool = false;
+    var preferred_idx: i32 = -1;
+    if !leading {
+        while i < legal.count {
+            const probe: &DdzAction = &legal.items[i as usize];
+            if probe.combo.kind != DdzComboKind.Pass && !ddz_ai_is_bomb_like(probe) {
+                has_non_bomb_response = true;
+                if probe.combo.kind == game.last_combo.kind {
+                    if preferred_idx < 0 {
+                        preferred_idx = i;
+                    } else if preferred_idx >= 0 && preferred_idx < legal.count {
+                        if probe.combo.main_rank < legal.items[preferred_idx as usize].combo.main_rank {
+                            preferred_idx = i;
+                        }
+                    }
+                }
+                break;
+            }
+            i = i + 1;
+        }
+        i = 0;
+        if preferred_idx >= 0 && !ddz_ai_should_spend_bomb(game, player) {
+            return preferred_idx;
+        }
+    }
+    while i < legal.count {
+        const action: &DdzAction = &legal.items[i as usize];
+        if !leading && has_non_bomb_response && ddz_ai_is_bomb_like(action) && !ddz_ai_should_spend_bomb(game, player) {
+            i = i + 1;
+            continue;
+        }
+        var score: i32 = 0;
+        if leading {
+            score = ddz_ai_score_lead_action(game, player, action);
+        } else {
+            score = ddz_ai_score_follow_action(game, player, action);
+        }
+        if best_idx < 0 || score > best_score {
+            best_idx = i;
+            best_score = score;
+        }
+        i = i + 1;
+    }
+    return best_idx;
+}
+
+fn ddz_ai_decision_fail(source: DdzAiSource, status: DdzAiStatus) DdzAiDecision {
+    return DdzAiDecision{
+        status: status,
+        source: source,
+        action_index: -1,
+        action: DdzAction{
+            kind: DdzActionKind.Play,
+            bid: 0,
+            combo: ddz_combo_invalid(),
+            card_ids: [],
+            card_count: 0,
+            label: [],
+        },
+    };
+}
+
+export fn ddz_ai_choose_action(state: &DdzAiState, game: &DdzGameState, player: i32) DdzAiDecision {
+    if game == null || player < 0 || player >= DDZ_PLAYER_COUNT {
+        return ddz_ai_decision_fail(DdzAiSource.Local, DdzAiStatus.NoLegalActions);
+    }
+    var legal: DdzActionList = ddz_action_list_new();
+    if game.phase == DdzGamePhase.Bidding {
+        if !ddz_generate_bid_actions(game, player, &legal) || legal.count <= 0 {
+            return ddz_ai_decision_fail(DdzAiSource.Local, DdzAiStatus.NoLegalActions);
+        }
+        var desired: i32 = 0;
+        if player == 0 {
+            desired = ddz_ai_bid_score(&game.players[0]);
+        } else if player == 1 {
+            desired = ddz_ai_bid_score(&game.players[1]);
+        } else {
+            desired = ddz_ai_bid_score(&game.players[2]);
+        }
+        const best_idx: i32 = ddz_ai_pick_best_bid(&legal, desired);
+        if !ddz_ai_action_id_valid(&legal, best_idx) {
+            return ddz_ai_decision_fail(DdzAiSource.Local, DdzAiStatus.InvalidActionId);
+        }
+        if state != null {
+            state.last_source = DdzAiSource.Local;
+            state.turn_count = state.turn_count + 1;
+        }
+        return DdzAiDecision{
+            status: DdzAiStatus.Ok,
+            source: DdzAiSource.Local,
+            action_index: best_idx,
+            action: legal.items[best_idx as usize],
+        };
+    }
+
+    if !ddz_generate_play_actions(game, player, &legal) || legal.count <= 0 {
+        return ddz_ai_decision_fail(DdzAiSource.Local, DdzAiStatus.NoLegalActions);
+    }
+    const best_idx_play: i32 = ddz_ai_pick_best_play(game, player, &legal);
+    if !ddz_ai_action_id_valid(&legal, best_idx_play) {
+        return ddz_ai_decision_fail(DdzAiSource.Local, DdzAiStatus.InvalidActionId);
+    }
+    if state != null {
+        state.last_source = DdzAiSource.Local;
+        state.turn_count = state.turn_count + 1;
+    }
+    return DdzAiDecision{
+        status: DdzAiStatus.Ok,
+        source: DdzAiSource.Local,
+        action_index: best_idx_play,
+        action: legal.items[best_idx_play as usize],
+    };
+}
