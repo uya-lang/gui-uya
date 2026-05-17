@@ -91,3 +91,25 @@ test "doudizhu ai follows with smallest beating action and avoids bomb early" {
     try assert_eq_i32(decision.action.combo.kind as i32, DdzComboKind.Single as i32);
     try assert_eq_i32(decision.action.combo.main_rank, 4);
 }
+
+test "doudizhu ai spends bomb when it can nearly finish" {
+    var game: DdzGameState = ddz_ai_test_game();
+    game.players[0].count = 4;
+    game.players[0].cards[0] = DdzCard{ id: 51, rank: 6, suit: 0 };
+    game.players[0].cards[1] = DdzCard{ id: 52, rank: 6, suit: 1 };
+    game.players[0].cards[2] = DdzCard{ id: 53, rank: 6, suit: 2 };
+    game.players[0].cards[3] = DdzCard{ id: 54, rank: 6, suit: 3 };
+    ddz_hand_recount(&game.players[0]);
+    var last_ranks: [i32: 20] = [];
+    last_ranks[0] = 5;
+    last_ranks[1] = 5;
+    last_ranks[2] = 5;
+    last_ranks[3] = 5;
+    game.last_combo = ddz_combo_detect(&last_ranks[0], 4);
+    game.last_combo_player = 1;
+    var ai: DdzAiState = ddz_ai_state_new();
+    const decision: DdzAiDecision = ddz_ai_choose_action(&ai, &game, 0);
+    try assert_eq_i32(decision.status as i32, DdzAiStatus.Ok as i32);
+    try assert_eq_i32(decision.action.combo.kind as i32, DdzComboKind.Bomb as i32);
+    try assert_eq_i32(decision.action.combo.main_rank, 6);
+}

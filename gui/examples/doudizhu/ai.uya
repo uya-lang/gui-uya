@@ -296,21 +296,18 @@ fn ddz_ai_pick_best_play(game: &DdzGameState, player: i32, legal: &DdzActionList
         || game.last_combo_player == DDZ_NO_PLAYER;
     var has_non_bomb_response: bool = false;
     var preferred_idx: i32 = -1;
+    var preferred_rank: i32 = 100;
     if !leading {
         while i < legal.count {
             const probe: &DdzAction = &legal.items[i as usize];
             if probe.combo.kind != DdzComboKind.Pass && !ddz_ai_is_bomb_like(probe) {
                 has_non_bomb_response = true;
                 if probe.combo.kind == game.last_combo.kind {
-                    if preferred_idx < 0 {
+                    if preferred_idx < 0 || probe.combo.main_rank < preferred_rank {
                         preferred_idx = i;
-                    } else if preferred_idx >= 0 && preferred_idx < legal.count {
-                        if probe.combo.main_rank < legal.items[preferred_idx as usize].combo.main_rank {
-                            preferred_idx = i;
-                        }
+                        preferred_rank = probe.combo.main_rank;
                     }
                 }
-                break;
             }
             i = i + 1;
         }

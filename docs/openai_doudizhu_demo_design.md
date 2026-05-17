@@ -1,6 +1,6 @@
 # OpenAI Chat 人机斗地主 Demo 详细设计文档
 
-> 状态：阶段 A 主体实现已落地，正在做最后的测试与 smoke 收口  
+> 状态：阶段 A 主体实现、默认测试与 headless smoke 已完成；仍缺 `sim-run` 手工完整对局收口  
 > 推荐交付顺序：先完成阶段 A 离线 MVP，再进入阶段 B OpenAI 接入。  
 > 核心要求：阶段 A 必须真实可玩、可测、可 smoke，不能靠文档或占位代码假装完成。
 
@@ -8,7 +8,9 @@
 
 - 已落地阶段 A 主体代码：`rules.uya`、`ai.uya`、`demo_doudizhu.uya`、sim 接入和基础测试文件均已创建并接线。
 - 当前仍以离线路径为唯一完成口径；OpenAI 相关文件尚未开始。
-- 文档中的阶段 A smoke、截图、手工完整打一局，仍按“必须真实执行后再勾选”的标准保留未完成。
+- 已真实通过默认测试链路：`./uya/bin/uya test gui/test_suite.uya -O0 --stack-size 65536`、`make test`。
+- 已真实通过 headless smoke，并产出/核对 `build/sim/doudizhu.bmp` 截图。
+- 文档中仍保留未完成的只有 `sim-run` 手工可玩与完整打一局相关项。
 
 ## 1. 项目背景
 

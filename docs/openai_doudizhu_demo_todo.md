@@ -1,7 +1,7 @@
 # OpenAI Chat 人机斗地主 Demo TODO
 
 > 配套设计文档：`docs/openai_doudizhu_demo_design.md`  
-> 当前状态：阶段 A 已完成主体实现，正在补最后一轮测试/Smoke 收口  
+> 当前状态：阶段 A 已完成主体实现、默认测试与 headless smoke；仍缺 `sim-run` 手工完整对局收口  
 > 执行原则：先完整做完离线 MVP，再开始 OpenAI 接入。  
 > 纪律：未写代码、未跑测试、未跑 smoke、未产出截图，不得勾选完成。
 
@@ -11,7 +11,9 @@
 - 已修改 `gui/sim/config.uya`、`gui/sim/app.uya`，接入 `--demo doudizhu` 和 `Z` 热键。
 - 已新增 `gui/tests/test_doudizhu_rules.uya`、`gui/tests/test_doudizhu_ai.uya`，并接入 `gui/test_suite.uya`。
 - 已补 `phase6` demo 渲染测试入口。
-- 当前文档勾选只反映“代码已落地”的项；凡是需要全量测试、`sim-run`、`sim-headless`、截图人工核对的项，仍保持未完成。
+- 已真实通过 `./uya/bin/uya test gui/test_suite.uya -O0 --stack-size 65536` 与 `make test`。
+- 已真实通过 `make sim-headless SIM_HEADLESS_ARGS="--demo doudizhu --max-frames 5 --screenshot build/sim/doudizhu.bmp"`，并核对截图内容。
+- 当前仍未完成的只剩 `sim-run` 手工可玩与完整跑完一局相关项。
 
 ## 0. 交付策略
 
@@ -50,7 +52,7 @@
 
 验收：
 
-- [ ] 设计文档中所有阶段 A 待确认项已有结论。
+- [x] 设计文档中所有阶段 A 待确认项已有结论。
 
 ### A1. 规则层
 
@@ -78,16 +80,16 @@
 
 测试：
 
-- [ ] deck 唯一性。
-- [ ] 发牌数量。
-- [ ] rank_counts 正确。
-- [ ] 单、对、三、三带一、三带一对。
-- [ ] 顺子、连对、炸弹、火箭。
-- [ ] 非法顺子和非法连对。
-- [ ] 炸弹/火箭比较。
-- [ ] pass 规则。
-- [ ] apply action 后手牌和轮转正确。
-- [ ] GameOver 判定。
+- [x] deck 唯一性。
+- [x] 发牌数量。
+- [x] rank_counts 正确。
+- [x] 单、对、三、三带一、三带一对。
+- [x] 顺子、连对、炸弹、火箭。
+- [x] 非法顺子和非法连对。
+- [x] 炸弹/火箭比较。
+- [x] pass 规则。
+- [x] apply action 后手牌和轮转正确。
+- [x] GameOver 判定。
 
 ### A2. 本地启发式 AI
 
@@ -109,12 +111,12 @@
 
 测试：
 
-- [ ] 强牌叫 3 分。
-- [ ] 弱牌不叫或叫低分。
-- [ ] 主动出牌选择最小普通动作。
-- [ ] 跟牌选择最小可压动作。
-- [ ] 非必要场景不炸。
-- [ ] 剩余牌少时允许炸。
+- [x] 强牌叫 3 分。
+- [x] 弱牌不叫或叫低分。
+- [x] 主动出牌选择最小普通动作。
+- [x] 跟牌选择最小可压动作。
+- [x] 非必要场景不炸。
+- [x] 剩余牌少时允许炸。
 
 ### A3. 离线 UI Demo
 
@@ -157,7 +159,7 @@
 验收：
 
 - [ ] `make sim-run SIM_ARGS="--demo doudizhu --scale 1"` 能打开。
-- [ ] `make sim-headless SIM_HEADLESS_ARGS="--demo doudizhu --max-frames 5 --screenshot build/sim/doudizhu.bmp"` 能生成截图。
+- [x] `make sim-headless SIM_HEADLESS_ARGS="--demo doudizhu --max-frames 5 --screenshot build/sim/doudizhu.bmp"` 能生成截图。
 - [ ] 切换到其他 demo 再切回不崩溃。
 
 ### A5. 测试接入
@@ -169,8 +171,8 @@
 
 验收：
 
-- [ ] `./uya/bin/uya test gui/test_suite.uya -O0 --stack-size 65536` 通过。
-- [ ] `make test` 通过。
+- [x] `./uya/bin/uya test gui/test_suite.uya -O0 --stack-size 65536` 通过。
+- [x] `make test` 通过。
 
 ### A6. 文档先写离线路径
 
@@ -185,8 +187,8 @@
 
 - [ ] `make sim-run SIM_ARGS="--demo doudizhu --scale 1"` 手工可玩验证通过。
 - [ ] 至少完整跑完一局离线对局。
-- [ ] `make sim-headless SIM_HEADLESS_ARGS="--demo doudizhu --max-frames 5 --screenshot build/sim/doudizhu.bmp"` 通过。
-- [ ] 产出并核对 `build/sim/doudizhu.bmp`。
+- [x] `make sim-headless SIM_HEADLESS_ARGS="--demo doudizhu --max-frames 5 --screenshot build/sim/doudizhu.bmp"` 通过。
+- [x] 产出并核对 `build/sim/doudizhu.bmp`。
 
 阶段 A 最终验收：
 
