@@ -4,6 +4,7 @@ extern fn uya_openai_chat_available() i32;
 extern fn uya_openai_chat_start(request_body: &const byte, request_len: usize) i32;
 extern fn uya_openai_chat_poll(handle: i32, out_body: &byte, out_cap: i32, out_len: &i32) i32;
 extern fn uya_openai_chat_cancel(handle: i32) void;
+extern fn uya_openai_chat_get_model(out_model: &byte, out_cap: i32) i32;
 
 export enum UyaOpenAiChatStatus {
     Ready,
@@ -90,6 +91,14 @@ export fn uya_openai_chat_cancel_request(handle: i32) void {
         return;
     }
     uya_openai_chat_cancel(handle);
+}
+
+export fn uya_openai_chat_model_name(out_model: &byte, out_cap: i32) bool {
+    if out_model == null || out_cap <= 0 {
+        return false;
+    }
+    out_model[0] = 0;
+    return uya_openai_chat_get_model(out_model, out_cap) > 0;
 }
 
 fn uya_openai_chat_is_space(ch: byte) bool {

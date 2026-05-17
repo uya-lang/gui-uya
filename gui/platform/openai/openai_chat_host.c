@@ -688,6 +688,26 @@ int32_t uya_openai_chat_available(void) {
     return uya_openai_chat_enabled() ? 1 : 0;
 }
 
+int32_t uya_openai_chat_get_model(uint8_t *out_model, int32_t out_cap) {
+    UyaOpenAiResolvedConfig cfg;
+    size_t len;
+    if (out_model == NULL || out_cap <= 0) {
+        return 0;
+    }
+    cfg = uya_openai_chat_resolve_config();
+    len = strlen(cfg.model);
+    if (len == 0u) {
+        out_model[0] = 0u;
+        return 0;
+    }
+    if ((size_t)out_cap <= len) {
+        len = (size_t)(out_cap - 1);
+    }
+    memcpy(out_model, cfg.model, len);
+    out_model[len] = 0u;
+    return 1;
+}
+
 int32_t uya_openai_chat_start(const uint8_t *request_body, size_t request_len) {
     UyaOpenAiChatRequest *req = &g_openai_req;
     UyaOpenAiResolvedConfig cfg;

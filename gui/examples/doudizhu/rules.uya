@@ -8,6 +8,7 @@ export const DDZ_MAX_CARDS_PER_HAND: i32 = 20;
 export const DDZ_RANK_COUNT: i32 = 15;
 export const DDZ_MAX_COMBO_CARDS: i32 = 20;
 export const DDZ_MAX_ACTIONS: i32 = 128;
+export const DDZ_MAX_HISTORY: i32 = 256;
 export const DDZ_ACTION_LABEL_BYTES: i32 = 48;
 export const DDZ_NO_PLAYER: i32 = -1;
 export const DDZ_RANK_2: i32 = 12;
@@ -76,6 +77,20 @@ export struct DdzActionList {
     truncated: bool,
 }
 
+export struct DdzHistoryEntry {
+    step: i32,
+    phase: DdzGamePhase,
+    player: i32,
+    action: DdzAction,
+    hand_counts: [i32: 3],
+    current_player: i32,
+    landlord: i32,
+    highest_bid: i32,
+    highest_bid_player: i32,
+    pass_count: i32,
+    last_combo_player: i32,
+}
+
 export struct DdzGameState {
     phase: DdzGamePhase,
     seed: u32,
@@ -92,6 +107,8 @@ export struct DdzGameState {
     last_combo_player: i32,
     winner: i32,
     round_index: i32,
+    history: [DdzHistoryEntry: 256],
+    history_count: i32,
 }
 
 fn ddz_min_i32(a: i32, b: i32) i32 {
@@ -309,6 +326,68 @@ fn ddz_action_list_push(list: &DdzActionList, action: DdzAction) bool {
     list.items[list.count as usize] = action;
     list.count = list.count + 1;
     return true;
+}
+
+export fn ddz_history_entry_new() DdzHistoryEntry {
+    return DdzHistoryEntry{
+        step: 0,
+        phase: DdzGamePhase.Bidding,
+        player: DDZ_NO_PLAYER,
+        action: DdzAction{
+            kind: DdzActionKind.Play,
+            bid: 0,
+            combo: ddz_combo_invalid(),
+            card_ids: [],
+            card_count: 0,
+            label: [],
+        },
+        hand_counts: [],
+        current_player: 0,
+        landlord: DDZ_NO_PLAYER,
+        highest_bid: 0,
+        highest_bid_player: DDZ_NO_PLAYER,
+        pass_count: 0,
+        last_combo_player: DDZ_NO_PLAYER,
+    };
+}
+
+fn ddz_game_record_action(game: &DdzGameState, phase: DdzGamePhase, player: i32, action: &DdzAction) void {
+    if game == null || action == null {
+        return;
+    }
+    if game.history_count < 0 || game.history_count >= DDZ_MAX_HISTORY {
+        return;
+    }
+    var entry: DdzHistoryEntry = ddz_history_entry_new();
+    entry.step = game.history_count;
+    entry.phase = phase;
+    entry.player = player;
+    ddz_action_copy(&entry.action, action);
+    var i: i32 = 0;
+    while i < DDZ_PLAYER_COUNT {
+        entry.hand_counts[i as usize] = game.players[i as usize].count;
+        i = i + 1;
+    }
+    entry.current_player = game.current_player;
+    entry.landlord = game.landlord;
+    entry.highest_bid = game.highest_bid;
+    entry.highest_bid_player = game.highest_bid_player;
+    entry.pass_count = game.pass_count;
+    entry.last_combo_player = game.last_combo_player;
+    game.history[game.history_count as usize] = entry;
+    game.history_count = game.history_count + 1;
+}
+
+fn ddz_game_clear_history(game: &DdzGameState) void {
+    if game == null {
+        return;
+    }
+    var i: i32 = 0;
+    while i < DDZ_MAX_HISTORY {
+        game.history[i as usize] = ddz_history_entry_new();
+        i = i + 1;
+    }
+    game.history_count = 0;
 }
 
 fn ddz_card_sort_less(lhs: DdzCard, rhs: DdzCard) bool {
@@ -1157,6 +1236,7 @@ export fn ddz_generate_play_actions(game: &DdzGameState, player: i32, out_list: 
 }
 
 export fn ddz_game_apply_bid(game: &DdzGameState, player: i32, bid: i32) bool {
+    var action: DdzAction = ddz_action_make_bid(bid);
     if game == null || game.phase != DdzGamePhase.Bidding || player != game.current_player || bid < 0 || bid > 3 {
         return false;
     }
@@ -1200,9 +1280,11 @@ export fn ddz_game_apply_bid(game: &DdzGameState, player: i32, bid: i32) bool {
         game.last_combo = ddz_combo_invalid();
         game.last_combo_player = DDZ_NO_PLAYER;
         game.pass_count = 0;
+        ddz_game_record_action(game, DdzGamePhase.Bidding, player, &action);
         return true;
     }
     game.current_player = (player + 1) % DDZ_PLAYER_COUNT;
+    ddz_game_record_action(game, DdzGamePhase.Bidding, player, &action);
     return true;
 }
 
@@ -1256,6 +1338,7 @@ export fn ddz_game_apply_action(game: &DdzGameState, player: i32, action: &DdzAc
         } else {
             game.current_player = (player + 1) % DDZ_PLAYER_COUNT;
         }
+        ddz_game_record_action(game, DdzGamePhase.Playing, player, action);
         return true;
     }
 
@@ -1291,9 +1374,11 @@ export fn ddz_game_apply_action(game: &DdzGameState, player: i32, action: &DdzAc
         game.phase = DdzGamePhase.GameOver;
         game.winner = player;
         game.current_player = player;
+        ddz_game_record_action(game, DdzGamePhase.Playing, player, action);
         return true;
     }
     game.current_player = (player + 1) % DDZ_PLAYER_COUNT;
+    ddz_game_record_action(game, DdzGamePhase.Playing, player, action);
     return true;
 }
 
@@ -1314,6 +1399,8 @@ export fn ddz_game_new() DdzGameState {
         last_combo_player: DDZ_NO_PLAYER,
         winner: DDZ_NO_PLAYER,
         round_index: 0,
+        history: [],
+        history_count: 0,
     };
 }
 
@@ -1332,6 +1419,7 @@ export fn ddz_game_restart(game: &DdzGameState, seed: u32) bool {
     game.last_combo = ddz_combo_invalid();
     game.last_combo_player = DDZ_NO_PLAYER;
     game.winner = DDZ_NO_PLAYER;
+    ddz_game_clear_history(game);
     _ = ddz_deck_init(game);
     _ = ddz_deck_shuffle(game, seed);
     return ddz_game_deal(game);

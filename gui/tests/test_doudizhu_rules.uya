@@ -1,4 +1,5 @@
 use examples.doudizhu.rules.DDZ_DECK_COUNT;
+use examples.doudizhu.rules.DDZ_MAX_HISTORY;
 use examples.doudizhu.rules.DDZ_NO_PLAYER;
 use examples.doudizhu.rules.DDZ_PLAYER_COUNT;
 use examples.doudizhu.rules.DdzAction;
@@ -144,6 +145,10 @@ test "doudizhu apply action updates hand turn and game over" {
     try assert_eq_i32(game.players[0].count, 0);
     try assert_eq_i32(game.phase as i32, DdzGamePhase.GameOver as i32);
     try assert_eq_i32(game.winner, 0);
+    try assert_eq_i32(game.history_count, 1);
+    try assert_eq_i32(game.history[0].player, 0);
+    try assert_eq_i32(game.history[0].action.combo.kind as i32, DdzComboKind.Single as i32);
+    try assert_eq_i32(game.history[0].hand_counts[0], 0);
 }
 
 test "doudizhu generate play actions includes pass only when responding" {
@@ -160,4 +165,40 @@ test "doudizhu generate play actions includes pass only when responding" {
     var legal: DdzActionList = ddz_action_list_new();
     try assert_eq_bool(ddz_generate_play_actions(&game, 1, &legal), true);
     try assert_eq_i32(legal.items[0].combo.kind as i32, DdzComboKind.Pass as i32);
+}
+
+test "doudizhu history records bid pass and restart resets history" {
+    var game: DdzGameState = ddz_game_new();
+    game.phase = DdzGamePhase.Bidding;
+    game.current_player = 0;
+    var bid_action: DdzAction = DdzAction{
+        kind: DdzActionKind.Bid,
+        bid: 1,
+        combo: DdzCombo{ kind: DdzComboKind.Invalid, main_rank: -1, card_count: 0, kick_rank: -1, chain_len: 0, ranks: [], rank_count: 0 },
+        card_ids: [],
+        card_count: 0,
+        label: [],
+    };
+    try assert_eq_bool(ddz_game_apply_action(&game, 0, &bid_action), true);
+    try assert_eq_i32(game.history_count, 1);
+    try assert_eq_i32(game.history[0].action.bid, 1);
+
+    game.phase = DdzGamePhase.Playing;
+    game.current_player = 1;
+    game.last_combo_player = 0;
+    var ranks: [i32: 20] = [];
+    ranks[0] = 4;
+    game.last_combo = ddz_combo_detect(&ranks[0], 1);
+    game.players[1].count = 1;
+    game.players[1].cards[0] = DdzCard{ id: 99, rank: 5, suit: 0 };
+    ddz_hand_recount(&game.players[1]);
+    var legal: DdzActionList = ddz_action_list_new();
+    try assert_eq_bool(ddz_generate_play_actions(&game, 1, &legal), true);
+    try assert_eq_bool(ddz_game_apply_action(&game, 1, &legal.items[0]), true);
+    try assert_eq_i32(game.history_count, 2);
+    try assert_eq_i32(game.history[1].action.combo.kind as i32, DdzComboKind.Pass as i32);
+
+    try assert_eq_bool(ddz_game_restart(&game, 77u32), true);
+    try assert_eq_i32(game.history_count, 0);
+    try assert_eq_bool(DDZ_MAX_HISTORY >= 128, true);
 }

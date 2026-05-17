@@ -1,4 +1,5 @@
 use examples.doudizhu.rules.DDZ_MAX_ACTIONS;
+use examples.doudizhu.rules.DDZ_MAX_HISTORY;
 use examples.doudizhu.rules.DDZ_NO_PLAYER;
 use examples.doudizhu.rules.DDZ_PLAYER_COUNT;
 use examples.doudizhu.rules.DDZ_RANK_2;
@@ -11,6 +12,7 @@ use examples.doudizhu.rules.DdzCombo;
 use examples.doudizhu.rules.DdzComboKind;
 use examples.doudizhu.rules.DdzGamePhase;
 use examples.doudizhu.rules.DdzGameState;
+use examples.doudizhu.rules.DdzHistoryEntry;
 use examples.doudizhu.rules.DdzHand;
 use examples.doudizhu.rules.ddz_action_list_new;
 use examples.doudizhu.rules.ddz_action_label_format;
@@ -22,13 +24,13 @@ use platform.openai.chat.UyaOpenAiChatPollResult;
 use platform.openai.chat.UyaOpenAiChatStatus;
 use platform.openai.chat.uya_openai_chat_cancel_request;
 use platform.openai.chat.uya_openai_chat_is_available;
+use platform.openai.chat.uya_openai_chat_model_name;
 use platform.openai.chat.uya_openai_chat_parse_action_id;
 use platform.openai.chat.uya_openai_chat_poll_request;
 use platform.openai.chat.uya_openai_chat_start_request;
-use libc.getenv;
 use libc.snprintf;
 
-export const DDZ_PROMPT_BYTES: i32 = 8192;
+export const DDZ_PROMPT_BYTES: i32 = 32768;
 export const DDZ_OPENAI_RESPONSE_BYTES: i32 = 1024;
 
 export enum DdzAiSource {
@@ -587,44 +589,45 @@ fn ddz_ai_append_bool(buf: &byte, cap: i32, len: &i32, value: bool) bool {
     return ddz_ai_append_bytes(buf, cap, len, "false" as &const byte);
 }
 
-fn ddz_ai_append_rank_list(buf: &byte, cap: i32, len: &i32, hand: &DdzHand) bool {
-    if hand == null {
+fn ddz_ai_append_json_key(buf: &byte, cap: i32, len: &i32, key: &const byte) bool {
+    if !ddz_ai_append_json_string(buf, cap, len, key) {
         return false;
     }
-    var i: i32 = 0;
-    while i < hand.count {
-        if i > 0 && !ddz_ai_append_byte(buf, cap, len, ' ' as u8) {
-            return false;
-        }
-        if !ddz_ai_append_bytes(buf, cap, len, ddz_rank_name(hand.cards[i as usize].rank)) {
-            return false;
-        }
-        i = i + 1;
-    }
-    return true;
+    return ddz_ai_append_byte(buf, cap, len, ':' as u8);
 }
 
-fn ddz_ai_append_legal_actions(buf: &byte, cap: i32, len: &i32, legal: &DdzActionList) bool {
-    if legal == null {
-        return false;
+fn ddz_ai_combo_kind_name(kind: DdzComboKind) &const byte {
+    if kind == DdzComboKind.Pass {
+        return "pass" as &const byte;
     }
-    var i: i32 = 0;
-    while i < legal.count {
-        if i > 0 && !ddz_ai_append_bytes(buf, cap, len, " | " as &const byte) {
-            return false;
-        }
-        if !ddz_ai_append_i32(buf, cap, len, i) {
-            return false;
-        }
-        if !ddz_ai_append_bytes(buf, cap, len, ":" as &const byte) {
-            return false;
-        }
-        if !ddz_ai_append_bytes(buf, cap, len, &legal.items[i as usize].label[0]) {
-            return false;
-        }
-        i = i + 1;
+    if kind == DdzComboKind.Single {
+        return "single" as &const byte;
     }
-    return true;
+    if kind == DdzComboKind.Pair {
+        return "pair" as &const byte;
+    }
+    if kind == DdzComboKind.Triple {
+        return "triple" as &const byte;
+    }
+    if kind == DdzComboKind.TripleSingle {
+        return "triple_single" as &const byte;
+    }
+    if kind == DdzComboKind.TriplePair {
+        return "triple_pair" as &const byte;
+    }
+    if kind == DdzComboKind.Straight {
+        return "straight" as &const byte;
+    }
+    if kind == DdzComboKind.StraightPairs {
+        return "straight_pairs" as &const byte;
+    }
+    if kind == DdzComboKind.Bomb {
+        return "bomb" as &const byte;
+    }
+    if kind == DdzComboKind.Rocket {
+        return "rocket" as &const byte;
+    }
+    return "invalid" as &const byte;
 }
 
 fn ddz_ai_append_json_string(buf: &byte, cap: i32, len: &i32, text: &const byte) bool {
@@ -665,6 +668,389 @@ fn ddz_ai_append_json_string(buf: &byte, cap: i32, len: &i32, text: &const byte)
     return ddz_ai_append_byte(buf, cap, len, '"' as u8);
 }
 
+fn ddz_ai_card_rank_by_id(game: &DdzGameState, card_id: i32) i32 {
+    if game == null || card_id < 0 {
+        return -1;
+    }
+    var i: i32 = 0;
+    while i < 54 {
+        if game.deck[i as usize].id == card_id {
+            return game.deck[i as usize].rank;
+        }
+        i = i + 1;
+    }
+    return -1;
+}
+
+fn ddz_ai_append_action_cards_json(game: &DdzGameState, action: &DdzAction, buf: &byte, cap: i32, len: &i32) bool {
+    if game == null || action == null {
+        return false;
+    }
+    if !ddz_ai_append_byte(buf, cap, len, '[' as u8) {
+        return false;
+    }
+    var i: i32 = 0;
+    while i < action.card_count {
+        if i > 0 && !ddz_ai_append_byte(buf, cap, len, ',' as u8) {
+            return false;
+        }
+        const rank: i32 = ddz_ai_card_rank_by_id(game, action.card_ids[i as usize]);
+        if rank >= 0 {
+            if !ddz_ai_append_json_string(buf, cap, len, ddz_rank_name(rank)) {
+                return false;
+            }
+        } else {
+            if !ddz_ai_append_json_string(buf, cap, len, "?" as &const byte) {
+                return false;
+            }
+        }
+        i = i + 1;
+    }
+    return ddz_ai_append_byte(buf, cap, len, ']' as u8);
+}
+
+fn ddz_ai_append_hand_counts_json(counts: &i32, buf: &byte, cap: i32, len: &i32) bool {
+    if counts == null {
+        return false;
+    }
+    if !ddz_ai_append_byte(buf, cap, len, '[' as u8) {
+        return false;
+    }
+    var i: i32 = 0;
+    while i < DDZ_PLAYER_COUNT {
+        if i > 0 && !ddz_ai_append_byte(buf, cap, len, ',' as u8) {
+            return false;
+        }
+        if !ddz_ai_append_i32(buf, cap, len, counts[i as usize]) {
+            return false;
+        }
+        i = i + 1;
+    }
+    return ddz_ai_append_byte(buf, cap, len, ']' as u8);
+}
+
+fn ddz_ai_append_current_hand_counts_json(game: &DdzGameState, buf: &byte, cap: i32, len: &i32) bool {
+    if game == null {
+        return false;
+    }
+    if !ddz_ai_append_byte(buf, cap, len, '[' as u8) {
+        return false;
+    }
+    var i: i32 = 0;
+    while i < DDZ_PLAYER_COUNT {
+        if i > 0 && !ddz_ai_append_byte(buf, cap, len, ',' as u8) {
+            return false;
+        }
+        if !ddz_ai_append_i32(buf, cap, len, game.players[i as usize].count) {
+            return false;
+        }
+        i = i + 1;
+    }
+    return ddz_ai_append_byte(buf, cap, len, ']' as u8);
+}
+
+fn ddz_ai_append_action_json(game: &DdzGameState, action: &DdzAction, action_id: i32, buf: &byte, cap: i32, len: &i32) bool {
+    if game == null || action == null {
+        return false;
+    }
+    if !ddz_ai_append_byte(buf, cap, len, '{' as u8) {
+        return false;
+    }
+    if !ddz_ai_append_json_key(buf, cap, len, "id" as &const byte) || !ddz_ai_append_i32(buf, cap, len, action_id) {
+        return false;
+    }
+    if !ddz_ai_append_byte(buf, cap, len, ',' as u8) {
+        return false;
+    }
+    if !ddz_ai_append_json_key(buf, cap, len, "kind" as &const byte) || !ddz_ai_append_json_string(buf, cap, len, ddz_ai_combo_kind_name(action.combo.kind)) {
+        return false;
+    }
+    if !ddz_ai_append_byte(buf, cap, len, ',' as u8) {
+        return false;
+    }
+    if !ddz_ai_append_json_key(buf, cap, len, "label" as &const byte) || !ddz_ai_append_json_string(buf, cap, len, &action.label[0]) {
+        return false;
+    }
+    if !ddz_ai_append_byte(buf, cap, len, ',' as u8) {
+        return false;
+    }
+    if !ddz_ai_append_json_key(buf, cap, len, "bid" as &const byte) || !ddz_ai_append_i32(buf, cap, len, action.bid) {
+        return false;
+    }
+    if !ddz_ai_append_byte(buf, cap, len, ',' as u8) {
+        return false;
+    }
+    if !ddz_ai_append_json_key(buf, cap, len, "card_count" as &const byte) || !ddz_ai_append_i32(buf, cap, len, action.card_count) {
+        return false;
+    }
+    if !ddz_ai_append_byte(buf, cap, len, ',' as u8) {
+        return false;
+    }
+    if !ddz_ai_append_json_key(buf, cap, len, "main_rank" as &const byte) || !ddz_ai_append_i32(buf, cap, len, action.combo.main_rank) {
+        return false;
+    }
+    if !ddz_ai_append_byte(buf, cap, len, ',' as u8) {
+        return false;
+    }
+    if !ddz_ai_append_json_key(buf, cap, len, "cards" as &const byte) || !ddz_ai_append_action_cards_json(game, action, buf, cap, len) {
+        return false;
+    }
+    return ddz_ai_append_byte(buf, cap, len, '}' as u8);
+}
+
+fn ddz_ai_append_history_entry_json(game: &DdzGameState, entry: &DdzHistoryEntry, buf: &byte, cap: i32, len: &i32) bool {
+    if game == null || entry == null {
+        return false;
+    }
+    if !ddz_ai_append_byte(buf, cap, len, '{' as u8) {
+        return false;
+    }
+    if !ddz_ai_append_json_key(buf, cap, len, "step" as &const byte) || !ddz_ai_append_i32(buf, cap, len, entry.step) {
+        return false;
+    }
+    if !ddz_ai_append_byte(buf, cap, len, ',' as u8) {
+        return false;
+    }
+    if !ddz_ai_append_json_key(buf, cap, len, "phase" as &const byte) {
+        return false;
+    }
+    if entry.phase == DdzGamePhase.Bidding {
+        if !ddz_ai_append_json_string(buf, cap, len, "bid" as &const byte) {
+            return false;
+        }
+    } else {
+        if !ddz_ai_append_json_string(buf, cap, len, "play" as &const byte) {
+            return false;
+        }
+    }
+    if !ddz_ai_append_byte(buf, cap, len, ',' as u8) {
+        return false;
+    }
+    if !ddz_ai_append_json_key(buf, cap, len, "player" as &const byte) || !ddz_ai_append_i32(buf, cap, len, entry.player) {
+        return false;
+    }
+    if !ddz_ai_append_byte(buf, cap, len, ',' as u8) {
+        return false;
+    }
+    if !ddz_ai_append_json_key(buf, cap, len, "action" as &const byte) || !ddz_ai_append_action_json(game, &entry.action, entry.step, buf, cap, len) {
+        return false;
+    }
+    if !ddz_ai_append_byte(buf, cap, len, ',' as u8) {
+        return false;
+    }
+    if !ddz_ai_append_json_key(buf, cap, len, "hand_counts" as &const byte) || !ddz_ai_append_hand_counts_json(&entry.hand_counts[0], buf, cap, len) {
+        return false;
+    }
+    if !ddz_ai_append_byte(buf, cap, len, ',' as u8) {
+        return false;
+    }
+    if !ddz_ai_append_json_key(buf, cap, len, "current_player" as &const byte) || !ddz_ai_append_i32(buf, cap, len, entry.current_player) {
+        return false;
+    }
+    if !ddz_ai_append_byte(buf, cap, len, ',' as u8) {
+        return false;
+    }
+    if !ddz_ai_append_json_key(buf, cap, len, "landlord" as &const byte) || !ddz_ai_append_i32(buf, cap, len, entry.landlord) {
+        return false;
+    }
+    if !ddz_ai_append_byte(buf, cap, len, ',' as u8) {
+        return false;
+    }
+    if !ddz_ai_append_json_key(buf, cap, len, "highest_bid" as &const byte) || !ddz_ai_append_i32(buf, cap, len, entry.highest_bid) {
+        return false;
+    }
+    if !ddz_ai_append_byte(buf, cap, len, ',' as u8) {
+        return false;
+    }
+    if !ddz_ai_append_json_key(buf, cap, len, "highest_bid_player" as &const byte) || !ddz_ai_append_i32(buf, cap, len, entry.highest_bid_player) {
+        return false;
+    }
+    if !ddz_ai_append_byte(buf, cap, len, ',' as u8) {
+        return false;
+    }
+    if !ddz_ai_append_json_key(buf, cap, len, "pass_count" as &const byte) || !ddz_ai_append_i32(buf, cap, len, entry.pass_count) {
+        return false;
+    }
+    return ddz_ai_append_byte(buf, cap, len, '}' as u8);
+}
+
+fn ddz_ai_append_history_json(game: &DdzGameState, buf: &byte, cap: i32, len: &i32) bool {
+    if game == null {
+        return false;
+    }
+    if !ddz_ai_append_byte(buf, cap, len, '[' as u8) {
+        return false;
+    }
+    var i: i32 = 0;
+    while i < game.history_count && i < DDZ_MAX_HISTORY {
+        if i > 0 && !ddz_ai_append_byte(buf, cap, len, ',' as u8) {
+            return false;
+        }
+        if !ddz_ai_append_history_entry_json(game, &game.history[i as usize], buf, cap, len) {
+            return false;
+        }
+        i = i + 1;
+    }
+    return ddz_ai_append_byte(buf, cap, len, ']' as u8);
+}
+
+fn ddz_ai_append_legal_actions_json(game: &DdzGameState, legal: &DdzActionList, hand_count: i32, buf: &byte, cap: i32, len: &i32) bool {
+    if game == null || legal == null {
+        return false;
+    }
+    if !ddz_ai_append_byte(buf, cap, len, '[' as u8) {
+        return false;
+    }
+    var i: i32 = 0;
+    while i < legal.count {
+        if i > 0 && !ddz_ai_append_byte(buf, cap, len, ',' as u8) {
+            return false;
+        }
+        if !ddz_ai_append_byte(buf, cap, len, '{' as u8) {
+            return false;
+        }
+        if !ddz_ai_append_json_key(buf, cap, len, "id" as &const byte) || !ddz_ai_append_i32(buf, cap, len, i) {
+            return false;
+        }
+        if !ddz_ai_append_byte(buf, cap, len, ',' as u8) {
+            return false;
+        }
+        if !ddz_ai_append_json_key(buf, cap, len, "label" as &const byte) || !ddz_ai_append_json_string(buf, cap, len, &legal.items[i as usize].label[0]) {
+            return false;
+        }
+        if !ddz_ai_append_byte(buf, cap, len, ',' as u8) {
+            return false;
+        }
+        if !ddz_ai_append_json_key(buf, cap, len, "kind" as &const byte) || !ddz_ai_append_json_string(buf, cap, len, ddz_ai_combo_kind_name(legal.items[i as usize].combo.kind)) {
+            return false;
+        }
+        if !ddz_ai_append_byte(buf, cap, len, ',' as u8) {
+            return false;
+        }
+        if !ddz_ai_append_json_key(buf, cap, len, "bid" as &const byte) || !ddz_ai_append_i32(buf, cap, len, legal.items[i as usize].bid) {
+            return false;
+        }
+        if !ddz_ai_append_byte(buf, cap, len, ',' as u8) {
+            return false;
+        }
+        if !ddz_ai_append_json_key(buf, cap, len, "card_count" as &const byte) || !ddz_ai_append_i32(buf, cap, len, legal.items[i as usize].card_count) {
+            return false;
+        }
+        if !ddz_ai_append_byte(buf, cap, len, ',' as u8) {
+            return false;
+        }
+        if !ddz_ai_append_json_key(buf, cap, len, "main_rank" as &const byte) || !ddz_ai_append_i32(buf, cap, len, legal.items[i as usize].combo.main_rank) {
+            return false;
+        }
+        if !ddz_ai_append_byte(buf, cap, len, ',' as u8) {
+            return false;
+        }
+        if !ddz_ai_append_json_key(buf, cap, len, "is_bomb_like" as &const byte) || !ddz_ai_append_bool(buf, cap, len, ddz_ai_is_bomb_like(&legal.items[i as usize])) {
+            return false;
+        }
+        if !ddz_ai_append_byte(buf, cap, len, ',' as u8) {
+            return false;
+        }
+        if !ddz_ai_append_json_key(buf, cap, len, "ends_hand" as &const byte) || !ddz_ai_append_bool(buf, cap, len, legal.items[i as usize].card_count == hand_count) {
+            return false;
+        }
+        if !ddz_ai_append_byte(buf, cap, len, '}' as u8) {
+            return false;
+        }
+        i = i + 1;
+    }
+    return ddz_ai_append_byte(buf, cap, len, ']' as u8);
+}
+
+fn ddz_ai_history_has_combo(game: &DdzGameState, kind: DdzComboKind) bool {
+    if game == null {
+        return false;
+    }
+    var i: i32 = 0;
+    while i < game.history_count && i < DDZ_MAX_HISTORY {
+        if game.history[i as usize].action.combo.kind == kind {
+            return true;
+        }
+        i = i + 1;
+    }
+    return false;
+}
+
+fn ddz_ai_append_players_reported_single_json(game: &DdzGameState, buf: &byte, cap: i32, len: &i32) bool {
+    if game == null {
+        return false;
+    }
+    if !ddz_ai_append_byte(buf, cap, len, '[' as u8) {
+        return false;
+    }
+    var added: i32 = 0;
+    var i: i32 = 0;
+    while i < DDZ_PLAYER_COUNT {
+        if game.players[i as usize].count == 1 {
+            if added > 0 && !ddz_ai_append_byte(buf, cap, len, ',' as u8) {
+                return false;
+            }
+            if !ddz_ai_append_i32(buf, cap, len, i) {
+                return false;
+            }
+            added = added + 1;
+        }
+        i = i + 1;
+    }
+    return ddz_ai_append_byte(buf, cap, len, ']' as u8);
+}
+
+fn ddz_ai_append_history_summary_json(game: &DdzGameState, buf: &byte, cap: i32, len: &i32) bool {
+    var last_buf: [byte: 96] = [];
+    if game == null {
+        return false;
+    }
+    _ = ddz_ai_last_play_label(game, &last_buf[0], 96);
+    if !ddz_ai_append_byte(buf, cap, len, '{' as u8) {
+        return false;
+    }
+    if !ddz_ai_append_json_key(buf, cap, len, "history_count" as &const byte) || !ddz_ai_append_i32(buf, cap, len, game.history_count) {
+        return false;
+    }
+    if !ddz_ai_append_byte(buf, cap, len, ',' as u8) {
+        return false;
+    }
+    if !ddz_ai_append_json_key(buf, cap, len, "bomb_played" as &const byte) || !ddz_ai_append_bool(buf, cap, len, ddz_ai_history_has_combo(game, DdzComboKind.Bomb)) {
+        return false;
+    }
+    if !ddz_ai_append_byte(buf, cap, len, ',' as u8) {
+        return false;
+    }
+    if !ddz_ai_append_json_key(buf, cap, len, "rocket_played" as &const byte) || !ddz_ai_append_bool(buf, cap, len, ddz_ai_history_has_combo(game, DdzComboKind.Rocket)) {
+        return false;
+    }
+    if !ddz_ai_append_byte(buf, cap, len, ',' as u8) {
+        return false;
+    }
+    if !ddz_ai_append_json_key(buf, cap, len, "consecutive_passes" as &const byte) || !ddz_ai_append_i32(buf, cap, len, game.pass_count) {
+        return false;
+    }
+    if !ddz_ai_append_byte(buf, cap, len, ',' as u8) {
+        return false;
+    }
+    if !ddz_ai_append_json_key(buf, cap, len, "last_non_pass_player" as &const byte) || !ddz_ai_append_i32(buf, cap, len, game.last_combo_player) {
+        return false;
+    }
+    if !ddz_ai_append_byte(buf, cap, len, ',' as u8) {
+        return false;
+    }
+    if !ddz_ai_append_json_key(buf, cap, len, "last_non_pass_play" as &const byte) || !ddz_ai_append_json_string(buf, cap, len, &last_buf[0]) {
+        return false;
+    }
+    if !ddz_ai_append_byte(buf, cap, len, ',' as u8) {
+        return false;
+    }
+    if !ddz_ai_append_json_key(buf, cap, len, "players_reported_single" as &const byte) || !ddz_ai_append_players_reported_single_json(game, buf, cap, len) {
+        return false;
+    }
+    return ddz_ai_append_byte(buf, cap, len, '}' as u8);
+}
+
 fn ddz_ai_role_name(game: &DdzGameState, player: i32) &const byte {
     if game == null || player < 0 || player >= DDZ_PLAYER_COUNT {
         return "unknown" as &const byte;
@@ -703,12 +1089,16 @@ fn ddz_ai_last_play_label(game: &DdzGameState, buf: &byte, cap: i32) bool {
     return true;
 }
 
-fn ddz_ai_model_name() &const byte {
-    const model: &byte = getenv("OPENAI_MODEL" as &const byte);
-    if model == null || model[0] == 0 {
-        return "gpt-5.4-mini" as &const byte;
+fn ddz_ai_load_model_name(out_model: &byte, out_cap: i32) bool {
+    if out_model == null || out_cap <= 0 {
+        return false;
     }
-    return model as &const byte;
+    out_model[0] = 0;
+    if uya_openai_chat_model_name(out_model, out_cap) && out_model[0] != 0 {
+        return true;
+    }
+    _ = snprintf(out_model, out_cap as usize, "gpt-5.4-mini" as &const byte);
+    return true;
 }
 
 fn ddz_ai_build_user_payload(game: &DdzGameState, player: i32, legal: &DdzActionList, out_buf: &byte, out_cap: i32) bool {
@@ -717,71 +1107,123 @@ fn ddz_ai_build_user_payload(game: &DdzGameState, player: i32, legal: &DdzAction
     }
     var len: i32 = 0;
     out_buf[0] = 0;
+    if !ddz_ai_append_byte(out_buf, out_cap, &len, '{' as u8) {
+        return false;
+    }
+    if !ddz_ai_append_json_key(out_buf, out_cap, &len, "game" as &const byte) || !ddz_ai_append_json_string(out_buf, out_cap, &len, "doudizhu" as &const byte) {
+        return false;
+    }
+    if !ddz_ai_append_byte(out_buf, out_cap, &len, ',' as u8) {
+        return false;
+    }
+    if !ddz_ai_append_json_key(out_buf, out_cap, &len, "phase" as &const byte) {
+        return false;
+    }
     if game.phase == DdzGamePhase.Bidding {
-        if !ddz_ai_append_bytes(out_buf, out_cap, &len, "phase=bid; " as &const byte) {
+        if !ddz_ai_append_json_string(out_buf, out_cap, &len, "bid" as &const byte) {
             return false;
         }
     } else {
-        if !ddz_ai_append_bytes(out_buf, out_cap, &len, "phase=play; " as &const byte) {
+        if !ddz_ai_append_json_string(out_buf, out_cap, &len, "play" as &const byte) {
             return false;
         }
     }
-    if !ddz_ai_append_bytes(out_buf, out_cap, &len, "seat=" as &const byte) || !ddz_ai_append_i32(out_buf, out_cap, &len, player) {
+    if !ddz_ai_append_byte(out_buf, out_cap, &len, ',' as u8) {
         return false;
     }
-    if !ddz_ai_append_bytes(out_buf, out_cap, &len, "; role=" as &const byte) || !ddz_ai_append_bytes(out_buf, out_cap, &len, ddz_ai_role_name(game, player)) {
+    if !ddz_ai_append_json_key(out_buf, out_cap, &len, "seat" as &const byte) || !ddz_ai_append_i32(out_buf, out_cap, &len, player) {
         return false;
     }
-    if !ddz_ai_append_bytes(out_buf, out_cap, &len, "; landlord=" as &const byte) || !ddz_ai_append_i32(out_buf, out_cap, &len, game.landlord) {
+    if !ddz_ai_append_byte(out_buf, out_cap, &len, ',' as u8) {
         return false;
     }
-    if !ddz_ai_append_bytes(out_buf, out_cap, &len, "; current_player=" as &const byte) || !ddz_ai_append_i32(out_buf, out_cap, &len, game.current_player) {
+    if !ddz_ai_append_json_key(out_buf, out_cap, &len, "role" as &const byte) || !ddz_ai_append_json_string(out_buf, out_cap, &len, ddz_ai_role_name(game, player)) {
         return false;
     }
-    if !ddz_ai_append_bytes(out_buf, out_cap, &len, "; highest_bid=" as &const byte) || !ddz_ai_append_i32(out_buf, out_cap, &len, game.highest_bid) {
+    if !ddz_ai_append_byte(out_buf, out_cap, &len, ',' as u8) {
         return false;
     }
-    if !ddz_ai_append_bytes(out_buf, out_cap, &len, "; highest_bidder=" as &const byte) || !ddz_ai_append_i32(out_buf, out_cap, &len, game.highest_bid_player) {
+    if !ddz_ai_append_json_key(out_buf, out_cap, &len, "landlord" as &const byte) || !ddz_ai_append_i32(out_buf, out_cap, &len, game.landlord) {
+        return false;
+    }
+    if !ddz_ai_append_byte(out_buf, out_cap, &len, ',' as u8) {
+        return false;
+    }
+    if !ddz_ai_append_json_key(out_buf, out_cap, &len, "current_player" as &const byte) || !ddz_ai_append_i32(out_buf, out_cap, &len, game.current_player) {
+        return false;
+    }
+    if !ddz_ai_append_byte(out_buf, out_cap, &len, ',' as u8) {
+        return false;
+    }
+    if !ddz_ai_append_json_key(out_buf, out_cap, &len, "highest_bid" as &const byte) || !ddz_ai_append_i32(out_buf, out_cap, &len, game.highest_bid) {
+        return false;
+    }
+    if !ddz_ai_append_byte(out_buf, out_cap, &len, ',' as u8) {
+        return false;
+    }
+    if !ddz_ai_append_json_key(out_buf, out_cap, &len, "highest_bidder" as &const byte) || !ddz_ai_append_i32(out_buf, out_cap, &len, game.highest_bid_player) {
         return false;
     }
     const hand: &DdzHand = ddz_ai_player_hand(game, player);
     if hand == null {
         return false;
     }
-    if !ddz_ai_append_bytes(out_buf, out_cap, &len, "; hand_count=" as &const byte) || !ddz_ai_append_i32(out_buf, out_cap, &len, hand.count) {
+    if !ddz_ai_append_byte(out_buf, out_cap, &len, ',' as u8) {
         return false;
     }
-    if !ddz_ai_append_bytes(out_buf, out_cap, &len, "; hand=" as &const byte) || !ddz_ai_append_rank_list(out_buf, out_cap, &len, hand) {
+    if !ddz_ai_append_json_key(out_buf, out_cap, &len, "hand_count" as &const byte) || !ddz_ai_append_i32(out_buf, out_cap, &len, hand.count) {
         return false;
     }
-    if !ddz_ai_append_bytes(out_buf, out_cap, &len, "; card_counts=" as &const byte) {
+    if !ddz_ai_append_byte(out_buf, out_cap, &len, ',' as u8) {
+        return false;
+    }
+    if !ddz_ai_append_json_key(out_buf, out_cap, &len, "hand" as &const byte) || !ddz_ai_append_byte(out_buf, out_cap, &len, '[' as u8) {
         return false;
     }
     var i: i32 = 0;
-    while i < DDZ_PLAYER_COUNT {
+    while i < hand.count {
         if i > 0 && !ddz_ai_append_byte(out_buf, out_cap, &len, ',' as u8) {
             return false;
         }
-        if !ddz_ai_append_i32(out_buf, out_cap, &len, game.players[i as usize].count) {
+        if !ddz_ai_append_json_string(out_buf, out_cap, &len, ddz_rank_name(hand.cards[i as usize].rank)) {
             return false;
         }
         i = i + 1;
     }
-    var last_buf: [byte: 96] = [];
-    _ = ddz_ai_last_play_label(game, &last_buf[0], 96);
-    if !ddz_ai_append_bytes(out_buf, out_cap, &len, "; last_player=" as &const byte) || !ddz_ai_append_i32(out_buf, out_cap, &len, game.last_combo_player) {
+    if !ddz_ai_append_byte(out_buf, out_cap, &len, ']' as u8) {
         return false;
     }
-    if !ddz_ai_append_bytes(out_buf, out_cap, &len, "; last_play=" as &const byte) || !ddz_ai_append_bytes(out_buf, out_cap, &len, &last_buf[0]) {
+    if !ddz_ai_append_byte(out_buf, out_cap, &len, ',' as u8) {
         return false;
     }
-    if !ddz_ai_append_bytes(out_buf, out_cap, &len, "; legal_actions_truncated=" as &const byte) || !ddz_ai_append_bool(out_buf, out_cap, &len, legal.truncated) {
+    if !ddz_ai_append_json_key(out_buf, out_cap, &len, "card_counts" as &const byte) || !ddz_ai_append_current_hand_counts_json(game, out_buf, out_cap, &len) {
         return false;
     }
-    if !ddz_ai_append_bytes(out_buf, out_cap, &len, "; legal_actions=" as &const byte) || !ddz_ai_append_legal_actions(out_buf, out_cap, &len, legal) {
+    if !ddz_ai_append_byte(out_buf, out_cap, &len, ',' as u8) {
         return false;
     }
-    return true;
+    if !ddz_ai_append_json_key(out_buf, out_cap, &len, "legal_actions_truncated" as &const byte) || !ddz_ai_append_bool(out_buf, out_cap, &len, legal.truncated) {
+        return false;
+    }
+    if !ddz_ai_append_byte(out_buf, out_cap, &len, ',' as u8) {
+        return false;
+    }
+    if !ddz_ai_append_json_key(out_buf, out_cap, &len, "history_summary" as &const byte) || !ddz_ai_append_history_summary_json(game, out_buf, out_cap, &len) {
+        return false;
+    }
+    if !ddz_ai_append_byte(out_buf, out_cap, &len, ',' as u8) {
+        return false;
+    }
+    if !ddz_ai_append_json_key(out_buf, out_cap, &len, "history" as &const byte) || !ddz_ai_append_history_json(game, out_buf, out_cap, &len) {
+        return false;
+    }
+    if !ddz_ai_append_byte(out_buf, out_cap, &len, ',' as u8) {
+        return false;
+    }
+    if !ddz_ai_append_json_key(out_buf, out_cap, &len, "legal_actions" as &const byte) || !ddz_ai_append_legal_actions_json(game, legal, hand.count, out_buf, out_cap, &len) {
+        return false;
+    }
+    return ddz_ai_append_byte(out_buf, out_cap, &len, '}' as u8);
 }
 
 fn ddz_ai_build_openai_request(game: &DdzGameState, player: i32, legal: &DdzActionList, out_buf: &byte, out_cap: i32, out_len: &i32) bool {
@@ -789,7 +1231,11 @@ fn ddz_ai_build_openai_request(game: &DdzGameState, player: i32, legal: &DdzActi
         return false;
     }
     var payload: [byte: DDZ_PROMPT_BYTES] = [];
+    var model_name: [byte: 128] = [];
     if !ddz_ai_build_user_payload(game, player, legal, &payload[0], DDZ_PROMPT_BYTES) {
+        return false;
+    }
+    if !ddz_ai_load_model_name(&model_name[0], 128) {
         return false;
     }
     var len: i32 = 0;
@@ -797,13 +1243,13 @@ fn ddz_ai_build_openai_request(game: &DdzGameState, player: i32, legal: &DdzActi
     if !ddz_ai_append_bytes(out_buf, out_cap, &len, "{\"model\":" as &const byte) {
         return false;
     }
-    if !ddz_ai_append_json_string(out_buf, out_cap, &len, ddz_ai_model_name()) {
+    if !ddz_ai_append_json_string(out_buf, out_cap, &len, &model_name[0]) {
         return false;
     }
     if !ddz_ai_append_bytes(out_buf, out_cap, &len, ",\"messages\":[{\"role\":\"system\",\"content\":" as &const byte) {
         return false;
     }
-    if !ddz_ai_append_json_string(out_buf, out_cap, &len, "You are a Dou Dizhu AI. Choose exactly one legal action id from legal_actions. Do not invent cards, bids, or rules. Return JSON only like {\"action_id\":1}.") {
+    if !ddz_ai_append_json_string(out_buf, out_cap, &len, "You are a strong Dou Dizhu AI. Use the full bidding and play history to maximize win probability. If you are a peasant, coordinate implicitly with your teammate instead of selfish short-term play. Choose exactly one legal action id from legal_actions, never invent cards, history, bids, or rules, and return JSON only like {\"action_id\":1}.") {
         return false;
     }
     if !ddz_ai_append_bytes(out_buf, out_cap, &len, "},{\"role\":\"user\",\"content\":" as &const byte) {
