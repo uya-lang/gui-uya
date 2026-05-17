@@ -1,31 +1,70 @@
 # OpenAI Chat 人机斗地主 Demo 详细设计文档
 
 > 状态：待确认  
-> 目标：在 UyaGUI Linux 模拟器里新增一个“1 名玩家 + 2 名电脑玩家”的斗地主 demo。电脑玩家可通过 OpenAI Chat Completions API 从本地生成的合法动作列表中选择动作，并在任何 API 不可用或结果异常时自动回退到本地启发式 AI。
+> 推荐交付顺序：先完成阶段 A 离线 MVP，再进入阶段 B OpenAI 接入。  
+> 核心要求：阶段 A 必须真实可玩、可测、可 smoke，不能靠文档或占位代码假装完成。
 
-## 1. 背景与约束
+## 1. 项目背景
 
-当前仓库是 UyaGUI 嵌入式 GUI/模拟器工程，已有 `2048`、`novel`、`widgets` 等 retained-state demo。斗地主 demo 应沿用现有 demo 的结构：示例逻辑放在 `gui/examples/*`，模拟器入口由 `gui/sim/config.uya` 和 `gui/sim/app.uya` 接入，运行通过 `make sim-run` / `make sim-headless` 验证。
+当前仓库是 UyaGUI 嵌入式 GUI/模拟器工程，已有 `2048`、`novel`、`widgets` 等 retained-state demo。斗地主 demo 应沿用现有 demo 结构：示例逻辑放在 `gui/examples/*`，模拟器入口由 `gui/sim/config.uya` 和 `gui/sim/app.uya` 接入，运行通过 `make sim-run` / `make sim-headless` 验证。
 
-用户明确要求使用 OpenAI 的 chat 接口，因此本设计使用 `POST /v1/chat/completions`，不改用 Responses API。OpenAI 官方文档当前说明 Chat Completions 接收一组 conversation messages 并返回模型响应；Structured Outputs 支持用 `response_format: { "type": "json_schema" }` 约束输出。官方文档也持续推荐新项目优先考虑 Responses API，但本 demo 为满足需求固定走 Chat Completions。
+本项目最终目标包含 OpenAI 决策路径，但开发上不建议一开始把规则、UI、模拟器接入、网络桥接混做。推荐拆成两个严格串行的阶段：
 
-参考资料：
+- 阶段 A：离线 MVP
+- 阶段 B：OpenAI 接入
 
-- Chat Completions API: `https://platform.openai.com/docs/api-reference/chat/create`
-- Structured Outputs: `https://platform.openai.com/docs/guides/structured-outputs`
-- Latest model guidance: `https://developers.openai.com/api/docs/guides/latest-model`
+这样做的原因：
 
-## 2. 设计目标
+- 规则正确性必须先独立成立，否则后续所有 AI 决策都不可信。
+- UI 交互和 simulator 接入必须先形成完整闭环，否则很难判断问题来自规则、输入还是网络层。
+- OpenAI 只应该是“可选电脑决策源”，不应该成为 MVP 可玩的前置条件。
+- 默认测试和 CI 必须先稳定在离线路径上，避免把联网调用引入基础回归链路。
 
-1. 新增可运行的 UyaGUI 斗地主 demo：`make sim-run SIM_ARGS="--demo doudizhu --scale 1"`。
+## 2. 阶段划分与 gate
+
+### 2.1 阶段 A：离线 MVP
+
+阶段 A 必须一次性完成以下闭环：
+
+- 规则层
+- 本地启发式 AI
+- UI demo
+- simulator 接入
+- tests
+- 文档先写离线路径
+
+阶段 A 的真实完成标准：
+
+- 本地可完整玩完一局。
+- 默认测试不访问网络。
+- `make sim-run SIM_ARGS="--demo doudizhu --scale 1"` 可打开并手工验证。
+- `make sim-headless SIM_HEADLESS_ARGS="--demo doudizhu --max-frames 5 --screenshot build/sim/doudizhu.bmp"` 可产出截图。
+- 单测和 smoke 结果有真实命令验证，不靠“理论上应该可以”。
+
+### 2.2 阶段 B：OpenAI 接入
+
+只有阶段 A 全部完成后才进入阶段 B。阶段 B 包含：
+
+- `chat.uya`
+- `stub.c`
+- `host.c + libcurl`
+- prompt / poll / fallback / cancel
+- OpenAI 环境变量文档
+- live smoke
+
+阶段 B 的目标不是替代阶段 A，而是在不破坏离线闭环的前提下增加可选网络决策路径。
+
+## 3. 设计目标
+
+1. 阶段 A 先交付一个可玩的 UyaGUI 斗地主 demo：`make sim-run SIM_ARGS="--demo doudizhu --scale 1"`。
 2. 支持单局完整流程：发牌、叫地主、发底牌、出牌、不要、轮转、胜负判定、重开。
-3. 电脑玩家在可用时通过 OpenAI Chat Completions API 选择动作。
-4. OpenAI 只允许从本地生成的 `legal_actions` 中返回 `action_id`，不能直接决定牌面或绕过规则。
-5. 任何失败场景都必须使用本地启发式 AI 兜底，包括无 API Key、无 libcurl、网络超时、HTTP 错误、JSON 解析失败、非法 `action_id`。
+3. 电脑玩家在阶段 A 使用本地启发式 AI，在阶段 B 可选接入 OpenAI。
+4. OpenAI 只允许从本地生成的 `legal_actions` 中选择动作，不能绕过规则。
+5. 任何 OpenAI 失败场景都必须自动回退到本地启发式 AI。
 6. 默认测试与 CI 不依赖网络，不依赖真实 OpenAI Key。
 7. 保持 UyaGUI 当前风格：固定容量数组、明确生命周期、无默认动态 GC、可 headless 截图验证。
 
-## 3. 非目标
+## 4. 非目标
 
 1. 不实现联网多人对战。
 2. 不把 OpenAI Key 写入代码、日志、截图或 UI 文本。
@@ -34,15 +73,21 @@
 5. 不把 OpenAI HTTPS 调用放入裸机目标路径；首版只在 Linux SDL2 模拟器中启用。
 6. 不追求 AI 强度，首版重点是稳定、合法、可解释、可回退。
 
-## 4. 用户体验
+## 5. 用户体验
 
-运行命令：
+### 5.1 阶段 A：离线运行
 
 ```bash
 make sim-run SIM_ARGS="--demo doudizhu --scale 1"
 ```
 
-启用 OpenAI：
+离线模式要求：
+
+- 不设置 `OPENAI_API_KEY` 也能完整玩一局。
+- 不要求 libcurl。
+- 不要求任何联网依赖。
+
+### 5.2 阶段 B：启用 OpenAI
 
 ```bash
 OPENAI_API_KEY=... \
@@ -50,12 +95,6 @@ OPENAI_MODEL=gpt-5.4-mini \
 UYA_DDZ_USE_OPENAI=1 \
 make sim-run SIM_ARGS="--demo doudizhu --scale 1"
 ```
-
-离线模式：
-
-- 不设置 `OPENAI_API_KEY`。
-- 或设置 `UYA_DDZ_USE_OPENAI=0`。
-- 或当前构建环境没有 libcurl 开发包。
 
 用户看到的行为：
 
@@ -65,10 +104,10 @@ make sim-run SIM_ARGS="--demo doudizhu --scale 1"
 - 点击 `提示` 时只选择推荐牌，不自动提交。
 - 点击 `出牌` 提交选中牌。
 - 点击 `不要` 在规则允许时跳过。
-- 点击 `重开` 取消当前 OpenAI 请求并重新开始。
-- AI 回合显示 `Thinking...`、`OpenAI`、`Offline`、`Timeout` 等短状态。
+- 点击 `重开` 重新开始；若阶段 B 正在请求 OpenAI，则同时 cancel 请求。
+- AI 回合显示简短状态，例如 `Local`、`OpenAI`、`Fallback`、`Timeout`。
 
-## 5. MVP 规则范围
+## 6. MVP 规则范围
 
 牌组：
 
@@ -105,16 +144,26 @@ make sim-run SIM_ARGS="--demo doudizhu --scale 1"
 - 四带二
 - 四带两对
 
-这些牌型会在数据结构中预留 enum 值空间，但首版识别和生成不启用。
+## 7. 总体架构
 
-## 6. 总体架构
+### 7.1 阶段 A 架构
 
 ```text
 SDL2 input / keyboard
   -> sim.app
     -> demo_doudizhu retained page
-      -> doudizhu.rules       本地规则、牌型、合法动作
-      -> doudizhu.ai          决策调度、启发式、OpenAI 状态机
+      -> doudizhu.rules    本地规则、牌型、合法动作
+      -> doudizhu.ai       本地启发式决策
+```
+
+### 7.2 阶段 B 增量架构
+
+```text
+SDL2 input / keyboard
+  -> sim.app
+    -> demo_doudizhu retained page
+      -> doudizhu.rules
+      -> doudizhu.ai
         -> platform.openai.chat.uya
           -> openai_chat_host.c / openai_chat_stub.c
             -> libcurl
@@ -128,43 +177,36 @@ SDL2 input / keyboard
 - UI 层只负责展示、输入、状态同步，不复制牌型判断。
 - OpenAI host bridge 不知道斗地主规则，只负责 HTTPS 调用、外层响应解析、生命周期管理。
 
-## 7. 文件与模块
+## 8. 文件与模块
 
-新增文件：
+### 8.1 阶段 A 新增文件
 
 - `gui/examples/demo_doudizhu.uya`
-  - retained demo 状态、Canvas 绘制、按钮、点击选牌、每帧更新。
 - `gui/examples/doudizhu/rules.uya`
-  - 牌、手牌、牌型识别、牌型比较、合法动作生成、发牌、胜负判定。
 - `gui/examples/doudizhu/ai.uya`
-  - 本地启发式 AI、OpenAI request 构造、请求轮询、返回动作校验、失败冷却。
-- `gui/platform/openai/chat.uya`
-  - Uya 侧 host bridge 轻封装，统一 available/start/poll/cancel。
-- `gui/platform/openai/openai_chat_host.c`
-  - libcurl 真实 HTTPS 实现。
-- `gui/platform/openai/openai_chat_stub.c`
-  - 无 libcurl 时的同名 stub 实现。
 - `gui/tests/test_doudizhu_rules.uya`
-  - 规则单测。
 - `gui/tests/test_doudizhu_ai.uya`
-  - 启发式、返回解析和兜底单测。
-- `docs/openai_doudizhu_demo_todo.md`
-  - 实现任务拆分。
 
-修改文件：
+### 8.2 阶段 A 修改文件
 
 - `gui/sim/config.uya`
-  - 增加 `SimDemoKind.Doudizhu`、`sim_demo_name()`、`--demo doudizhu` 解析。
 - `gui/sim/app.uya`
-  - 增加 demo retained state、输入分发、渲染/更新、热键切换。
 - `gui/test_suite.uya`
-  - 聚合新测试。
-- `tools/build_gui_sim.sh`
-  - 可选检测并链接 libcurl，缺失时编译 stub。
-- `README.md`
-  - 增加运行说明与 OpenAI 环境变量。
+- `docs/openai_doudizhu_demo_todo.md`
 
-## 8. 常量与数据结构
+### 8.3 阶段 B 新增文件
+
+- `gui/platform/openai/chat.uya`
+- `gui/platform/openai/openai_chat_host.c`
+- `gui/platform/openai/openai_chat_stub.c`
+
+### 8.4 阶段 B 修改文件
+
+- `tools/build_gui_sim.sh`
+- `README.md`
+- `gui/examples/doudizhu/ai.uya`
+
+## 9. 常量与数据结构
 
 固定容量常量：
 
@@ -270,30 +312,20 @@ DdzPageRetained
   canvas + buttons + retained widget tree
 ```
 
-## 9. 规则层详细设计
+## 10. 阶段 A 详细设计
 
-### 9.1 发牌与排序
+### 10.1 规则层
 
 发牌流程：
 
 1. `ddz_deck_init(deck)` 生成 54 张唯一牌。
-2. `ddz_deck_shuffle(deck, rng_state)` 使用当前工程已采用的轻量 LCG 风格随机。
+2. `ddz_deck_shuffle(deck, rng_state)` 使用轻量可重复随机。
 3. 前 51 张按 `player = index % 3` 分发。
 4. 最后 3 张存入 `bottom`。
-5. 每个手牌调用 `ddz_hand_sort()`，按 rank 升序，rank 相同按 suit/id 排序。
+5. 每个手牌调用 `ddz_hand_sort()`。
 6. 更新每手牌的 `rank_counts`。
 
-不变量：
-
-- 任意时刻 54 张牌总数守恒。
-- 任意 `DdzHand.count` 不超过 `DDZ_MAX_CARDS_PER_HAND`。
-- `rank_counts` 必须由 `cards` 重新计算，避免局部维护出错。
-
-### 9.2 牌型识别
-
-`ddz_combo_detect(cards, count)` 输入一组实体牌，输出 `DdzCombo`。
-
-识别顺序：
+`ddz_combo_detect(cards, count)` 识别顺序：
 
 1. `count == 0` -> `Pass`
 2. `count == 1` -> `Single`
@@ -307,89 +339,37 @@ DdzPageRetained
 10. `count >= 6` 且偶数、连续 rank、每 rank 两张、不含 rank >= 12 -> `PairStraight`
 11. 否则 `Invalid`
 
-`main_rank` 规则：
-
-- 单、对、三、三带、炸弹为主体 rank。
-- 顺子、连对为最高 rank。
-- 火箭 main_rank 固定为 14。
-- Pass main_rank 为 -1。
-
-### 9.3 牌型比较
-
 `ddz_combo_can_beat(candidate, last)`：
 
 - `last.kind == Pass` 时，任何非 Pass 合法牌都可出。
-- `candidate.kind == Rocket` 时，除 candidate 本身非法外永远可压。
+- `candidate.kind == Rocket` 时永远可压。
 - `last.kind == Rocket` 时不可压。
 - `candidate.kind == Bomb` 且 `last.kind != Bomb` 时可压。
 - 双方都是 Bomb 时比较 `main_rank`。
-- 普通牌必须 kind 相同、count 相同、sequence_len 相同，且 `candidate.main_rank > last.main_rank`。
-- Pass 不能压任何牌，只能在不是主动出牌时作为跳过动作。
-
-### 9.4 合法动作生成
+- 普通牌必须 kind 相同、count 相同、`sequence_len` 相同，且 `candidate.main_rank > last.main_rank`。
 
 `ddz_generate_legal_actions(game, player, out_actions)`：
 
 1. 清空 action list。
 2. 如果当前不是主动出牌，先加入 `pass`。
-3. 根据手牌 rank_counts 枚举 MVP 牌型。
+3. 根据手牌 `rank_counts` 枚举 MVP 牌型。
 4. 对每个候选调用 `ddz_combo_can_beat()`。
 5. 通过则加入 action list。
-6. 按“保守优先”排序：
-   - pass
-   - 普通小牌
-   - 顺子/连对
-   - 三带
-   - 炸弹
-   - 火箭
-7. 超过 `DDZ_MAX_ACTIONS` 时丢弃排序靠后的动作，置 `truncated = true`。
-
-主动出牌定义：
-
-- `last_player == current_player`
-- 或 `last_combo.kind == Pass`
-- 或连续两个其他玩家 pass 后清空上一手。
-
-### 9.5 应用动作
+6. 按保守优先排序。
+7. 超过 `DDZ_MAX_ACTIONS` 时丢弃尾部动作并置 `truncated = true`。
 
 `ddz_game_apply_action(game, player, action)`：
 
 - 校验 `player == current_player`。
 - 校验 action 在当前合法列表中。
-- Pass：
-  - 仅允许非主动出牌。
-  - `pass_count += 1`。
-  - 若 `pass_count >= 2`，清空 `last_combo`，下一个轮到 `last_player` 主动出。
-- 非 Pass：
-  - 从手牌移除 action.cards。
-  - 设置 `last_combo = action.combo`、`last_player = player`、`pass_count = 0`。
-  - 若手牌为空，设置 `phase = GameOver`、`winner = player`。
+- Pass 仅允许非主动出牌。
+- 非 Pass 时从手牌移除 action.cards。
+- 手牌为空则进入 `GameOver`。
 - 正常轮转到下一位玩家。
 
-## 10. AI 层设计
+### 10.2 本地启发式 AI
 
-### 10.1 决策入口
-
-AI 层只暴露一个主入口：
-
-```text
-ddz_ai_request_or_choose(game, player, action_list, ai_controller) -> DdzAiDecisionState
-```
-
-状态：
-
-- `ReadyLocal`：已经用启发式选出动作。
-- `WaitingOpenAI`：已发起 OpenAI 请求，等待 poll。
-- `ReadyOpenAI`：OpenAI 返回合法动作。
-- `Fallback`：OpenAI 不可用或失败，已用启发式选出动作。
-
-UI 每帧调用：
-
-```text
-ddz_ai_update(controller, game, action_list)
-```
-
-### 10.2 本地启发式
+阶段 A 的 AI 只做本地启发式，不依赖网络。
 
 叫分评分：
 
@@ -398,21 +378,72 @@ ddz_ai_update(controller, game, action_list)
 - 每个王 +2
 - 每张 `2` +1
 - A/K 较多 +1
-- score >= 8 叫 3，>= 5 叫 2，>= 3 叫 1，否则不叫。
+- `score >= 8` 叫 3，`>= 5` 叫 2，`>= 3` 叫 1，否则不叫
 
 出牌策略：
 
-- 主动出牌：优先出最小非炸弹动作，若只剩少量牌可出更长组合。
+- 主动出牌：优先出最小非炸弹动作。
 - 跟牌：选择能压过上家的最小动作。
 - 默认不使用炸弹/火箭压普通牌。
-- 若自己剩余牌数 <= 2，允许使用炸弹/火箭收尾。
-- 若上家是地主且地主剩余牌数 <= 2，允许更积极压制。
+- 自己剩余牌数少时允许炸。
+- 地主将要走完时允许更积极压制。
 
-### 10.3 OpenAI 决策输入
+### 10.3 UI demo
+
+阶段 A UI 必须覆盖：
+
+- 桌面背景
+- 玩家区域
+- 底牌区
+- 上一手牌显示
+- 人类手牌显示
+- 选牌上移反馈
+- 叫分按钮
+- `提示` / `出牌` / `不要` / `重开`
+- 人类点击交互
+- AI 自动行动
+- 胜负状态和当前玩家提示
+
+### 10.4 simulator 接入
+
+阶段 A 需要把 `doudizhu` 作为正式 demo 接入：
+
+- `SimDemoKind.Doudizhu`
+- `--demo doudizhu`
+- `sim_demo_name()` 返回 `斗地主`
+- `gui/sim/app.uya` 接入 render/update/input
+- 热键 `Z`
+
+### 10.5 tests 与 smoke
+
+阶段 A 需要：
+
+- 规则单测
+- AI 单测
+- `gui/test_suite.uya` 聚合
+- `make test`
+- `sim-run` 手工对局验证
+- `sim-headless` 截图 smoke
+
+## 11. 阶段 B 详细设计
+
+### 11.1 OpenAI API 说明
+
+用户明确要求使用 OpenAI 的 chat 接口，因此阶段 B 使用：
+
+- `POST /v1/chat/completions`
+
+参考资料：
+
+- Chat Completions API: `https://platform.openai.com/docs/api-reference/chat/create`
+- Structured Outputs: `https://platform.openai.com/docs/guides/structured-outputs`
+- Latest model guidance: `https://developers.openai.com/api/docs/guides/latest-model`
+
+### 11.2 OpenAI 决策输入
 
 OpenAI 接收的是压缩后的局面摘要，不接收 API Key 或无关日志。
 
-prompt payload 草案：
+play 阶段 payload 草案：
 
 ```json
 {
@@ -434,7 +465,7 @@ prompt payload 草案：
 }
 ```
 
-叫分阶段也使用同一 schema：
+bid 阶段 payload 草案：
 
 ```json
 {
@@ -452,7 +483,7 @@ prompt payload 草案：
 }
 ```
 
-### 10.4 Chat Completions 请求
+### 11.3 Chat Completions 请求
 
 环境变量：
 
@@ -462,8 +493,6 @@ OPENAI_MODEL=gpt-5.4-mini
 OPENAI_BASE_URL=https://api.openai.com/v1
 UYA_DDZ_USE_OPENAI=1
 ```
-
-默认模型使用 `gpt-5.4-mini` 作为低延迟 demo 示例值，并允许 `OPENAI_MODEL` 覆盖。实现不得依赖具体模型名。启用 structured output 时应选择支持 Chat Completions `response_format.json_schema` 的模型。
 
 请求体：
 
@@ -504,257 +533,65 @@ UYA_DDZ_USE_OPENAI=1
 { "action_id": 1 }
 ```
 
-Uya 侧只使用 `action_id`。调试说明由本地状态记录，例如 `openai action 1`、`fallback timeout`。
-
-### 10.5 返回校验
+### 11.4 返回校验与 fallback
 
 OpenAI 返回动作必须经过三层校验：
 
 1. C bridge 校验 HTTP 和 Chat envelope。
-2. Uya `platform.openai.chat` 校验返回 JSON 长度与格式。
+2. `platform.openai.chat` 校验返回 JSON 长度与格式。
 3. `doudizhu.ai` 校验 `action_id` 是否存在于当前 `DdzActionList`。
 
 任意一层失败都进入本地启发式兜底。
 
-## 11. Host Bridge 设计
+### 11.5 host bridge
 
-Uya 标准库已有 JSON 和 socket 相关能力，但 OpenAI API 必须走 HTTPS。首版不在 Uya 中实现 TLS/HTTP 客户端，而是在 Linux 模拟器侧提供 C host bridge。
+阶段 B host bridge 负责：
 
-Uya extern 接口：
+- 读取 `OPENAI_API_KEY`
+- 读取 `OPENAI_MODEL`
+- 读取 `OPENAI_BASE_URL`
+- 读取 `UYA_DDZ_USE_OPENAI`
+- 单 in-flight 请求槽
+- libcurl 后台请求
+- timeout 控制
+- envelope 解析
+- cancel
 
-```uya
-extern fn uya_openai_chat_available() i32;
-extern fn uya_openai_chat_start(req_json: &const byte, req_len: usize) i32;
-extern fn uya_openai_chat_poll(handle: i32, out: &byte, out_cap: usize) i32;
-extern fn uya_openai_chat_cancel(handle: i32) void;
-```
+bridge 不知道斗地主规则本身。
 
-返回约定：
+## 12. 验收策略
 
-- `available() == 1`：当前构建和环境可尝试 OpenAI。
-- `available() == 0`：不可用，直接离线模式。
-- `start > 0`：请求句柄。
-- `start < 0`：启动失败，立即启发式兜底。
-- `poll == 0`：仍在等待。
-- `poll > 0`：已把 assistant content JSON 写入 `out`，返回 JSON 字节数。
-- `poll == -1`：网络、DNS、TLS、HTTP 或 API 错误。
-- `poll == -2`：超时。
-- `poll == -3`：`out_cap` 不足。
-- `poll == -4`：无效或已消费的 handle。
+### 12.1 阶段 A 验收
 
-生命周期与并发：
+必须全部满足：
 
-- `start()` 必须在返回前把 `req_json` 拷贝到 C 侧缓冲区，不能保存 Uya 栈/数组指针。
-- 首版只允许 1 个 in-flight 请求；若已有请求未完成，新的 `start()` 返回负值。
-- `poll() > 0`、`poll() < 0` 都是终态。终态后 bridge 释放该 handle 持有的请求、响应和线程资源。
-- 终态后的同一 handle 再次 `poll()` 返回 `-4`。
-- `cancel()` 幂等；对无效 handle、已完成 handle 调用不产生副作用。
-- demo 切换、重开、退出时必须调用 `cancel()`。
-- `out_cap` 首版固定为 `DDZ_OPENAI_RESPONSE_BYTES = 1024`。
+- `./uya/bin/uya test gui/test_suite.uya -O0 --stack-size 65536`
+- `make test`
+- `make sim-run SIM_ARGS="--demo doudizhu --scale 1"`
+- 至少手工完整跑完一局
+- `make sim-headless SIM_HEADLESS_ARGS="--demo doudizhu --max-frames 5 --screenshot build/sim/doudizhu.bmp"`
 
-Chat envelope 处理：
+### 12.2 阶段 B 验收
 
-- OpenAI Chat Completions 的原始 HTTP body 是外层 envelope。
-- 动作 JSON 位于 `choices[0].message.content`。
-- `openai_chat_host.c` 负责解析外层 envelope，只把 assistant content 中的 JSON 对象复制给 Uya。
-- 如果响应包含 refusal、没有 `choices[0].message.content`、content 不是 JSON object，bridge 返回错误。
-
-libcurl 构建策略：
-
-- `tools/build_gui_sim.sh` 用 `pkg-config --exists libcurl` 检测 curl。
-- 可用时编译 `openai_chat_host.c`，加入 libcurl cflags/libs。
-- 不可用时编译 `openai_chat_stub.c`，该文件不得 include curl 头文件。
-- 默认 Uya core/test 构建不链接 libcurl，也不访问网络。
-
-运行参数：
-
-- 连接超时：`1500ms`
-- 总请求超时：`3500ms`
-- 最大响应体：`16384` 字节
-- assistant content 最大：`DDZ_OPENAI_RESPONSE_BYTES`
-- 连续失败冷却：同一局内连续 3 次 OpenAI 失败后，冷却 5 个电脑决策回合。
-
-安全要求：
-
-- `Authorization: Bearer` header 只在 C bridge 内构造。
-- 不打印完整请求 header。
-- 不打印 API Key。
-- UI 不显示 API Key。
-- `OPENAI_BASE_URL` 只用于开发/代理场景，默认 `https://api.openai.com/v1`。
-
-## 12. UI 详细设计
-
-默认 640x480 布局：
-
-```text
-┌────────────────────────────────────────────────────────────┐
-│ P2 电脑  牌数:17  农民/地主  AI:OpenAI/Offline             │
-│                                                            │
-│       底牌: [??] [??] [??]      上一手: pair 9             │
-│                                                            │
-│ P1 电脑 牌数:12              当前: 你                      │
-│                                                            │
-│ 状态: 请选择要出的牌 / 电脑思考中 / 地主获胜               │
-│                                                            │
-│ 你的手牌: 3 3 4 7 K A 2 BJ ...                            │
-│                                                            │
-│ [不叫] [1分] [2分] [3分]                                  │
-│ 或 [提示] [出牌] [不要] [重开]                             │
-└────────────────────────────────────────────────────────────┘
-```
-
-绘制策略：
-
-- 背景使用深绿色桌面色，避免和已有蓝色/灰色 demo 过于接近。
-- 卡牌用紧凑矩形，圆角保持小于等于 8px。
-- 红色显示红桃/方块与大小王，黑色显示黑桃/梅花。
-- 电脑手牌只显示背面和牌数。
-- 底牌在叫地主前显示背面，地主确定后显示明牌。
-- 当前玩家用细边框或高亮条提示。
-- 选中手牌上移 12px。
-
-控件策略：
-
-- 叫分阶段只显示叫分按钮。
-- 出牌阶段显示 `提示`、`出牌`、`不要`、`重开`。
-- 当前不是人类回合时禁用 `提示`、`出牌`、`不要`。
-- `出牌` 按钮在选中牌非法时保持可点击但显示错误状态，便于用户理解。
-- `不要` 只在非主动出牌时有效。
-
-输入命中：
-
-- 手牌从右向左或从上层到下层检测，解决重叠卡牌点击。
-- 点击按钮优先级高于点击手牌。
-- `R` 可重开，`H` 可提示，`Space` 可出牌，`P` 仍保留模拟器截图语义。
-
-## 13. 模拟器接入
-
-`SimDemoKind` 增加：
-
-```text
-Doudizhu
-```
-
-命令行：
-
-```bash
-make sim-run SIM_ARGS="--demo doudizhu --scale 1"
-make sim-headless SIM_HEADLESS_ARGS="--demo doudizhu --max-frames 5 --screenshot build/sim/doudizhu.bmp"
-```
-
-热键建议：
-
-- `Z`：切换到 doudizhu demo。
-- `R`：demo 内重开。
-- `H`：demo 内提示。
-- `Space`：demo 内出牌。
-
-`README.md` 和 `docs/gui_uya_linux_sim.md` 后续补充 `--demo doudizhu`，但不阻塞首版功能。
-
-## 14. 错误处理
-
-| 场景 | 行为 |
-| --- | --- |
-| 未设置 `OPENAI_API_KEY` | 离线启发式模式 |
-| `UYA_DDZ_USE_OPENAI=0` | 离线启发式模式 |
-| libcurl 不可用 | 离线启发式模式 |
-| 已有 in-flight 请求 | 本回合启发式兜底 |
-| 请求超时 | 本回合启发式兜底，状态显示 `timeout` |
-| HTTP 非 2xx | 本回合启发式兜底，保留错误码 |
-| API response 含 refusal | 本回合启发式兜底，状态显示 `refused` |
-| envelope 缺少 content | 本回合启发式兜底 |
-| assistant content 不是 JSON object | 本回合启发式兜底 |
-| JSON 解析失败 | 本回合启发式兜底 |
-| `action_id` 非法 | 本回合启发式兜底 |
-| 连续失败 3 次 | 冷却 5 个电脑决策回合 |
-| 用户重开/切 demo | cancel 未完成请求 |
-
-## 15. 测试计划
-
-默认测试不访问网络。
-
-规则测试：
-
-- deck 初始化后 54 张唯一。
-- 发牌数量为 `17/17/17 + 3`。
-- hand sort 与 rank_counts 正确。
-- 牌型识别：单、对、三、三带一、三带一对、顺子、连对、炸弹、火箭。
-- 牌型拒绝：含 `2` 的顺子、含王的顺子、断裂顺子、长度不足连对。
-- 牌型比较：同牌型按主牌、炸弹压普通牌、火箭最大。
-- pass 规则：主动出牌不能 pass，跟牌可以 pass。
-- apply action 后手牌减少、last_combo 更新、pass_count 更新。
-- 胜负判定：任一玩家手牌归零进入 GameOver。
-
-合法动作测试：
-
-- 主动出牌生成普通动作。
-- 跟牌只生成可压动作和 pass。
-- 炸弹/火箭在必要时出现。
-- `DDZ_MAX_ACTIONS` 截断只保留合法动作并设置 `truncated`。
-- action id 稳定从 0 递增。
-
-AI 测试：
-
-- 启发式叫分可重复。
-- 启发式出牌永远从 legal_actions 选择。
-- 合法 OpenAI JSON 接收。
-- 坏 JSON、非法 id、超时码走兜底。
-- 连续失败触发冷却。
-
-Bridge 测试：
-
-- stub `available() == 0`。
-- 提取 `choices[0].message.content`。
-- 处理 refusal。
-- 处理过小 `out_cap`。
-- 终态释放 handle。
-- `cancel()` 幂等。
-
-模拟器 smoke：
-
-```bash
-make test
-make sim-headless SIM_HEADLESS_ARGS="--demo doudizhu --max-frames 5 --screenshot build/sim/doudizhu.bmp"
-```
-
-可选 live 测试：
+在阶段 A 已通过后，再追加：
 
 ```bash
 ALLOW_OPENAI_LIVE=1 OPENAI_API_KEY=... UYA_DDZ_USE_OPENAI=1 \
 make sim-run SIM_ARGS="--demo doudizhu --max-frames 300"
 ```
 
-live 测试不进入默认 CI。
+要求：
 
-## 16. 实现里程碑
+- OpenAI 可用时可参与电脑决策。
+- OpenAI 不可用时自动降级。
+- 默认 CI 不访问网络。
+- live smoke 仅作为可选人工验收，不进入默认测试链路。
 
-1. 规则层与单测。
-2. 离线启发式 AI。
-3. 离线可玩的 UyaGUI demo。
-4. 模拟器 `--demo doudizhu` 接入。
-5. OpenAI bridge stub 与构建接入。
-6. libcurl host bridge。
-7. OpenAI 决策接入与兜底。
-8. 文档、README、headless smoke。
+## 13. 当前结论
 
-## 17. 风险与缓解
+推荐就按下面这个顺序推进，不要交叉偷跑：
 
-| 风险 | 缓解 |
-| --- | --- |
-| Uya 侧 JSON 构造容易越界 | 使用固定缓冲、长度检查、失败即兜底 |
-| 合法动作过多 | `DDZ_MAX_ACTIONS` 截断并测试 |
-| OpenAI 延迟影响 UI | 后台线程 + 非阻塞 poll + 超时 |
-| libcurl 缺失导致构建失败 | stub 文件不 include curl |
-| 模型返回不可用内容 | strict JSON schema + 本地二次校验 |
-| API Key 泄漏 | 不记录 header，不显示 key |
-| 牌型 MVP 与真实斗地主有差异 | UI/README 标注 MVP 规则，后续扩展 |
+1. 阶段 A：规则层、本地启发式 AI、UI demo、sim 接入、tests、离线路径文档、真实 smoke。
+2. 阶段 B：`chat.uya`、`stub.c`、`host.c + libcurl`、prompt / poll / fallback / cancel、OpenAI 环境变量文档、live smoke。
 
-## 18. 待确认项
-
-1. MVP 先不做飞机、四带二、完整积分倍数。
-2. 首版 OpenAI 只为电脑决策服务，规则与胜负判定全部在本地。
-3. OpenAI 调用只在 Linux SDL2 模拟器里启用，目标板路径走离线 AI。
-4. 默认模型为可配置的 `OPENAI_MODEL`，示例值使用 `gpt-5.4-mini`。
-5. 可接受 libcurl 作为可选模拟器依赖；无 libcurl 时自动离线。
-
-确认后按 `docs/openai_doudizhu_demo_todo.md` 执行实现。
+如果阶段 A 还不能真实玩完一局，就不应该声称“斗地主 demo 已基本完成”。

@@ -1,22 +1,50 @@
 # OpenAI Chat 人机斗地主 Demo TODO
 
 > 配套设计文档：`docs/openai_doudizhu_demo_design.md`  
-> 状态：待开始  
-> 原则：先离线可玩，再接 OpenAI；默认测试不访问网络。
+> 当前状态：未开始实现  
+> 执行原则：先完整做完离线 MVP，再开始 OpenAI 接入。  
+> 纪律：未写代码、未跑测试、未跑 smoke、未产出截图，不得勾选完成。
 
-## 0. 开工前确认
+## 0. 交付策略
+
+推荐拆成两个阶段，而且必须串行推进：
+
+- 阶段 A：离线 MVP
+- 阶段 B：OpenAI 接入
+
+阶段 B 的开始条件：
+
+- [ ] 阶段 A 所有实现项完成。
+- [ ] 阶段 A 单测通过。
+- [ ] 阶段 A `sim-run` 可玩完一局。
+- [ ] 阶段 A `sim-headless` 可出截图。
+- [ ] 阶段 A 文档已经先写离线路径。
+
+阶段 B 禁止提前“预埋半套实现”来假装并行完成，除非只是无行为影响的接口占位，且不会让评审误判为已接入 OpenAI。
+
+## 阶段 A：离线 MVP
+
+目标：
+
+- 完整本地规则闭环。
+- 完整本地启发式 AI 闭环。
+- 完整 UI demo 闭环。
+- 完整 simulator 接入闭环。
+- 完整 tests 闭环。
+- 文档先以离线路径为主，不要求任何网络依赖。
+
+### A0. 开工前确认
 
 - [ ] 确认 MVP 不实现飞机、四带二、完整积分倍数。
-- [ ] 确认 OpenAI 仅用于电脑决策，不参与规则判定。
-- [ ] 确认 OpenAI HTTPS 调用只在 Linux SDL2 模拟器启用。
-- [ ] 确认 `OPENAI_MODEL` 可配置，示例值使用 `gpt-5.4-mini`。
-- [ ] 确认 libcurl 是可选依赖，缺失时自动编译 stub。
+- [ ] 确认电脑决策先只走本地启发式 AI。
+- [ ] 确认默认测试不访问网络。
+- [ ] 确认文档、命令示例、验收口径全部以离线路径优先。
 
 验收：
 
-- [ ] 设计文档待确认项全部有结论。
+- [ ] 设计文档中所有阶段 A 待确认项已有结论。
 
-## 1. 规则层
+### A1. 规则层
 
 - [ ] 新建 `gui/examples/doudizhu/rules.uya`。
 - [ ] 定义 rank、card、hand、combo、action、game phase、game state。
@@ -53,23 +81,23 @@
 - [ ] apply action 后手牌和轮转正确。
 - [ ] GameOver 判定。
 
-## 2. 本地启发式 AI
+### A2. 本地启发式 AI
 
 - [ ] 新建 `gui/examples/doudizhu/ai.uya`。
-- [ ] 定义 `DdzAiSource`：`Local | OpenAI | Fallback`。
-- [ ] 定义 `DdzAiStatus`：`Idle | Waiting | Ready | Failed | Cooldown`。
+- [ ] 定义 `DdzAiSource`：`Local | Fallback`。
+- [ ] 定义离线 AI 决策状态。
 - [ ] 实现叫分评分函数。
 - [ ] 实现主动出牌启发式。
 - [ ] 实现跟牌启发式。
 - [ ] 实现炸弹/火箭保守使用策略。
 - [ ] 实现 action id 校验函数。
-- [ ] 实现连续失败计数和冷却计数。
+- [ ] 保证同一 seed 和同一局面下结果稳定。
 
 验收：
 
-- [ ] 启发式永远返回 legal_actions 中已有的 action。
-- [ ] legal_actions 为空时返回明确失败状态。
-- [ ] 同一 seed 和同一局面下结果稳定。
+- [ ] 启发式永远返回 `legal_actions` 中已有的 action。
+- [ ] `legal_actions` 为空时返回明确失败状态。
+- [ ] 不依赖任何 OpenAI 模块也能完成整局流程。
 
 测试：
 
@@ -79,10 +107,8 @@
 - [ ] 跟牌选择最小可压动作。
 - [ ] 非必要场景不炸。
 - [ ] 剩余牌少时允许炸。
-- [ ] 非法 OpenAI action id 兜底。
-- [ ] 连续失败触发冷却。
 
-## 3. 离线 UI Demo
+### A3. 离线 UI Demo
 
 - [ ] 新建 `gui/examples/demo_doudizhu.uya`。
 - [ ] 定义 `DdzPageRetained`。
@@ -109,7 +135,7 @@
 - [ ] 当前玩家和胜负状态清晰可见。
 - [ ] 选中牌、非法出牌、不能 pass 都有明确反馈。
 
-## 4. 模拟器接入
+### A4. 模拟器接入
 
 - [ ] 修改 `gui/sim/config.uya`，新增 `SimDemoKind.Doudizhu`。
 - [ ] 修改 `sim_demo_name()`，返回 `斗地主`。
@@ -126,7 +152,7 @@
 - [ ] `make sim-headless SIM_HEADLESS_ARGS="--demo doudizhu --max-frames 5 --screenshot build/sim/doudizhu.bmp"` 能生成截图。
 - [ ] 切换到其他 demo 再切回不崩溃。
 
-## 5. 测试接入
+### A5. 测试接入
 
 - [ ] 新建 `gui/tests/test_doudizhu_rules.uya`。
 - [ ] 新建 `gui/tests/test_doudizhu_ai.uya`。
@@ -138,7 +164,38 @@
 - [ ] `./uya/bin/uya test gui/test_suite.uya -O0 --stack-size 65536` 通过。
 - [ ] `make test` 通过。
 
-## 6. OpenAI Uya 封装
+### A6. 文档先写离线路径
+
+- [ ] 设计文档开头明确“阶段 A 先离线完成”。
+- [ ] 运行文档先给出离线启动命令。
+- [ ] 验收文档先给出离线 smoke 命令。
+- [ ] 明确阶段 A 不要求 API Key、libcurl、联网。
+
+### A7. 阶段 A 真实 smoke
+
+必须真实执行，不接受“理论上可运行”：
+
+- [ ] `make sim-run SIM_ARGS="--demo doudizhu --scale 1"` 手工可玩验证通过。
+- [ ] 至少完整跑完一局离线对局。
+- [ ] `make sim-headless SIM_HEADLESS_ARGS="--demo doudizhu --max-frames 5 --screenshot build/sim/doudizhu.bmp"` 通过。
+- [ ] 产出并核对 `build/sim/doudizhu.bmp`。
+
+阶段 A 最终验收：
+
+- [ ] 离线 demo 可玩。
+- [ ] 离线 AI 可完成整局。
+- [ ] 默认 CI/测试不访问网络。
+- [ ] 规则测试覆盖 MVP 牌型。
+- [ ] 进入阶段 B 前，不存在“只是文档完成、代码未闭环”的假完成状态。
+
+## 阶段 B：OpenAI 接入
+
+目标：
+
+- 在不破坏阶段 A 离线可玩的前提下，增加可选 OpenAI 决策路径。
+- 所有失败场景自动回退到本地启发式 AI。
+
+### B1. OpenAI Uya 封装
 
 - [ ] 新建 `gui/platform/openai/chat.uya`。
 - [ ] 声明 `uya_openai_chat_available()`。
@@ -155,7 +212,7 @@
 - [ ] 返回码映射清晰。
 - [ ] JSON 解析失败返回错误，不产生未定义 action。
 
-## 7. OpenAI Stub
+### B2. OpenAI Stub
 
 - [ ] 新建 `gui/platform/openai/openai_chat_stub.c`。
 - [ ] 实现 `uya_openai_chat_available()` 返回 0。
@@ -168,7 +225,7 @@
 - [ ] 无 libcurl 开发包时 `make sim-build` 仍通过。
 - [ ] 未设置 API Key 时 demo 自动离线。
 
-## 8. libcurl Host Bridge
+### B3. libcurl Host Bridge
 
 - [ ] 新建 `gui/platform/openai/openai_chat_host.c`。
 - [ ] 读取 `OPENAI_API_KEY`。
@@ -198,7 +255,7 @@
 - [ ] 请求失败不会阻塞 UI 主循环。
 - [ ] 终态 handle 不可重复消费。
 
-## 9. 构建脚本接入
+### B4. 构建脚本接入
 
 - [ ] 修改 `tools/build_gui_sim.sh` 检测 `pkg-config --exists libcurl`。
 - [ ] 有 libcurl 时加入 cflags/libs。
@@ -213,66 +270,48 @@
 - [ ] `make sim-build` 在无 libcurl 环境应可通过 stub 路径。
 - [ ] `make test` 不因 libcurl 缺失受影响。
 
-## 10. OpenAI 决策接入
+### B5. OpenAI 决策接入
 
 - [ ] 在 `doudizhu.ai` 中构造 prompt payload。
 - [ ] 固定 prompt 缓冲 `DDZ_PROMPT_BYTES`。
-- [ ] 叫分阶段生成 bid legal_actions prompt。
-- [ ] 出牌阶段生成 play legal_actions prompt。
-- [ ] 调用 `openai_chat_start()`。
-- [ ] 每帧 poll。
-- [ ] 成功后解析 `action_id`。
-- [ ] 校验 action id 仍然属于当前 legal_actions。
-- [ ] 失败时启发式兜底。
-- [ ] 更新 AI 状态 UI 文案。
-- [ ] 重开和切 demo 时 cancel。
+- [ ] 叫分阶段生成 bid `legal_actions` prompt。
+- [ ] 出牌阶段生成 play `legal_actions` prompt。
+- [ ] 实现 request in-flight 状态机。
+- [ ] 实现 poll 成功后的 `action_id` 校验。
+- [ ] 非法 `action_id` 自动 fallback。
+- [ ] 超时、HTTP 错误、JSON 错误自动 fallback。
+- [ ] `重开` 时 cancel 未完成请求。
 
 验收：
 
-- [ ] OpenAI 成功时电脑动作来自模型选择。
-- [ ] OpenAI 失败时同一回合仍能继续。
-- [ ] 模型返回非法 id 时不会出非法牌。
-- [ ] UI 主循环不卡住。
+- [ ] OpenAI 只从合法动作列表中选动作。
+- [ ] 任意异常都能自动回退到离线 AI。
+- [ ] 不会因 OpenAI 超时卡死主循环。
 
-## 11. 文档更新
+### B6. OpenAI 环境变量文档
 
-- [ ] 更新 `README.md`，添加斗地主 demo 运行命令。
-- [ ] 更新 `README.md`，添加 OpenAI 环境变量说明。
-- [ ] 更新 `docs/gui_uya_linux_sim.md`，添加 `--demo doudizhu`。
-- [ ] 更新 `docs/gui_uya_linux_sim.md`，添加热键说明。
-- [ ] 如有 API docs 生成清单，确认无需手写修改生成文件。
+- [ ] 补充 `OPENAI_API_KEY` 用法。
+- [ ] 补充 `OPENAI_MODEL` 用法。
+- [ ] 补充 `OPENAI_BASE_URL` 用法。
+- [ ] 补充 `UYA_DDZ_USE_OPENAI` 用法。
+- [ ] 说明未配置时默认离线。
 
-验收：
+### B7. live smoke
 
-- [ ] 文档说明离线模式是默认安全路径。
-- [ ] 文档不要求用户必须安装 libcurl 才能运行离线 demo。
-- [ ] 文档不展示真实 API Key。
+仅在阶段 A 已真实完成后执行：
 
-## 12. 最终验证
+- [ ] `ALLOW_OPENAI_LIVE=1 OPENAI_API_KEY=... UYA_DDZ_USE_OPENAI=1 make sim-run SIM_ARGS="--demo doudizhu --max-frames 300"` 通过。
+- [ ] 验证 OpenAI 可参与电脑决策。
+- [ ] 验证拔掉 API Key 后可自动降级。
 
-- [ ] `make test`
-- [ ] `make sim-build`
-- [ ] `make sim-headless SIM_HEADLESS_ARGS="--demo doudizhu --max-frames 5 --screenshot build/sim/doudizhu.bmp"`
-- [ ] 无 `OPENAI_API_KEY` 运行一局 smoke。
-- [ ] 设置 `UYA_DDZ_USE_OPENAI=0` 运行一局 smoke。
-- [ ] 可选：有 API Key 时 live smoke。
+阶段 B 最终验收：
 
-可选 live smoke：
-
-```bash
-ALLOW_OPENAI_LIVE=1 OPENAI_API_KEY=... UYA_DDZ_USE_OPENAI=1 \
-make sim-run SIM_ARGS="--demo doudizhu --max-frames 300"
-```
-
-最终验收：
-
-- [ ] 离线 demo 可玩。
 - [ ] OpenAI 可用时可参与电脑决策。
 - [ ] OpenAI 不可用时自动降级。
 - [ ] 默认 CI 不访问网络。
-- [ ] 规则测试覆盖 MVP 牌型。
+- [ ] live smoke 仅作为可选验收，不进入默认测试路径。
 
-## 13. 后续增强
+## 后续增强
 
 - [ ] 增加飞机。
 - [ ] 增加飞机带翅膀。
