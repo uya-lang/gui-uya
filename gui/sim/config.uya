@@ -195,6 +195,19 @@ export fn sim_config_default() SimConfig {
     };
 }
 
+export fn sim_config_apply_backend_defaults(cfg: &SimConfig) void {
+    if cfg == null {
+        return;
+    }
+    if sim_cstr_empty(cfg.resource_root) {
+        if cfg.backend == SimBackendKind.Web {
+            cfg.resource_root = "/app";
+        } else {
+            cfg.resource_root = ".";
+        }
+    }
+}
+
 /// 从环境变量和命令行参数构建模拟器配置。
 export fn sim_config_from_runtime() SimConfig {
     var cfg: SimConfig = sim_config_default();
@@ -235,6 +248,8 @@ export fn sim_config_from_runtime() SimConfig {
             cfg.show_dirty_regions = false;
         } else if sim_cstr_eq(arg as &const byte, "--persist-data") {
             cfg.persist_data = true;
+        } else if sim_cstr_eq(arg as &const byte, "--no-persist-data") {
+            cfg.persist_data = false;
         } else if i + 1 < get_argc() {
             const next: &byte = get_argv(i + 1);
             if sim_cstr_eq(arg as &const byte, "--demo") && next != null {
@@ -344,12 +359,6 @@ export fn sim_config_from_runtime() SimConfig {
         i = i + 1;
     }
 
-    if sim_cstr_empty(cfg.resource_root) {
-        if cfg.backend == SimBackendKind.Web {
-            cfg.resource_root = "/app";
-        } else {
-            cfg.resource_root = ".";
-        }
-    }
+    sim_config_apply_backend_defaults(&cfg);
     return cfg;
 }

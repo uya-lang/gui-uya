@@ -6,6 +6,7 @@ EXAMPLE_DIR ?= gui/examples
 SMOKE_APP ?= gui/phase6_smoke.uya
 BENCH_APP ?= gui/bench_suite.uya
 TEST_ENTRY ?= gui/test_suite.uya
+WEB_PRESENT_TEST_ENTRY ?= gui/web_present_plan_suite.uya
 RENDER_TEST_ENTRY ?= gui/render_test_suite.uya
 TEST_STACK_SIZE ?= 65536
 BENCH_STACK_SIZE ?= $(TEST_STACK_SIZE)
@@ -47,6 +48,7 @@ build:
 
 test:
 	$(UYA) test $(TEST_ENTRY) $(UYA_OPT) --stack-size $(TEST_STACK_SIZE)
+	$(UYA) test $(WEB_PRESENT_TEST_ENTRY) $(UYA_OPT) --stack-size $(TEST_STACK_SIZE)
 	$(UYA) test $(RENDER_TEST_ENTRY) $(UYA_OPT) --stack-size $(TEST_STACK_SIZE)
 
 bench:
@@ -198,4 +200,4 @@ sim-web-serve: sim-web-build
 	@PORT=$(SIM_WEB_PORT) BUILD_DIR=$(abspath $(SIM_WEB_BUILD_DIR)) bash tools/serve_gui_web.sh
 
 sim-web-smoke: sim-web-build
-	@echo "sim-web-smoke requires a headless browser runner; build output is ready at $(SIM_WEB_BUILD_DIR)/index.html"
+	@BUILD_DIR=$(abspath $(SIM_WEB_BUILD_DIR)) bash tools/smoke_gui_web.sh

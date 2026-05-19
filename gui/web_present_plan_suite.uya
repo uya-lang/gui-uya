@@ -1,0 +1,6 @@
+use tests.test_web_present_plan;
+
+test "web present plan suite loads" {
+    const sentinel: i32 = TEST_WEB_PRESENT_PLAN_MODULE;
+    _ = sentinel;
+}

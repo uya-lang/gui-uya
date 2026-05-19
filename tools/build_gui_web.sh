@@ -13,7 +13,9 @@ OUT_GEN_O="$BUILD_DIR/${OUT_NAME}.generated.o"
 OUT_WEB_O="$BUILD_DIR/${OUT_NAME}.web_host.o"
 OUT_HTML="$BUILD_DIR/index.html"
 OUT_CIMPORT_SIDECAR="${OUT_C}imports.sh"
+SHELL_FILE="${SHELL_FILE:-$ROOT_DIR/gui/platform/web/shell.html}"
 MODE="${MODE:-debug}"
+WEB_STACK_SIZE="${WEB_STACK_SIZE:-8388608}"
 TARGET_OS="${TARGET_OS:-unknown}"
 TARGET_ARCH="${TARGET_ARCH:-unknown}"
 
@@ -94,7 +96,10 @@ fi
     -o "$OUT_HTML" \
     -sALLOW_MEMORY_GROWTH=1 \
     -sNO_EXIT_RUNTIME=1 \
+    -sSTACK_SIZE="$WEB_STACK_SIZE" \
     -sEXPORTED_FUNCTIONS=_main,_uya_gui_web_host_feed_event \
+    -lidbfs.js \
+    --shell-file "$SHELL_FILE" \
     --preload-file "$ROOT_DIR/gui@/app/gui" \
     --preload-file "$ROOT_DIR/.uya_sim_root_probe@/app/.uya_sim_root_probe" \
     "${CIMPORT_LDFLAGS[@]}"

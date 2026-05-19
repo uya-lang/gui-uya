@@ -2,7 +2,7 @@
 
 > 版本: v0.2.0  
 > 日期: 2026-05-19  
-> 状态: 已启动实现（Uya 侧主链路已落地，浏览器实产构建待 Emscripten 环境）
+> 状态: 已完成主线实现（真实 `wasm/js/html`、dirty present、无头 smoke 已打通）
 
 > 说明: 本文是“原生 Web 后端”实施路线图，目标是在浏览器中运行当前 `sim`/demo，并保持与现有 `SDL2` / `Framebuffer` 后端一致的分层方式。本文重点记录当前基线、缺口、实施顺序和验收标准。
 
@@ -57,8 +57,8 @@
 | W3 | Web 显示 MVP（Canvas2D full present） | 已完成 |
 | W4 | Web 输入 MVP（mouse/wheel/key） | 已完成 |
 | W5 | Web runner 与浏览器主循环接线 | 已完成 |
-| W6 | 资源打包、截图/录制、Makefile/构建脚本 | 部分完成 |
-| W7 | dirty present、resize、页面生命周期与 smoke | 未开始 |
+| W6 | 资源打包、截图/录制、Makefile/构建脚本 | 已完成 |
+| W7 | dirty present、resize、页面生命周期与 smoke | 已完成 |
 | W8 | WebGL/worker/移动端兼容作为 backlog | 未开始 |
 
 ## 当前实现状态
@@ -66,18 +66,24 @@
 - 已完成：
   - 新增 `gui/sim/runtime_core.uya`，统一 SDL2 / FB / Web 的帧循环核心。
   - 新增 `gui/platform/web/` 目录与 `disp_web.uya` / `indev_web.uya` / `web_common.uya` / `web_host.c`。
+  - 新增 `gui/platform/web/shell.html`，由 host 组装 `Module.arguments`、fit-window、下载导出与 `IDBFS` 挂载。
   - 新增 `gui/sim/runner_web.uya` 与 `gui/sim_web_main.uya`。
   - `SimConfig` 已支持 `backend=web` 与 `persist_data` 占位开关。
   - 资源根探针已改为 `.uya_sim_root_probe`。
   - Web 默认路径已切到 `/app`、`/tmp/last_frame.png`、`/tmp/last_input.uyarec`。
   - Make 目标与脚本已补齐：`sim-web-build` / `sim-web-run` / `sim-web-serve` / `sim-web-smoke`。
-  - Web 单测已补入 `gui/tests/test_web_backend.uya`。
+  - Web dirty present、overlay、resize/visibility refresh 与 screenshot host 导出已补齐。
+  - Web 单测已补入 `gui/tests/test_web_backend.uya` / `gui/tests/test_web_config.uya` / `gui/tests/test_web_present_plan.uya`。
+- 已新增验证脚本：
+  - `tools/smoke_gui_web.sh`
+  - `tools/smoke_gui_web.py`
 - 已验证：
-  - `./uya/bin/uya test gui/test_suite.uya -O0 --stack-size 65536` 通过，`206` 个测试全部通过。
-  - `./uya/bin/uya build --c99 gui/sim_web_main.uya -O0 -o /tmp/gui_sim_web_check.c` 可成功生成 C99。
+  - `./uya/bin/uya test gui/test_suite.uya -O0 --stack-size 65536` 通过，`208` 个测试全部通过。
+  - `./uya/bin/uya test gui/web_present_plan_suite.uya -O0 --stack-size 65536` 通过，`4` 个测试全部通过。
+  - `make sim-web-build` 可真实产出 `build/web/{index.html,index.js,index.wasm,index.data}`。
+  - `make sim-web-smoke` 可无头打开页面，跑完 `--max-frames 3` 并校验 `/tmp/last_frame.png`。
 - 当前阻塞：
-  - `tools/build_gui_web.sh` 依赖 `emcc`，当前环境未安装 Emscripten，因此尚未产出真实 `wasm/js/html`。
-  - 浏览器无头 smoke、真实页面首帧、下载式截图导出尚未完成闭环验证。
+  - 无硬阻塞；剩余主要是更强的交互式验收与视觉回归确认。
 
 ---
 
@@ -217,8 +223,8 @@
 
 ### 验收
 
-- [ ] 浏览器中可见首帧画面
-- [ ] framebuffer 逻辑尺寸与 canvas 显示尺寸可以分离
+- [x] 浏览器中可见首帧画面
+- [x] framebuffer 逻辑尺寸与 canvas 显示尺寸可以分离
 - [x] 全屏请求失败时不会导致 sim 崩溃
 
 ---
@@ -293,9 +299,9 @@
 
 ### 验收
 
-- [ ] `--backend web` 能进入并退出主循环
-- [ ] `max-frames=3` 的 smoke 可自动完成
-- [ ] `SDL2` / `FB` 分支行为不回归
+- [x] `--backend web` 能进入并退出主循环
+- [x] `max-frames=3` 的 smoke 可自动完成
+- [x] `SDL2` / `FB` 分支行为不回归
 
 ---
 
@@ -332,20 +338,20 @@
 - [x] 截图方案
   - [x] 空路径时使用 `/tmp/last_frame.png`
   - [x] 先写入 MEMFS
-  - [ ] 再由 host 触发下载或保留给 smoke 读取
+  - [x] 再由 host 触发下载或保留给 smoke 读取
 - [x] 录制/回放默认路径方案
   - [x] record 默认 `/tmp/last_input.uyarec`
   - [x] playback 默认 `/tmp/last_input.uyarec`
 - [x] `--persist-data` 方案
   - [x] 首版可先占位
-  - [ ] 若开启则挂 `IDBFS`
+  - [x] 若开启则挂 `IDBFS`
 
 ### 验收
 
-- [ ] 一条命令可以产出 `wasm/js/html`
-- [ ] 本地静态服务可正常打开页面
-- [ ] demo 所需资源在浏览器中可读
-- [ ] 截图链路可用
+- [x] 一条命令可以产出 `wasm/js/html`
+- [x] 本地静态服务可正常打开页面
+- [x] demo 所需资源在浏览器中可读
+- [x] 截图链路可用
 
 ---
 
@@ -357,30 +363,30 @@
 
 ### TODO
 
-- [ ] `present_dirty()`
-  - [ ] dirty rect merge
-  - [ ] full/dirty 退化阈值
-  - [ ] 局部 swizzle 上传
-- [ ] dirty overlay 调试显示
-- [ ] resize/focus/visibility 生命周期处理
-  - [ ] 页面隐藏后 refresh request
-  - [ ] resize 后 refresh request
-  - [ ] canvas CSS fit-window
-- [ ] 单元测试
+- [x] `present_dirty()`
+  - [x] dirty rect merge
+  - [x] full/dirty 退化阈值
+  - [x] 局部 swizzle 上传
+- [x] dirty overlay 调试显示
+- [x] resize/focus/visibility 生命周期处理
+  - [x] 页面隐藏后 refresh request
+  - [x] resize 后 refresh request
+  - [x] canvas CSS fit-window
+- [x] 单元测试
   - [x] `test_web_input_mapping.uya`
-  - [ ] `test_web_present_plan.uya`
-  - [ ] `test_web_config.uya`
-- [ ] 浏览器 smoke
-  - [ ] 启动静态 server
-  - [ ] 无头浏览器打开页面
-  - [ ] `--max-frames 3`
-  - [ ] 校验截图或 completion 标志
+  - [x] `test_web_present_plan.uya`
+  - [x] `test_web_config.uya`
+- [x] 浏览器 smoke
+  - [x] 启动静态 server
+  - [x] 无头浏览器打开页面
+  - [x] `--max-frames 3`
+  - [x] 校验截图或 completion 标志
 
 ### 验收
 
 - [ ] 页面缩放后点击位置仍正确
 - [ ] dirty render 不会出现脏区残影/黑边
-- [ ] headless browser smoke 可自动跑通
+- [x] headless browser smoke 可自动跑通
 
 ---
 

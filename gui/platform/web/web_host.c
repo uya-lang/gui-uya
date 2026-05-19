@@ -103,191 +103,59 @@ static void uya_gui_web_set_error(const char *msg) {
 }
 
 EM_JS(int, uya_gui_web_js_setup_canvas, (int width, int height, int scale, const char *title_ptr), {
-    var title = UTF8ToString(title_ptr || 0);
-    if (typeof document === "undefined") {
+    if (!Module.uyaGuiSetupCanvas) {
         return 0;
     }
-    var canvas = Module.uyaGuiCanvas || document.getElementById("uya-gui-canvas");
-    if (!canvas) {
-        canvas = document.createElement("canvas");
-        canvas.id = "uya-gui-canvas";
-        document.body.style.margin = "0";
-        document.body.style.background = "#111";
-        document.body.style.display = "flex";
-        document.body.style.alignItems = "center";
-        document.body.style.justifyContent = "center";
-        document.body.appendChild(canvas);
-    }
-    Module.uyaGuiCanvas = canvas;
-    canvas.width = width;
-    canvas.height = height;
-    canvas.style.width = (width * Math.max(scale, 1)) + "px";
-    canvas.style.height = (height * Math.max(scale, 1)) + "px";
-    canvas.style.outline = "none";
-    canvas.style.touchAction = "none";
-    canvas.style.overscrollBehavior = "contain";
-    canvas.style.imageRendering = "pixelated";
-    canvas.tabIndex = 0;
-    if (title.length > 0) {
-        document.title = title;
-    }
-    Module.uyaGuiCtx2d = canvas.getContext("2d", { alpha: false, desynchronized: true });
-    if (!Module.uyaGuiCtx2d) {
-        return 0;
-    }
-    if (!Module.uyaGuiImageData || Module.uyaGuiImageData.width !== width || Module.uyaGuiImageData.height !== height) {
-        Module.uyaGuiImageData = Module.uyaGuiCtx2d.createImageData(width, height);
-    }
-    if (canvas.__uyaGuiBound) {
-        return 1;
-    }
-
-    var mapKey = function(key) {
-        switch (key) {
-            case "Escape": return 27;
-            case "Enter": return 13;
-            case " ": return 32;
-            case "Spacebar": return 32;
-            case "ArrowLeft": return 1000;
-            case "ArrowRight": return 1001;
-            case "ArrowUp": return 1002;
-            case "ArrowDown": return 1003;
-            case "F11": return 1011;
-            default: return 0;
-        }
-    };
-    var feed = function(kind, x, y, value, keyCode, modifiers) {
-        Module._uya_gui_web_host_feed_event(kind, x | 0, y | 0, value | 0, keyCode | 0, modifiers | 0);
-    };
-    var pointFromEvent = function(clientX, clientY) {
-        var rect = canvas.getBoundingClientRect();
-        var scaleX = rect.width > 0 ? canvas.width / rect.width : 1;
-        var scaleY = rect.height > 0 ? canvas.height / rect.height : 1;
-        var x = Math.round((clientX - rect.left) * scaleX);
-        var y = Math.round((clientY - rect.top) * scaleY);
-        x = Math.max(0, Math.min(canvas.width - 1, x));
-        y = Math.max(0, Math.min(canvas.height - 1, y));
-        return { x: x, y: y };
-    };
-    var modifierBits = function(evt) {
-        return (evt.altKey ? 1 : 0) | (evt.ctrlKey ? 2 : 0) | (evt.metaKey ? 4 : 0) | (evt.shiftKey ? 8 : 0);
-    };
-
-    canvas.addEventListener("mousedown", function(evt) {
-        var p = pointFromEvent(evt.clientX, evt.clientY);
-        canvas.focus();
-        feed(2, p.x, p.y, 0, 0, modifierBits(evt));
-        evt.preventDefault();
-    });
-    window.addEventListener("mousemove", function(evt) {
-        var p = pointFromEvent(evt.clientX, evt.clientY);
-        feed(1, p.x, p.y, 0, 0, modifierBits(evt));
-    });
-    window.addEventListener("mouseup", function(evt) {
-        var p = pointFromEvent(evt.clientX, evt.clientY);
-        feed(3, p.x, p.y, 0, 0, modifierBits(evt));
-        evt.preventDefault();
-    });
-    canvas.addEventListener("touchstart", function(evt) {
-        if (evt.changedTouches.length < 1) {
-            return;
-        }
-        var touch = evt.changedTouches[0];
-        var p = pointFromEvent(touch.clientX, touch.clientY);
-        canvas.focus();
-        feed(2, p.x, p.y, 0, 0, 0);
-        evt.preventDefault();
-    }, { passive: false });
-    canvas.addEventListener("touchmove", function(evt) {
-        if (evt.changedTouches.length < 1) {
-            return;
-        }
-        var touch = evt.changedTouches[0];
-        var p = pointFromEvent(touch.clientX, touch.clientY);
-        feed(1, p.x, p.y, 0, 0, 0);
-        evt.preventDefault();
-    }, { passive: false });
-    canvas.addEventListener("touchend", function(evt) {
-        if (evt.changedTouches.length < 1) {
-            return;
-        }
-        var touch = evt.changedTouches[0];
-        var p = pointFromEvent(touch.clientX, touch.clientY);
-        feed(3, p.x, p.y, 0, 0, 0);
-        evt.preventDefault();
-    }, { passive: false });
-    canvas.addEventListener("touchcancel", function(evt) {
-        feed(9, 0, 0, 0, 0, 0);
-        evt.preventDefault();
-    }, { passive: false });
-    canvas.addEventListener("wheel", function(evt) {
-        var p = pointFromEvent(evt.clientX, evt.clientY);
-        var delta = evt.deltaY > 0 ? 1 : (evt.deltaY < 0 ? -1 : 0);
-        feed(4, p.x, p.y, delta, 0, modifierBits(evt));
-        evt.preventDefault();
-    }, { passive: false });
-    canvas.addEventListener("keydown", function(evt) {
-        var mapped = mapKey(evt.key);
-        if (!mapped) {
-            return;
-        }
-        feed(5, 0, 0, 0, mapped, modifierBits(evt));
-        evt.preventDefault();
-    });
-    canvas.addEventListener("keyup", function(evt) {
-        var mapped = mapKey(evt.key);
-        if (!mapped) {
-            return;
-        }
-        feed(6, 0, 0, 0, mapped, modifierBits(evt));
-        evt.preventDefault();
-    });
-    window.addEventListener("blur", function() {
-        feed(7, 0, 0, 0, 0, 0);
-    });
-    document.addEventListener("visibilitychange", function() {
-        if (document.hidden) {
-            feed(7, 0, 0, 0, 0, 0);
-        } else {
-            feed(8, 0, 0, 0, 0, 0);
-        }
-    });
-    window.addEventListener("resize", function() {
-        feed(8, 0, 0, 0, 0, 0);
-    });
-    canvas.__uyaGuiBound = true;
-    return 1;
+    return Module.uyaGuiSetupCanvas(width, height, scale, UTF8ToString(title_ptr || 0)) | 0;
 });
 
 EM_JS(void, uya_gui_web_js_present, (const uint8_t *rgba_ptr, int width, int height), {
-    var ctx = Module.uyaGuiCtx2d;
-    var imageData = Module.uyaGuiImageData;
-    if (!ctx || !imageData) {
-        return;
+    if (Module.uyaGuiPresent) {
+        Module.uyaGuiPresent(rgba_ptr, width, height);
     }
-    var src = Module.HEAPU8.subarray(rgba_ptr, rgba_ptr + (width * height * 4));
-    imageData.data.set(src);
-    ctx.putImageData(imageData, 0, 0);
+});
+
+EM_JS(void, uya_gui_web_js_present_region, (const uint8_t *rgba_ptr, int width, int height, int x, int y, int rect_w, int rect_h), {
+    if (Module.uyaGuiPresentRegion) {
+        Module.uyaGuiPresentRegion(rgba_ptr, width, height, x, y, rect_w, rect_h);
+    }
 });
 
 EM_JS(void, uya_gui_web_js_set_title, (const char *title_ptr), {
-    if (typeof document === "undefined") {
-        return;
+    if (Module.uyaGuiSetTitle) {
+        Module.uyaGuiSetTitle(UTF8ToString(title_ptr || 0));
     }
-    document.title = UTF8ToString(title_ptr || 0);
 });
 
-EM_JS(int, uya_gui_web_js_request_fullscreen, (), {
-    var canvas = Module.uyaGuiCanvas;
-    if (!canvas || !canvas.requestFullscreen) {
+EM_JS(int, uya_gui_web_js_request_fullscreen, (void), {
+    if (!Module.uyaGuiRequestFullscreen) {
         return 0;
     }
-    canvas.requestFullscreen().catch(function() {});
-    return 1;
+    return Module.uyaGuiRequestFullscreen() | 0;
 });
 
-EM_JS(void, uya_gui_web_js_shutdown, (), {
-    Module.uyaGuiLoopActive = 0;
+EM_JS(void, uya_gui_web_js_clear_dirty_overlay, (void), {
+    if (Module.uyaGuiClearDirtyOverlay) {
+        Module.uyaGuiClearDirtyOverlay();
+    }
+});
+
+EM_JS(void, uya_gui_web_js_draw_dirty_rect, (int x, int y, int w, int h), {
+    if (Module.uyaGuiDrawDirtyRect) {
+        Module.uyaGuiDrawDirtyRect(x, y, w, h);
+    }
+});
+
+EM_JS(void, uya_gui_web_js_set_dirty_overlay_enabled, (int enabled), {
+    if (Module.uyaGuiSetDirtyOverlayEnabled) {
+        Module.uyaGuiSetDirtyOverlayEnabled(enabled);
+    }
+});
+
+EM_JS(void, uya_gui_web_js_shutdown, (void), {
+    if (Module.uyaGuiShutdown) {
+        Module.uyaGuiShutdown();
+    }
 });
 
 EMSCRIPTEN_KEEPALIVE void uya_gui_web_host_feed_event(uint8_t kind, int16_t x, int16_t y, int32_t value, uint16_t key_code, uint16_t modifiers) {
@@ -355,18 +223,86 @@ static void uya_gui_web_swizzle_argb_to_rgba(UyaGuiWebDisplay *display, const ui
     }
 }
 
-int32_t uya_gui_web_display_present(void *handle, const uint8_t *pixels, int32_t pitch, int32_t width, int32_t height, int32_t format_tag) {
-    UyaGuiWebDisplay *display = (UyaGuiWebDisplay *)handle;
+static void uya_gui_web_swizzle_argb_to_rgba_region(UyaGuiWebDisplay *display, const uint8_t *pixels, int32_t pitch, int32_t width, int32_t x, int32_t y, int32_t rect_w, int32_t rect_h) {
+    for (int32_t row = 0; row < rect_h; ++row) {
+        const uint8_t *src = pixels + (size_t)(y + row) * (size_t)pitch + (size_t)x * 4u;
+        uint8_t *dst = display->rgba_pixels + ((size_t)(y + row) * (size_t)width + (size_t)x) * 4u;
+        for (int32_t col = 0; col < rect_w; ++col) {
+            dst[0] = src[1];
+            dst[1] = src[2];
+            dst[2] = src[3];
+            dst[3] = src[0];
+            src += 4;
+            dst += 4;
+        }
+    }
+}
+
+static int uya_gui_web_display_validate_present(UyaGuiWebDisplay *display, const uint8_t *pixels, int32_t width, int32_t height, int32_t format_tag) {
     if (display == NULL || pixels == NULL) {
         uya_gui_web_set_error("invalid present arguments");
+        return 0;
+    }
+    if (width != display->width || height != display->height) {
+        uya_gui_web_set_error("present geometry mismatch");
         return 0;
     }
     if (format_tag != 2) {
         uya_gui_web_set_error("web backend only supports ARGB8888 source");
         return 0;
     }
+    return 1;
+}
+
+int32_t uya_gui_web_display_present(void *handle, const uint8_t *pixels, int32_t pitch, int32_t width, int32_t height, int32_t format_tag) {
+    UyaGuiWebDisplay *display = (UyaGuiWebDisplay *)handle;
+    if (!uya_gui_web_display_validate_present(display, pixels, width, height, format_tag)) {
+        return 0;
+    }
+    uya_gui_web_js_clear_dirty_overlay();
     uya_gui_web_swizzle_argb_to_rgba(display, pixels, pitch, width, height);
     uya_gui_web_js_present(display->rgba_pixels, width, height);
+    if (display->dirty_overlay_enabled) {
+        uya_gui_web_js_draw_dirty_rect(0, 0, width, height);
+    }
+    return 1;
+}
+
+int32_t uya_gui_web_display_present_begin(void *handle, int32_t width, int32_t height, int32_t format_tag) {
+    UyaGuiWebDisplay *display = (UyaGuiWebDisplay *)handle;
+    if (!uya_gui_web_display_validate_present(display, display != NULL ? display->rgba_pixels : NULL, width, height, format_tag)) {
+        return 0;
+    }
+    uya_gui_web_js_clear_dirty_overlay();
+    return 1;
+}
+
+int32_t uya_gui_web_display_present_region(void *handle, const uint8_t *pixels, int32_t pitch, int32_t width, int32_t height, int32_t format_tag, int32_t x, int32_t y, int32_t rect_w, int32_t rect_h) {
+    UyaGuiWebDisplay *display = (UyaGuiWebDisplay *)handle;
+    if (!uya_gui_web_display_validate_present(display, pixels, width, height, format_tag)) {
+        return 0;
+    }
+    if (rect_w <= 0 || rect_h <= 0) {
+        return 1;
+    }
+    if (x < 0 || y < 0 || x + rect_w > width || y + rect_h > height) {
+        uya_gui_web_set_error("dirty rect out of bounds");
+        return 0;
+    }
+    uya_gui_web_swizzle_argb_to_rgba_region(display, pixels, pitch, width, x, y, rect_w, rect_h);
+    uya_gui_web_js_present_region(display->rgba_pixels, width, height, x, y, rect_w, rect_h);
+    if (display->dirty_overlay_enabled) {
+        uya_gui_web_js_draw_dirty_rect(x, y, rect_w, rect_h);
+    }
+    return 1;
+}
+
+int32_t uya_gui_web_display_present_end(void *handle) {
+    UyaGuiWebDisplay *display = (UyaGuiWebDisplay *)handle;
+    if (display == NULL) {
+        uya_gui_web_set_error("invalid present handle");
+        return 0;
+    }
     return 1;
 }
 
@@ -395,6 +331,7 @@ int32_t uya_gui_web_display_set_dirty_overlay(void *handle, int32_t enabled) {
         return 0;
     }
     display->dirty_overlay_enabled = enabled != 0;
+    uya_gui_web_js_set_dirty_overlay_enabled(enabled);
     return 1;
 }
 

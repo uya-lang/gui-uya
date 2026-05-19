@@ -1,0 +1,578 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>UyaGUI Web</title>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        background: #0f1115;
+        color: #d8dee9;
+        font: 14px/1.4 monospace;
+      }
+
+      body {
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+      }
+
+      #uya-gui-status {
+        padding: 8px 12px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        background: rgba(255, 255, 255, 0.03);
+        white-space: pre-wrap;
+      }
+
+      #uya-gui-root {
+        position: relative;
+        min-height: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+      }
+
+      #uya-gui-stage {
+        position: relative;
+        display: inline-block;
+      }
+
+      canvas {
+        display: block;
+        border: 0;
+        outline: 0;
+        image-rendering: pixelated;
+      }
+
+      #uya-gui-overlay {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+      }
+
+      #uya-gui-log {
+        margin: 0;
+        padding: 8px 12px;
+        min-height: 96px;
+        max-height: 24vh;
+        overflow: auto;
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+        background: #0a0c10;
+        white-space: pre-wrap;
+      }
+    </style>
+    <script>
+      (function() {
+        function parseArgsString(text) {
+          if (!text) {
+            return [];
+          }
+          var out = [];
+          var cur = '';
+          var quote = '';
+          var escape = false;
+          for (var i = 0; i < text.length; ++i) {
+            var ch = text[i];
+            if (escape) {
+              cur += ch;
+              escape = false;
+              continue;
+            }
+            if (ch === '\\') {
+              escape = true;
+              continue;
+            }
+            if (quote) {
+              if (ch === quote) {
+                quote = '';
+              } else {
+                cur += ch;
+              }
+              continue;
+            }
+            if (ch === '"' || ch === "'") {
+              quote = ch;
+              continue;
+            }
+            if (/\s/.test(ch)) {
+              if (cur.length > 0) {
+                out.push(cur);
+                cur = '';
+              }
+              continue;
+            }
+            cur += ch;
+          }
+          if (cur.length > 0) {
+            out.push(cur);
+          }
+          return out;
+        }
+
+        function parseArgsFromLocation() {
+          if (typeof window === 'undefined') {
+            return [];
+          }
+          var params = new URLSearchParams(window.location.search);
+          var explicitArgs = params.getAll('arg');
+          if (explicitArgs.length > 0) {
+            return explicitArgs;
+          }
+          return parseArgsString(params.get('args') || '');
+        }
+
+        function findArgValue(args, flag, fallback) {
+          var value = fallback;
+          for (var i = 0; i + 1 < args.length; ++i) {
+            if (args[i] === flag) {
+              value = args[i + 1];
+              ++i;
+            }
+          }
+          return value;
+        }
+
+        function resolveBoolFlag(args, positiveFlag, negativeFlag, fallback) {
+          var value = fallback;
+          for (var i = 0; i < args.length; ++i) {
+            if (args[i] === positiveFlag) {
+              value = true;
+            } else if (args[i] === negativeFlag) {
+              value = false;
+            }
+          }
+          return value;
+        }
+
+        function ensureStageCanvas(canvasId) {
+          var root = document.getElementById('uya-gui-root');
+          var stage = document.getElementById('uya-gui-stage');
+          var canvas = document.getElementById(canvasId);
+          if (!canvas) {
+            canvas = document.createElement('canvas');
+            canvas.id = canvasId;
+            stage.insertBefore(canvas, document.getElementById('uya-gui-overlay'));
+          } else if (canvas.parentNode !== stage) {
+            stage.insertBefore(canvas, document.getElementById('uya-gui-overlay'));
+          }
+          root.dataset.canvasId = canvasId;
+          return canvas;
+        }
+
+        var bootArgs = parseArgsFromLocation();
+        var defaultCanvasId = findArgValue(bootArgs, '--canvas-id', 'uya-gui-canvas');
+        var fitWindow = resolveBoolFlag(bootArgs, '--fit-window', '--fixed-window', true);
+        var persistData = resolveBoolFlag(bootArgs, '--persist-data', '--no-persist-data', false);
+        var outputElement = null;
+        var statusElement = null;
+
+        var Module = {
+          arguments: bootArgs,
+          preRun: [],
+          postRun: [],
+          uyaGuiAutoDownload: true,
+          uyaGuiCanvasId: defaultCanvasId,
+          uyaGuiFitWindow: fitWindow,
+          uyaGuiPersistData: persistData,
+          uyaGuiCompleted: false,
+          uyaGuiCompletion: null,
+          uyaGuiLastPresentAt: 0,
+          uyaGuiLastScreenshotPath: null,
+          uyaGuiFiles: {},
+          print: function() {
+            if (!outputElement) {
+              outputElement = document.getElementById('uya-gui-log');
+            }
+            var text = Array.prototype.join.call(arguments, ' ');
+            console.log(text);
+            if (outputElement) {
+              outputElement.textContent += text + '\n';
+              outputElement.scrollTop = outputElement.scrollHeight;
+            }
+          },
+          printErr: function() {
+            var text = Array.prototype.join.call(arguments, ' ');
+            console.error(text);
+            Module.print(text);
+          },
+          setStatus: function(text) {
+            if (!statusElement) {
+              statusElement = document.getElementById('uya-gui-status');
+            }
+            if (statusElement) {
+              statusElement.textContent = text || '';
+            }
+          },
+          canvas: document.getElementById(defaultCanvasId),
+        };
+
+        window.Module = Module;
+
+        Module.preRun.push(function() {
+          if (!Module.uyaGuiPersistData) {
+            return;
+          }
+          try {
+            FS.mkdir('/data');
+          } catch (err) {
+          }
+          FS.mount(IDBFS, {}, '/data');
+          addRunDependency('uya-gui-idbfs-load');
+          FS.syncfs(true, function(err) {
+            if (err) {
+              Module.printErr('[web] IDBFS load failed:', err);
+            }
+            removeRunDependency('uya-gui-idbfs-load');
+          });
+        });
+
+        Module.uyaGuiUpdateCanvasCss = function() {
+          var canvas = Module.uyaGuiCanvas;
+          var overlay = Module.uyaGuiOverlayCanvas;
+          var stage = document.getElementById('uya-gui-stage');
+          if (!canvas || !overlay || !stage) {
+            return;
+          }
+          var cssScale = Math.max(Module.uyaGuiScale || 1, 1);
+          if (Module.uyaGuiFitWindow) {
+            var availWidth = Math.max(window.innerWidth - 24, 1);
+            var availHeight = Math.max(window.innerHeight - 24 - document.getElementById('uya-gui-status').offsetHeight - document.getElementById('uya-gui-log').offsetHeight, 1);
+            var fitScale = Math.min(availWidth / canvas.width, availHeight / canvas.height);
+            if (isFinite(fitScale) && fitScale > 0) {
+              cssScale = fitScale;
+            }
+          }
+          var cssWidth = Math.max(canvas.width * cssScale, 1);
+          var cssHeight = Math.max(canvas.height * cssScale, 1);
+          stage.style.width = cssWidth + 'px';
+          stage.style.height = cssHeight + 'px';
+          canvas.style.width = cssWidth + 'px';
+          canvas.style.height = cssHeight + 'px';
+          overlay.style.width = cssWidth + 'px';
+          overlay.style.height = cssHeight + 'px';
+        };
+
+        Module.uyaGuiSetupCanvas = function(width, height, scale, title) {
+          if (typeof document === 'undefined') {
+            return 0;
+          }
+          var canvas = ensureStageCanvas(Module.uyaGuiCanvasId || 'uya-gui-canvas');
+          var overlay = document.getElementById('uya-gui-overlay');
+          canvas.width = width;
+          canvas.height = height;
+          canvas.tabIndex = 0;
+          canvas.style.touchAction = 'none';
+          canvas.style.overscrollBehavior = 'contain';
+          canvas.style.background = '#000';
+          overlay.width = width;
+          overlay.height = height;
+          overlay.style.touchAction = 'none';
+          Module.canvas = canvas;
+          Module.uyaGuiCanvas = canvas;
+          Module.uyaGuiOverlayCanvas = overlay;
+          Module.uyaGuiScale = Math.max(scale || 1, 1);
+          Module.uyaGuiCtx2d = canvas.getContext('2d', { alpha: false, desynchronized: true });
+          Module.uyaGuiOverlayCtx2d = overlay.getContext('2d');
+          if (!Module.uyaGuiCtx2d || !Module.uyaGuiOverlayCtx2d) {
+            return 0;
+          }
+          Module.uyaGuiImageData = Module.uyaGuiCtx2d.createImageData(width, height);
+          if (title) {
+            document.title = title;
+          }
+          Module.uyaGuiUpdateCanvasCss();
+          if (canvas.__uyaGuiBound) {
+            return 1;
+          }
+
+          function mapKey(key) {
+            switch (key) {
+              case 'Escape': return 27;
+              case 'Enter': return 13;
+              case ' ': return 32;
+              case 'Spacebar': return 32;
+              case 'ArrowLeft': return 1000;
+              case 'ArrowRight': return 1001;
+              case 'ArrowUp': return 1002;
+              case 'ArrowDown': return 1003;
+              case 'F11': return 1011;
+              default: return 0;
+            }
+          }
+
+          function feed(kind, x, y, value, keyCode, modifiers) {
+            Module._uya_gui_web_host_feed_event(kind, x | 0, y | 0, value | 0, keyCode | 0, modifiers | 0);
+          }
+
+          function pointFromEvent(clientX, clientY) {
+            var rect = canvas.getBoundingClientRect();
+            var scaleX = rect.width > 0 ? canvas.width / rect.width : 1;
+            var scaleY = rect.height > 0 ? canvas.height / rect.height : 1;
+            var x = Math.round((clientX - rect.left) * scaleX);
+            var y = Math.round((clientY - rect.top) * scaleY);
+            x = Math.max(0, Math.min(canvas.width - 1, x));
+            y = Math.max(0, Math.min(canvas.height - 1, y));
+            return { x: x, y: y };
+          }
+
+          function modifierBits(evt) {
+            return (evt.altKey ? 1 : 0) | (evt.ctrlKey ? 2 : 0) | (evt.metaKey ? 4 : 0) | (evt.shiftKey ? 8 : 0);
+          }
+
+          canvas.addEventListener('mousedown', function(evt) {
+            var p = pointFromEvent(evt.clientX, evt.clientY);
+            canvas.focus();
+            feed(2, p.x, p.y, 0, 0, modifierBits(evt));
+            evt.preventDefault();
+          });
+          window.addEventListener('mousemove', function(evt) {
+            var p = pointFromEvent(evt.clientX, evt.clientY);
+            feed(1, p.x, p.y, 0, 0, modifierBits(evt));
+          });
+          window.addEventListener('mouseup', function(evt) {
+            var p = pointFromEvent(evt.clientX, evt.clientY);
+            feed(3, p.x, p.y, 0, 0, modifierBits(evt));
+            evt.preventDefault();
+          });
+          canvas.addEventListener('touchstart', function(evt) {
+            if (evt.changedTouches.length < 1) {
+              return;
+            }
+            var touch = evt.changedTouches[0];
+            var p = pointFromEvent(touch.clientX, touch.clientY);
+            canvas.focus();
+            feed(2, p.x, p.y, 0, 0, 0);
+            evt.preventDefault();
+          }, { passive: false });
+          canvas.addEventListener('touchmove', function(evt) {
+            if (evt.changedTouches.length < 1) {
+              return;
+            }
+            var touch = evt.changedTouches[0];
+            var p = pointFromEvent(touch.clientX, touch.clientY);
+            feed(1, p.x, p.y, 0, 0, 0);
+            evt.preventDefault();
+          }, { passive: false });
+          canvas.addEventListener('touchend', function(evt) {
+            if (evt.changedTouches.length < 1) {
+              return;
+            }
+            var touch = evt.changedTouches[0];
+            var p = pointFromEvent(touch.clientX, touch.clientY);
+            feed(3, p.x, p.y, 0, 0, 0);
+            evt.preventDefault();
+          }, { passive: false });
+          canvas.addEventListener('touchcancel', function(evt) {
+            feed(9, 0, 0, 0, 0, 0);
+            evt.preventDefault();
+          }, { passive: false });
+          canvas.addEventListener('wheel', function(evt) {
+            var p = pointFromEvent(evt.clientX, evt.clientY);
+            var delta = evt.deltaY > 0 ? 1 : (evt.deltaY < 0 ? -1 : 0);
+            feed(4, p.x, p.y, delta, 0, modifierBits(evt));
+            evt.preventDefault();
+          }, { passive: false });
+          canvas.addEventListener('keydown', function(evt) {
+            var mapped = mapKey(evt.key);
+            if (!mapped) {
+              return;
+            }
+            feed(5, 0, 0, 0, mapped, modifierBits(evt));
+            evt.preventDefault();
+          });
+          canvas.addEventListener('keyup', function(evt) {
+            var mapped = mapKey(evt.key);
+            if (!mapped) {
+              return;
+            }
+            feed(6, 0, 0, 0, mapped, modifierBits(evt));
+            evt.preventDefault();
+          });
+          if (!Module.uyaGuiWindowBound) {
+            window.addEventListener('blur', function() {
+              feed(7, 0, 0, 0, 0, 0);
+            });
+            document.addEventListener('visibilitychange', function() {
+              if (document.hidden) {
+                feed(7, 0, 0, 0, 0, 0);
+              } else {
+                Module.uyaGuiUpdateCanvasCss();
+                feed(8, 0, 0, 0, 0, 0);
+              }
+            });
+            window.addEventListener('resize', function() {
+              Module.uyaGuiUpdateCanvasCss();
+              feed(8, 0, 0, 0, 0, 0);
+            });
+            Module.uyaGuiWindowBound = true;
+          }
+          canvas.__uyaGuiBound = true;
+          return 1;
+        };
+
+        Module.uyaGuiPresent = function(rgbaPtr, width, height) {
+          var imageData = Module.uyaGuiImageData;
+          var ctx = Module.uyaGuiCtx2d;
+          if (!imageData || !ctx) {
+            return;
+          }
+          var src = Module.HEAPU8.subarray(rgbaPtr, rgbaPtr + width * height * 4);
+          imageData.data.set(src);
+          ctx.putImageData(imageData, 0, 0);
+          Module.uyaGuiLastPresentAt = Date.now();
+        };
+
+        Module.uyaGuiPresentRegion = function(rgbaPtr, width, height, rectX, rectY, rectW, rectH) {
+          var imageData = Module.uyaGuiImageData;
+          var ctx = Module.uyaGuiCtx2d;
+          if (!imageData || !ctx || rectW <= 0 || rectH <= 0) {
+            return;
+          }
+          var rowBytes = rectW * 4;
+          for (var y = 0; y < rectH; ++y) {
+            var srcOffset = rgbaPtr + (((rectY + y) * width + rectX) * 4);
+            var dstOffset = (((rectY + y) * width + rectX) * 4);
+            imageData.data.set(Module.HEAPU8.subarray(srcOffset, srcOffset + rowBytes), dstOffset);
+          }
+          ctx.putImageData(imageData, 0, 0, rectX, rectY, rectW, rectH);
+          Module.uyaGuiLastPresentAt = Date.now();
+        };
+
+        Module.uyaGuiClearDirtyOverlay = function() {
+          var overlay = Module.uyaGuiOverlayCtx2d;
+          if (!overlay) {
+            return;
+          }
+          overlay.clearRect(0, 0, Module.uyaGuiOverlayCanvas.width, Module.uyaGuiOverlayCanvas.height);
+        };
+
+        Module.uyaGuiDrawDirtyRect = function(x, y, w, h) {
+          if (!Module.uyaGuiDirtyOverlayEnabled) {
+            return;
+          }
+          var overlay = Module.uyaGuiOverlayCtx2d;
+          if (!overlay) {
+            return;
+          }
+          overlay.save();
+          overlay.strokeStyle = 'rgba(255, 96, 96, 0.9)';
+          overlay.lineWidth = 1;
+          overlay.strokeRect(x + 0.5, y + 0.5, Math.max(w - 1, 0), Math.max(h - 1, 0));
+          overlay.restore();
+        };
+
+        Module.uyaGuiSetDirtyOverlayEnabled = function(enabled) {
+          Module.uyaGuiDirtyOverlayEnabled = !!enabled;
+          if (!enabled) {
+            Module.uyaGuiClearDirtyOverlay();
+          }
+        };
+
+        Module.uyaGuiSetTitle = function(title) {
+          if (typeof document !== 'undefined' && title) {
+            document.title = title;
+          }
+        };
+
+        Module.uyaGuiRequestFullscreen = function() {
+          var target = Module.uyaGuiCanvas || Module.canvas;
+          if (!target || !target.requestFullscreen) {
+            return 0;
+          }
+          target.requestFullscreen().catch(function() {});
+          return 1;
+        };
+
+        Module.uyaGuiExposeFile = function(path, suggestedName, mimeType) {
+          if (!path || typeof FS === 'undefined') {
+            return 0;
+          }
+          try {
+            var bytes = FS.readFile(path);
+            Module.uyaGuiFiles[path] = {
+              path: path,
+              name: suggestedName || path.split('/').pop() || 'download.bin',
+              mime: mimeType || 'application/octet-stream',
+              size: bytes.length,
+            };
+            if (Module.uyaGuiAutoDownload && typeof document !== 'undefined') {
+              var blob = new Blob([bytes], { type: Module.uyaGuiFiles[path].mime });
+              var url = URL.createObjectURL(blob);
+              var link = document.createElement('a');
+              link.href = url;
+              link.download = Module.uyaGuiFiles[path].name;
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+              setTimeout(function() {
+                URL.revokeObjectURL(url);
+              }, 0);
+            }
+            return 1;
+          } catch (err) {
+            Module.printErr('[web] expose file failed:', path, err);
+            return 0;
+          }
+        };
+
+        Module.uyaGuiResolveScreenshotPath = function() {
+          var path = findArgValue(Module.arguments || [], '--screenshot', '');
+          return path || '/tmp/last_frame.png';
+        };
+
+        Module.uyaGuiShutdown = function() {
+          Module.uyaGuiCompleted = true;
+          Module.uyaGuiCompletion = {
+            completedAt: Date.now(),
+            screenshotPath: Module.uyaGuiResolveScreenshotPath(),
+            persistData: Module.uyaGuiPersistData,
+            persistSynced: !Module.uyaGuiPersistData,
+          };
+          var screenshotPath = Module.uyaGuiCompletion.screenshotPath;
+          if (typeof FS !== 'undefined') {
+            try {
+              if (FS.analyzePath(screenshotPath).exists) {
+                Module.uyaGuiLastScreenshotPath = screenshotPath;
+                Module.uyaGuiExposeFile(screenshotPath, screenshotPath.split('/').pop() || 'last_frame.png', 'image/png');
+              }
+            } catch (err) {
+              Module.printErr('[web] screenshot export failed:', err);
+            }
+            if (Module.uyaGuiPersistData) {
+              FS.syncfs(false, function(err) {
+                if (err) {
+                  Module.uyaGuiCompletion.persistError = String(err);
+                }
+                Module.uyaGuiCompletion.persistSynced = true;
+              });
+            }
+          }
+        };
+
+        Module.setStatus('Booting Web runtime...');
+        window.addEventListener('error', function() {
+          Module.setStatus('Exception thrown, see browser console.');
+        });
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="uya-gui-status">Booting Web runtime...</div>
+    <div id="uya-gui-root">
+      <div id="uya-gui-stage">
+        <canvas id="uya-gui-canvas" tabindex="-1"></canvas>
+        <canvas id="uya-gui-overlay" tabindex="-1"></canvas>
+      </div>
+    </div>
+    <pre id="uya-gui-log"></pre>
+    {{{ SCRIPT }}}
+  </body>
+</html>
