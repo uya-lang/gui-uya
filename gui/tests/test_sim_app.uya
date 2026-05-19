@@ -827,6 +827,90 @@ test "home nav buttons and standalone back button switch demos" {
     try assert_eq_i32(app.config.demo as i32, sim_config_default().demo as i32);
 }
 
+test "repeated home dashboard back cycles keep phase home stable" {
+    const app: &SimApp = sim_app_alloc();
+    try assert_eq_bool(app != null, true);
+    defer {
+        sim_app_free(app);
+    }
+    var cfg: SimConfig = sim_config_default();
+    cfg.width = SIM_DEFAULT_RES_WIDTH;
+    cfg.height = SIM_DEFAULT_RES_HEIGHT;
+    try assert_eq_bool(app.init(cfg), true);
+
+    const pixels_len: usize = framebuffer_required_bytes(cfg.width, cfg.height, PixelFormat.ARGB8888);
+    const pixels: &byte = malloc(pixels_len) as &byte;
+    if pixels == null {
+        try assert_eq_bool(false, true);
+        return;
+    }
+    defer {
+        free(pixels as &void);
+    }
+
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(pixels, cfg.width, cfg.height, cfg.width * 4u16, PixelFormat.ARGB8888));
+    _ = app.render_retained(&ctx, true);
+
+    var cycle: i32 = 0;
+    while cycle < 3 {
+        const dashboard_rect: Rect = app.home_nav_button_rect(3);
+        var open_dashboard: Event = event_point(
+            EventType.Click,
+            InputDev.Touch,
+            -1,
+            (40 + cycle * 40) as u32,
+            Point{ x: dashboard_rect.x + dashboard_rect.w as i16 / 2, y: dashboard_rect.y + dashboard_rect.h as i16 / 2 }
+        );
+        app.handle_translated_event(&open_dashboard);
+        try assert_eq_i32(app.config.demo as i32, SimDemoKind.Dashboard as i32);
+
+        ctx = render_ctx_new(framebuffer_new(pixels, cfg.width, cfg.height, cfg.width * 4u16, PixelFormat.ARGB8888));
+        _ = app.render_retained(&ctx, true);
+
+        const back_rect: Rect = app.standalone_back_button_rect();
+        var back_home: Event = event_point(
+            EventType.Click,
+            InputDev.Touch,
+            -1,
+            (72 + cycle * 40) as u32,
+            Point{ x: back_rect.x + back_rect.w as i16 / 2, y: back_rect.y + back_rect.h as i16 / 2 }
+        );
+        app.handle_translated_event(&back_home);
+        try assert_eq_i32(app.config.demo as i32, SimDemoKind.Phase4 as i32);
+
+        ctx = render_ctx_new(framebuffer_new(pixels, cfg.width, cfg.height, cfg.width * 4u16, PixelFormat.ARGB8888));
+        _ = app.render_retained(&ctx, true);
+        cycle = cycle + 1;
+    }
+
+    const action: Rect = app.action_button.widget.base.screen_area();
+    var press_evt: Event = event_point(
+        EventType.Press,
+        InputDev.Touch,
+        -1,
+        240u32,
+        Point{ x: action.x + action.w as i16 / 2, y: action.y + action.h as i16 / 2 }
+    );
+    var release_evt: Event = event_point(
+        EventType.Release,
+        InputDev.Touch,
+        -1,
+        252u32,
+        Point{ x: action.x + action.w as i16 / 2, y: action.y + action.h as i16 / 2 }
+    );
+    var click_evt: Event = event_point(
+        EventType.Click,
+        InputDev.Touch,
+        -1,
+        253u32,
+        Point{ x: action.x + action.w as i16 / 2, y: action.y + action.h as i16 / 2 }
+    );
+    app.handle_translated_event(&press_evt);
+    app.handle_translated_event(&release_evt);
+    app.handle_translated_event(&click_evt);
+    try assert_eq_i32(app.tap_count, 1);
+}
+
 test "widgets and custom demos react to mouse clicks" {
     const app: &SimApp = sim_app_alloc();
     try assert_eq_bool(app != null, true);

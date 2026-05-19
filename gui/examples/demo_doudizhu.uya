@@ -99,11 +99,13 @@ export struct DdzPageRetained {
 }
 
 fn ddz_demo_font(size: u8) &Font {
-    const font: &Font = font_ui_default_ref(size);
+    // Prefer the system UI font in Doudizhu so Chinese, digits, and ASCII
+    // labels share the same metrics instead of mixing fallback companions.
+    const font: &Font = font_system_ui_ref(size);
     if font != null {
         return font;
     }
-    return font_system_ui_ref(size);
+    return font_ui_default_ref(size);
 }
 
 fn ddz_demo_text_len(text: &const byte) usize {
