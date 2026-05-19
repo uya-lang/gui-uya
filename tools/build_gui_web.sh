@@ -105,7 +105,7 @@ TARGET_OS="$TARGET_OS" TARGET_ARCH="$TARGET_ARCH" \
 sed -i '/@syscall C99 backend: supported targets/d' "$OUT_C"
 sed -i '/#include <math.h>/a extern ssize_t write(int fd, const char *buf, size_t count);\nextern ssize_t read(int fd, char *buf, size_t count);\nextern int close(int fd);\nextern int access(const char *pathname, int mode);\nextern int64_t lseek(int fd, int64_t offset, int whence);\nextern void _exit(int code);' "$OUT_C"
 
-"$EMCC_BIN" -std=c99 "$EMCC_OPT" -fno-builtin -fvisibility=hidden -w \
+"$EMCC_BIN" -std=c99 "$EMCC_OPT" -fno-builtin -w \
     -include fcntl.h \
     -include sys/mman.h \
     -c "$OUT_C" \
