@@ -20,6 +20,7 @@ TARGET_OS="${TARGET_OS:-unknown}"
 TARGET_ARCH="${TARGET_ARCH:-unknown}"
 WEB_CJK_FONT_OUT="${WEB_CJK_FONT_OUT:-/app/fonts/system_ui_cjk_font}"
 WEB_CJK_FONT_SRC="${WEB_CJK_FONT_SRC:-}"
+WEB_MINIFY_HTML="${WEB_MINIFY_HTML:-auto}"
 
 pick_web_cjk_font() {
     if [ -n "$WEB_CJK_FONT_SRC" ] && [ -f "$WEB_CJK_FONT_SRC" ]; then
@@ -85,10 +86,22 @@ sed -i '/#include <math.h>/a extern ssize_t write(int fd, const char *buf, size_
 
 declare -a CIMPORT_OBJECTS=()
 declare -a CIMPORT_LDFLAGS=()
+declare -a HTML_MINIFY_FLAGS=()
 declare -a PRELOAD_FILES=(
     --preload-file "$ROOT_DIR/gui@/app/gui"
     --preload-file "$ROOT_DIR/.uya_sim_root_probe@/app/.uya_sim_root_probe"
 )
+
+if [ "$WEB_MINIFY_HTML" = "0" ] || [ "$WEB_MINIFY_HTML" = "false" ]; then
+    HTML_MINIFY_FLAGS+=(-sMINIFY_HTML=0)
+elif [ "$WEB_MINIFY_HTML" = "auto" ]; then
+    # Some distro-packaged Emscripten releases enable HTML minification for
+    # optimized HTML builds, but do not depend on html-minifier-terser.
+    if ! command -v html-minifier-terser >/dev/null 2>&1; then
+        HTML_MINIFY_FLAGS+=(-sMINIFY_HTML=0)
+        echo "warning: html-minifier-terser was not found; disabling HTML minification for web build." >&2
+    fi
+fi
 
 if WEB_CJK_FONT_PICKED="$(pick_web_cjk_font)"; then
     PRELOAD_FILES+=(--preload-file "$WEB_CJK_FONT_PICKED@$WEB_CJK_FONT_OUT")
@@ -142,6 +155,7 @@ fi
     -sEXPORTED_FUNCTIONS=_main,_uya_gui_web_host_feed_event \
     -lidbfs.js \
     --shell-file "$SHELL_FILE" \
+    "${HTML_MINIFY_FLAGS[@]}" \
     "${PRELOAD_FILES[@]}" \
     "${CIMPORT_LDFLAGS[@]}"
 
