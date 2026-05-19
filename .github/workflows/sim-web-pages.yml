@@ -1,0 +1,55 @@
+name: sim-web-pages
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/sim-web-pages.yml"
+      - "Makefile"
+      - "gui/**"
+      - "tools/**"
+      - "uya/**"
+      - "uya.toml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: sim-web-pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Emscripten and fonts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y emscripten fonts-noto-cjk
+
+      - name: Build Pages artifact
+        run: make sim-web-pages MODE=release
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/pages
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

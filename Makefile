@@ -26,7 +26,7 @@ UYA_DASHBOARD_COMPARE_DIR ?= $(BUILD_DIR)/dashboard_compare
 UYA_DASHBOARD_COMPARE_BIN ?= $(UYA_DASHBOARD_COMPARE_DIR)/uya_dashboard_compare
 DASHBOARD_COMPARE_REPORT ?= $(BUILD_DIR)/dashboard_compare/dashboard_compare_report.md
 
-.PHONY: build test bench bench-report bench-json bench-snapshot bench-verify docs-api ci release release-artifacts clean hooks build-arm build-riscv build-esp32 sim-build sim-run sim-debug sim-headless sim-web-build sim-web-run sim-web-serve sim-web-smoke text-compare lvgl-text-compare uya-dashboard-compare-build uya-dashboard-compare lvgl-dashboard-compare-build lvgl-dashboard-compare dashboard-compare dashboard-compare-report font-backend-compare
+.PHONY: build test bench bench-report bench-json bench-snapshot bench-verify docs-api ci release release-artifacts clean hooks build-arm build-riscv build-esp32 sim-build sim-run sim-debug sim-headless sim-web-build sim-web-run sim-web-serve sim-web-smoke sim-web-pages text-compare lvgl-text-compare uya-dashboard-compare-build uya-dashboard-compare lvgl-dashboard-compare-build lvgl-dashboard-compare dashboard-compare dashboard-compare-report font-backend-compare
 
 SIM_BUILD_DIR ?= $(BUILD_DIR)/sim
 SIM_BIN ?= $(SIM_BUILD_DIR)/gui_uya_sim
@@ -34,6 +34,7 @@ SIM_ARGS ?=
 SIM_HEADLESS_ARGS ?= --max-frames 3 --screenshot $(SIM_BUILD_DIR)/headless.bmp
 SIM_FB_ARGS ?= --backend fb --max-frames 60
 SIM_WEB_BUILD_DIR ?= $(BUILD_DIR)/web
+SIM_WEB_PAGES_DIR ?= $(BUILD_DIR)/pages
 SIM_WEB_ARGS ?= --backend web --demo dashboard --max-frames 3
 SIM_WEB_PORT ?= 8000
 
@@ -201,3 +202,6 @@ sim-web-serve: sim-web-build
 
 sim-web-smoke: sim-web-build
 	@BUILD_DIR=$(abspath $(SIM_WEB_BUILD_DIR)) bash tools/smoke_gui_web.sh
+
+sim-web-pages: sim-web-build
+	@BUILD_DIR=$(abspath $(SIM_WEB_BUILD_DIR)) PAGES_DIR=$(abspath $(SIM_WEB_PAGES_DIR)) bash tools/stage_gui_web_pages.sh
