@@ -104,6 +104,10 @@ TARGET_OS="$TARGET_OS" TARGET_ARCH="$TARGET_ARCH" \
 # 对 wasm 目标这里直接去掉该行，避免 helper-only 诊断阻塞后续真实编译错误。
 sed -i '/@syscall C99 backend: supported targets/d' "$OUT_C"
 sed -i '/#include <math.h>/a extern ssize_t write(int fd, const char *buf, size_t count);\nextern ssize_t read(int fd, char *buf, size_t count);\nextern int close(int fd);\nextern int access(const char *pathname, int mode);\nextern int64_t lseek(int fd, int64_t offset, int whence);\nextern void _exit(int code);' "$OUT_C"
+# Older distro-packaged Emscripten builds can fail to export `_main` from the
+# generated Uya entry even when the symbol exists. Pin the web entry to default
+# visibility so `_main` remains exportable across linker versions.
+sed -i 's/^int32_t main(int32_t argc, char \*\*argv) {$/__attribute__((used, visibility("default"))) int32_t main(int32_t argc, char **argv) {/' "$OUT_C"
 
 "$EMCC_BIN" -std=c99 "$EMCC_OPT" -fno-builtin -w \
     -include fcntl.h \
