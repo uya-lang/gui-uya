@@ -3,6 +3,16 @@
 This directory vendors `wqy-microhei.ttc` for the Web simulator build so CI
 and GitHub Pages do not depend on host-installed CJK fonts.
 
+Derived demo bitmap atlases:
+- `make demo-font-atlas`
+- Output directory: `gui/render/generated/`
+- Generator inputs:
+  - `tools/gen_wqy_demo_bitmap_font.c`
+  - `tools/gen_wqy_demo_bitmap_assets.py`
+- The generated atlases are pre-rasterized for the demo-facing system UI font
+  sizes so `font_system_ui_ref()` can prefer bitmap assets before falling back
+  to scalable TTC outlines.
+
 Source:
 - Debian package: `fonts-wqy-microhei` `0.2.0-beta-3.1`
 - Upstream project: `http://wenq.org/`

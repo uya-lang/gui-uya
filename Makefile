@@ -26,7 +26,7 @@ UYA_DASHBOARD_COMPARE_DIR ?= $(BUILD_DIR)/dashboard_compare
 UYA_DASHBOARD_COMPARE_BIN ?= $(UYA_DASHBOARD_COMPARE_DIR)/uya_dashboard_compare
 DASHBOARD_COMPARE_REPORT ?= $(BUILD_DIR)/dashboard_compare/dashboard_compare_report.md
 
-.PHONY: build test bench bench-report bench-json bench-snapshot bench-verify docs-api ci release release-artifacts clean hooks build-arm build-riscv build-esp32 sim-build sim-run sim-debug sim-headless sim-web-build sim-web-run sim-web-serve sim-web-smoke sim-web-pages text-compare lvgl-text-compare uya-dashboard-compare-build uya-dashboard-compare lvgl-dashboard-compare-build lvgl-dashboard-compare dashboard-compare dashboard-compare-report font-backend-compare
+.PHONY: build test bench bench-report bench-json bench-snapshot bench-verify docs-api ci release release-artifacts clean hooks build-arm build-riscv build-esp32 sim-build sim-run sim-debug sim-headless sim-web-build sim-web-run sim-web-serve sim-web-smoke sim-web-pages text-compare lvgl-text-compare uya-dashboard-compare-build uya-dashboard-compare lvgl-dashboard-compare-build lvgl-dashboard-compare dashboard-compare dashboard-compare-report font-backend-compare demo-font-atlas
 
 SIM_BUILD_DIR ?= $(BUILD_DIR)/sim
 SIM_BIN ?= $(SIM_BUILD_DIR)/gui_uya_sim
@@ -37,6 +37,9 @@ SIM_WEB_BUILD_DIR ?= $(BUILD_DIR)/web
 SIM_WEB_PAGES_DIR ?= $(BUILD_DIR)/pages
 SIM_WEB_ARGS ?= --backend web --demo dashboard --max-frames 3
 SIM_WEB_PORT ?= 8000
+WQY_DEMO_FONT_DIR ?= gui/render/generated
+WQY_DEMO_FONT_TOOL ?= $(BUILD_DIR)/tools/gen_wqy_demo_bitmap_font
+WQY_DEMO_FONT_SRC ?= third_party/fonts/wqy/wqy-microhei.ttc
 
 BENCH_REPORT ?= $(BUILD_DIR)/phase5_bench.txt
 RELEASE_VERSION ?= $(shell sed -n 's/^version = "\(.*\)"/\1/p' uya.toml)
@@ -77,6 +80,11 @@ bench-verify: bench-report
 text-compare:
 	@mkdir -p $(BUILD_DIR)/text_compare
 	$(UYA) run $(TEXT_COMPARE_APP) $(UYA_OPT)
+
+demo-font-atlas:
+	@mkdir -p $(BUILD_DIR)/tools $(WQY_DEMO_FONT_DIR)
+	cc -std=c99 -O2 tools/gen_wqy_demo_bitmap_font.c -o $(WQY_DEMO_FONT_TOOL) $$(pkg-config --cflags --libs freetype2) -lm
+	python3 tools/gen_wqy_demo_bitmap_assets.py --generator $(WQY_DEMO_FONT_TOOL) --font $(WQY_DEMO_FONT_SRC) --out-dir $(WQY_DEMO_FONT_DIR)
 
 lvgl-text-compare:
 	@mkdir -p $(LVGL_COMPARE_BUILD_DIR)

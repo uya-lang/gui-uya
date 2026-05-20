@@ -30,9 +30,44 @@ extern fn uya_c_stb_font_render_glyph(handle: &void, glyph_id: u16, dst: &byte, 
 
 const CJK_GLYPH_8X8_BYTES: &[const byte] = @embed("cjk_unifont_4e00_9fff_8x8.bin");
 const DEFAULT_UI_FONT_BYTES: &[const byte] = @embed("DejaVuSans.ttf");
+const WQY_DEMO_FONT_DESC_10: &[const byte] = @embed("generated/wqy_microhei_demo_10.fnt");
+const WQY_DEMO_FONT_BITMAP_10: &[const byte] = @embed("generated/wqy_microhei_demo_10.a8");
+const WQY_DEMO_FONT_DESC_11: &[const byte] = @embed("generated/wqy_microhei_demo_11.fnt");
+const WQY_DEMO_FONT_BITMAP_11: &[const byte] = @embed("generated/wqy_microhei_demo_11.a8");
+const WQY_DEMO_FONT_DESC_12: &[const byte] = @embed("generated/wqy_microhei_demo_12.fnt");
+const WQY_DEMO_FONT_BITMAP_12: &[const byte] = @embed("generated/wqy_microhei_demo_12.a8");
+const WQY_DEMO_FONT_DESC_13: &[const byte] = @embed("generated/wqy_microhei_demo_13.fnt");
+const WQY_DEMO_FONT_BITMAP_13: &[const byte] = @embed("generated/wqy_microhei_demo_13.a8");
+const WQY_DEMO_FONT_DESC_14: &[const byte] = @embed("generated/wqy_microhei_demo_14.fnt");
+const WQY_DEMO_FONT_BITMAP_14: &[const byte] = @embed("generated/wqy_microhei_demo_14.a8");
+const WQY_DEMO_FONT_DESC_15: &[const byte] = @embed("generated/wqy_microhei_demo_15.fnt");
+const WQY_DEMO_FONT_BITMAP_15: &[const byte] = @embed("generated/wqy_microhei_demo_15.a8");
+const WQY_DEMO_FONT_DESC_16: &[const byte] = @embed("generated/wqy_microhei_demo_16.fnt");
+const WQY_DEMO_FONT_BITMAP_16: &[const byte] = @embed("generated/wqy_microhei_demo_16.a8");
+const WQY_DEMO_FONT_DESC_17: &[const byte] = @embed("generated/wqy_microhei_demo_17.fnt");
+const WQY_DEMO_FONT_BITMAP_17: &[const byte] = @embed("generated/wqy_microhei_demo_17.a8");
+const WQY_DEMO_FONT_DESC_18: &[const byte] = @embed("generated/wqy_microhei_demo_18.fnt");
+const WQY_DEMO_FONT_BITMAP_18: &[const byte] = @embed("generated/wqy_microhei_demo_18.a8");
+const WQY_DEMO_FONT_DESC_20: &[const byte] = @embed("generated/wqy_microhei_demo_20.fnt");
+const WQY_DEMO_FONT_BITMAP_20: &[const byte] = @embed("generated/wqy_microhei_demo_20.a8");
+const WQY_DEMO_FONT_DESC_22: &[const byte] = @embed("generated/wqy_microhei_demo_22.fnt");
+const WQY_DEMO_FONT_BITMAP_22: &[const byte] = @embed("generated/wqy_microhei_demo_22.a8");
+const WQY_DEMO_FONT_DESC_24: &[const byte] = @embed("generated/wqy_microhei_demo_24.fnt");
+const WQY_DEMO_FONT_BITMAP_24: &[const byte] = @embed("generated/wqy_microhei_demo_24.a8");
+const WQY_DEMO_FONT_DESC_25: &[const byte] = @embed("generated/wqy_microhei_demo_25.fnt");
+const WQY_DEMO_FONT_BITMAP_25: &[const byte] = @embed("generated/wqy_microhei_demo_25.a8");
+const WQY_DEMO_FONT_DESC_26: &[const byte] = @embed("generated/wqy_microhei_demo_26.fnt");
+const WQY_DEMO_FONT_BITMAP_26: &[const byte] = @embed("generated/wqy_microhei_demo_26.a8");
+const WQY_DEMO_FONT_DESC_29: &[const byte] = @embed("generated/wqy_microhei_demo_29.fnt");
+const WQY_DEMO_FONT_BITMAP_29: &[const byte] = @embed("generated/wqy_microhei_demo_29.a8");
+const WQY_DEMO_FONT_DESC_31: &[const byte] = @embed("generated/wqy_microhei_demo_31.fnt");
+const WQY_DEMO_FONT_BITMAP_31: &[const byte] = @embed("generated/wqy_microhei_demo_31.a8");
+const WQY_DEMO_FONT_DESC_35: &[const byte] = @embed("generated/wqy_microhei_demo_35.fnt");
+const WQY_DEMO_FONT_BITMAP_35: &[const byte] = @embed("generated/wqy_microhei_demo_35.a8");
 const WEB_SYSTEM_UI_FONT_PATH: &const byte = "/app/fonts/system_ui_cjk_font\0";
 const CJK_UNIFIED_START: u32 = 0x4E00u32;
 const CJK_UNIFIED_END: u32 = 0x9FFFu32;
+const SYSTEM_UI_FONT_VENDORED_PATH: &const byte = "third_party/fonts/wqy/wqy-microhei.ttc\0";
 const SYSTEM_UI_FONT_PRIMARY_PATH: &const byte = "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc\0";
 const SYSTEM_UI_FONT_SECONDARY_PATH: &const byte = "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc\0";
 const SYSTEM_UI_FONT_FALLBACK_PATH: &const byte = "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc\0";
@@ -63,9 +98,9 @@ const FONT_LOOKUP_MISSING: i16 = -1;
 const TTF_GLYPH_FALLBACK_ID: u32 = 0xFFFFFFFFu32;
 const TTF_SFNT_OFFSET_INVALID: u32 = 0xFFFFFFFFu32;
 export const UI_FONT_BASE_DPI: u16 = 96u16;
-export const BITMAP_FONT_GLYPH_CAPACITY: i32 = 128;
-export const BITMAP_FONT_UNICODE_CAPACITY: i32 = 64;
-export const BITMAP_FONT_KERNING_CAPACITY: i32 = 64;
+export const BITMAP_FONT_GLYPH_CAPACITY: i32 = 1024;
+export const BITMAP_FONT_UNICODE_CAPACITY: i32 = 1024;
+export const BITMAP_FONT_KERNING_CAPACITY: i32 = 128;
 export const TTF_POINT_CAPACITY: i32 = 2048;
 export const TTF_CONTOUR_CAPACITY: i32 = 256;
 export const TTF_EDGE_CAPACITY: i32 = 16384;
@@ -160,9 +195,9 @@ export struct Font {
 
 export struct BitmapFontAsset {
     font: Font,
-    glyphs: [Glyph: 128],
-    unicode_entries: [GlyphLookupEntry: 64],
-    kerning_pairs: [KerningPair: 64],
+    glyphs: [Glyph: BITMAP_FONT_GLYPH_CAPACITY],
+    unicode_entries: [GlyphLookupEntry: BITMAP_FONT_UNICODE_CAPACITY],
+    kerning_pairs: [KerningPair: BITMAP_FONT_KERNING_CAPACITY],
     lut: GlyphLookupTable,
     glyph_len: u16,
     unicode_len: u16,
@@ -268,6 +303,23 @@ var _system_ui_font_attempted: bool = false;
 var _ui_default_font_slots: [SystemUiFontSlot: 16] = [];
 var _ui_default_font_slots_ready: bool = false;
 var _system_ui_font_slots: [SystemUiFontSlot: 16] = [];
+var _system_ui_bitmap_font_asset_10: BitmapFontAsset = BitmapFontAsset{};
+var _system_ui_bitmap_font_asset_11: BitmapFontAsset = BitmapFontAsset{};
+var _system_ui_bitmap_font_asset_12: BitmapFontAsset = BitmapFontAsset{};
+var _system_ui_bitmap_font_asset_13: BitmapFontAsset = BitmapFontAsset{};
+var _system_ui_bitmap_font_asset_14: BitmapFontAsset = BitmapFontAsset{};
+var _system_ui_bitmap_font_asset_15: BitmapFontAsset = BitmapFontAsset{};
+var _system_ui_bitmap_font_asset_16: BitmapFontAsset = BitmapFontAsset{};
+var _system_ui_bitmap_font_asset_17: BitmapFontAsset = BitmapFontAsset{};
+var _system_ui_bitmap_font_asset_18: BitmapFontAsset = BitmapFontAsset{};
+var _system_ui_bitmap_font_asset_20: BitmapFontAsset = BitmapFontAsset{};
+var _system_ui_bitmap_font_asset_22: BitmapFontAsset = BitmapFontAsset{};
+var _system_ui_bitmap_font_asset_24: BitmapFontAsset = BitmapFontAsset{};
+var _system_ui_bitmap_font_asset_25: BitmapFontAsset = BitmapFontAsset{};
+var _system_ui_bitmap_font_asset_26: BitmapFontAsset = BitmapFontAsset{};
+var _system_ui_bitmap_font_asset_29: BitmapFontAsset = BitmapFontAsset{};
+var _system_ui_bitmap_font_asset_31: BitmapFontAsset = BitmapFontAsset{};
+var _system_ui_bitmap_font_asset_35: BitmapFontAsset = BitmapFontAsset{};
 var _font_ui_dpi: u16 = UI_FONT_BASE_DPI;
 var _font_runtime_generation: u32 = 1u32;
 var _gpu_text_glyph_cmds: [GpuGlyphCmd: 16] = [];
@@ -1979,6 +2031,9 @@ fn font_latin_companion_candidate(font: &Font, codepoint: u32) bool {
     if font == null || !font_is_system_ui(font) {
         return false;
     }
+    if font.render_kind == FontRenderKind.BitmapAtlas {
+        return false;
+    }
     return codepoint < 0x0250u32;
 }
 
@@ -2002,6 +2057,17 @@ fn font_cjk_companion_height(base_height: u8) u8 {
         return base_height + 3u8;
     }
     return base_height + 2u8;
+}
+
+fn system_ui_outline_fallback(font: &Font, codepoint: u32) &Font {
+    if font == null || !font_is_system_ui(font) || font.render_kind != FontRenderKind.BitmapAtlas {
+        return null;
+    }
+    const outline: &Font = font_system_ui_outline_ref(font_runtime_height(font));
+    if outline != null && outline != font && font_has_codepoint(outline, codepoint) {
+        return outline;
+    }
+    return null;
 }
 
 fn font_resolve_ui_height(logical_height: u16) u16 {
@@ -2797,6 +2863,9 @@ fn system_ui_font_source_attempt() bool {
     if system_ui_font_try_source(WEB_SYSTEM_UI_FONT_PATH, true) {
         return true;
     }
+    if system_ui_font_try_source(SYSTEM_UI_FONT_VENDORED_PATH, true) {
+        return true;
+    }
     if system_ui_font_try_source(SYSTEM_UI_FONT_PRIMARY_PATH, false) {
         return true;
     }
@@ -3113,13 +3182,30 @@ fn resolve_glyph_for_font(font: &Font, codepoint: u32) ResolvedGlyph {
         };
     }
 
+    const outline_font: &Font = system_ui_outline_fallback(font, codepoint);
+    if outline_font != null {
+        return ResolvedGlyph{
+            font: outline_font,
+            glyph: outline_font.get_glyph(codepoint),
+        };
+    }
+
     if glyph_is_cjk(codepoint) {
         const cjk_font: &Font = font_system_ui_ref(font_cjk_companion_height(font_runtime_height(font)));
-        if cjk_font != null && cjk_font != font && font_has_codepoint(cjk_font, codepoint) {
-            return ResolvedGlyph{
-                font: cjk_font,
-                glyph: cjk_font.get_glyph(codepoint),
-            };
+        if cjk_font != null && cjk_font != font {
+            if font_has_codepoint(cjk_font, codepoint) {
+                return ResolvedGlyph{
+                    font: cjk_font,
+                    glyph: cjk_font.get_glyph(codepoint),
+                };
+            }
+            const cjk_outline: &Font = system_ui_outline_fallback(cjk_font, codepoint);
+            if cjk_outline != null {
+                return ResolvedGlyph{
+                    font: cjk_outline,
+                    glyph: cjk_outline.get_glyph(codepoint),
+                };
+            }
         }
     }
 
@@ -3494,7 +3580,7 @@ export fn bitmap_font_asset_new() BitmapFontAsset {
 
 /// 从 BMFont 描述文本和位图数据加载位图字体。
 export fn bitmap_font_load_bmfont(asset: &BitmapFontAsset, desc: &const byte, len: usize, bitmap_data: &const byte, bitmap_stride: u16) bool {
-    if asset == null || desc == null || bitmap_data == null || len == 0usize || bitmap_stride == 0u16 {
+    if asset == null || desc == null || bitmap_data == null || len == 0usize {
         return false;
     }
 
@@ -3536,11 +3622,15 @@ export fn bitmap_font_load_bmfont(asset: &BitmapFontAsset, desc: &const byte, le
             if bmfont_line_has_prefix(line, line_len, "common ") {
                 var line_height: i32 = 0;
                 var base: i32 = 0;
+                var scale_w: i32 = 0;
                 if bmfont_parse_i32_field(line, line_len, "lineHeight", &line_height) {
                     asset.font.line_height = (line_height as! u8).value;
                 }
                 if bmfont_parse_i32_field(line, line_len, "base", &base) {
                     asset.font.baseline = (base as! u8).value;
+                }
+                if asset.font.bitmap_stride == 0u16 && bmfont_parse_i32_field(line, line_len, "scaleW", &scale_w) && scale_w > 0 {
+                    asset.font.bitmap_stride = (scale_w as! u16).value;
                 }
             } else if bmfont_line_has_prefix(line, line_len, "char ") {
                 var id: i32 = 0;
@@ -3581,6 +3671,9 @@ export fn bitmap_font_load_bmfont(asset: &BitmapFontAsset, desc: &const byte, le
     }
 
     if asset.glyph_len == 0u16 {
+        return false;
+    }
+    if asset.font.bitmap_stride == 0u16 {
         return false;
     }
     if asset.font.line_height == 0u8 {
@@ -3716,8 +3809,43 @@ export fn font_ui_default_ref(pixel_height: u8) &Font {
     return &slot.asset.font;
 }
 
-/// 返回按像素高度解析后的系统 UI 字体引用。
-export fn font_system_ui_ref(pixel_height: u8) &Font {
+fn system_ui_bitmap_font_load_prebuilt(asset: &BitmapFontAsset, desc: &[const byte], bitmap: &[const byte], pixel_height: u8) &Font {
+    if asset == null || desc.len == 0usize || bitmap.len == 0usize {
+        return null;
+    }
+    if asset.font.glyph_count == 0u16 {
+        if !bitmap_font_load_bmfont(asset, desc.ptr, desc.len, bitmap.ptr, 0u16) {
+            return null;
+        }
+        asset.font.name = SYSTEM_UI_FONT_NAME;
+        asset.font.height = pixel_height;
+        asset.font.backend = null;
+    }
+    return &asset.font;
+}
+
+fn system_ui_bitmap_font_ref(pixel_height: u8) &Font {
+    if pixel_height == 10u8 { return system_ui_bitmap_font_load_prebuilt(&_system_ui_bitmap_font_asset_10, WQY_DEMO_FONT_DESC_10, WQY_DEMO_FONT_BITMAP_10, 10u8); }
+    if pixel_height == 11u8 { return system_ui_bitmap_font_load_prebuilt(&_system_ui_bitmap_font_asset_11, WQY_DEMO_FONT_DESC_11, WQY_DEMO_FONT_BITMAP_11, 11u8); }
+    if pixel_height == 12u8 { return system_ui_bitmap_font_load_prebuilt(&_system_ui_bitmap_font_asset_12, WQY_DEMO_FONT_DESC_12, WQY_DEMO_FONT_BITMAP_12, 12u8); }
+    if pixel_height == 13u8 { return system_ui_bitmap_font_load_prebuilt(&_system_ui_bitmap_font_asset_13, WQY_DEMO_FONT_DESC_13, WQY_DEMO_FONT_BITMAP_13, 13u8); }
+    if pixel_height == 14u8 { return system_ui_bitmap_font_load_prebuilt(&_system_ui_bitmap_font_asset_14, WQY_DEMO_FONT_DESC_14, WQY_DEMO_FONT_BITMAP_14, 14u8); }
+    if pixel_height == 15u8 { return system_ui_bitmap_font_load_prebuilt(&_system_ui_bitmap_font_asset_15, WQY_DEMO_FONT_DESC_15, WQY_DEMO_FONT_BITMAP_15, 15u8); }
+    if pixel_height == 16u8 { return system_ui_bitmap_font_load_prebuilt(&_system_ui_bitmap_font_asset_16, WQY_DEMO_FONT_DESC_16, WQY_DEMO_FONT_BITMAP_16, 16u8); }
+    if pixel_height == 17u8 { return system_ui_bitmap_font_load_prebuilt(&_system_ui_bitmap_font_asset_17, WQY_DEMO_FONT_DESC_17, WQY_DEMO_FONT_BITMAP_17, 17u8); }
+    if pixel_height == 18u8 { return system_ui_bitmap_font_load_prebuilt(&_system_ui_bitmap_font_asset_18, WQY_DEMO_FONT_DESC_18, WQY_DEMO_FONT_BITMAP_18, 18u8); }
+    if pixel_height == 20u8 { return system_ui_bitmap_font_load_prebuilt(&_system_ui_bitmap_font_asset_20, WQY_DEMO_FONT_DESC_20, WQY_DEMO_FONT_BITMAP_20, 20u8); }
+    if pixel_height == 22u8 { return system_ui_bitmap_font_load_prebuilt(&_system_ui_bitmap_font_asset_22, WQY_DEMO_FONT_DESC_22, WQY_DEMO_FONT_BITMAP_22, 22u8); }
+    if pixel_height == 24u8 { return system_ui_bitmap_font_load_prebuilt(&_system_ui_bitmap_font_asset_24, WQY_DEMO_FONT_DESC_24, WQY_DEMO_FONT_BITMAP_24, 24u8); }
+    if pixel_height == 25u8 { return system_ui_bitmap_font_load_prebuilt(&_system_ui_bitmap_font_asset_25, WQY_DEMO_FONT_DESC_25, WQY_DEMO_FONT_BITMAP_25, 25u8); }
+    if pixel_height == 26u8 { return system_ui_bitmap_font_load_prebuilt(&_system_ui_bitmap_font_asset_26, WQY_DEMO_FONT_DESC_26, WQY_DEMO_FONT_BITMAP_26, 26u8); }
+    if pixel_height == 29u8 { return system_ui_bitmap_font_load_prebuilt(&_system_ui_bitmap_font_asset_29, WQY_DEMO_FONT_DESC_29, WQY_DEMO_FONT_BITMAP_29, 29u8); }
+    if pixel_height == 31u8 { return system_ui_bitmap_font_load_prebuilt(&_system_ui_bitmap_font_asset_31, WQY_DEMO_FONT_DESC_31, WQY_DEMO_FONT_BITMAP_31, 31u8); }
+    if pixel_height == 35u8 { return system_ui_bitmap_font_load_prebuilt(&_system_ui_bitmap_font_asset_35, WQY_DEMO_FONT_DESC_35, WQY_DEMO_FONT_BITMAP_35, 35u8); }
+    return null;
+}
+
+fn font_system_ui_outline_ref(pixel_height: u8) &Font {
     if pixel_height == 0u8 {
         return null;
     }
@@ -3759,6 +3887,18 @@ export fn font_system_ui_ref(pixel_height: u8) &Font {
     slot.pixel_height = requested_height;
     slot.ready = true;
     return &slot.asset.font;
+}
+
+/// 返回按像素高度解析后的系统 UI 字体引用。
+export fn font_system_ui_ref(pixel_height: u8) &Font {
+    if pixel_height == 0u8 {
+        return null;
+    }
+    const bitmap_font: &Font = system_ui_bitmap_font_ref(pixel_height);
+    if bitmap_font != null {
+        return bitmap_font;
+    }
+    return font_system_ui_outline_ref(pixel_height);
 }
 
 export fn font_runtime_generation() u32 {

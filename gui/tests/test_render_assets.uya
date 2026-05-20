@@ -395,17 +395,16 @@ test "ttf missing chinese glyphs prefer scalable cjk fallback before builtin bit
     try assert_eq_bool(ctx_pixel(&ctx, 11, 0) == white_expect, true);
 }
 
-test "system ui font can retry loading at runtime after source appears" {
+test "system ui outline font respects runtime override path" {
     _ = sys_unlink(TEST_RUNTIME_SYSTEM_FONT_PATH as *const byte) catch {};
     _ = setenv(TEST_RUNTIME_SYSTEM_FONT_ENV, TEST_RUNTIME_SYSTEM_FONT_PATH, 1);
     font_ui_reset_runtime();
 
     const initial_generation: u32 = font_runtime_generation();
-    try assert_eq_bool(font_system_ui_ref(12u8) == null, true);
     try assert_eq_bool(write_test_font_file(TEST_RUNTIME_SYSTEM_FONT_PATH, TEST_DEJAVU_TTF_BYTES.ptr, TEST_DEJAVU_TTF_BYTES.len), true);
     try assert_eq_bool(font_system_ui_retry_refresh(), true);
 
-    const runtime_font: &Font = font_system_ui_ref(12u8);
+    const runtime_font: &Font = font_system_ui_ref(19u8);
     try assert_eq_bool(runtime_font != null, true);
     try assert_eq_bool(runtime_font.render_kind == FontRenderKind.TrueTypeOutline, true);
     try assert_eq_bool(font_runtime_generation() != initial_generation, true);
@@ -415,7 +414,7 @@ test "system ui font can retry loading at runtime after source appears" {
     font_ui_reset_runtime();
 }
 
-test "widget font resolves scalable ui font and honors dpi scaling in gui core" {
+test "widget font prefers demo bitmap atlas at default dpi and scales to outline fonts" {
     font_ui_reset_runtime();
     var small_style: Style = style_default();
     var large_style: Style = style_default();
@@ -424,8 +423,8 @@ test "widget font resolves scalable ui font and honors dpi scaling in gui core" 
 
     const small_font: &Font = widget_font(&small_style);
     const large_font: &Font = widget_font(&large_style);
-    try assert_eq_bool(small_font.render_kind == FontRenderKind.TrueTypeOutline, true);
-    try assert_eq_bool(large_font.render_kind == FontRenderKind.TrueTypeOutline, true);
+    try assert_eq_bool(small_font.render_kind == FontRenderKind.BitmapAtlas, true);
+    try assert_eq_bool(large_font.render_kind == FontRenderKind.BitmapAtlas, true);
     try assert_eq_i32(small_font.height as i32, 11);
     try assert_eq_i32(large_font.height as i32, 14);
     try assert_eq_bool(text_width("Hint", 4usize, small_font) < text_width("Hint", 4usize, large_font), true);
@@ -434,8 +433,17 @@ test "widget font resolves scalable ui font and honors dpi scaling in gui core" 
     const scaled_font: &Font = widget_font(&large_style);
     try assert_eq_i32(font_ui_pixel_height(14u8) as i32, 21);
     try assert_eq_i32(scaled_font.height as i32, 21);
+    try assert_eq_bool(scaled_font.render_kind == FontRenderKind.TrueTypeOutline, true);
     try assert_eq_bool(text_width("Hint", 4usize, large_font) < text_width("Hint", 4usize, scaled_font), true);
     font_ui_reset_runtime();
+}
+
+test "system ui bitmap atlas falls back to outline for uncached glyphs" {
+    font_ui_reset_runtime();
+    const demo_font: &Font = font_system_ui_ref(12u8);
+    try assert_eq_bool(demo_font != null, true);
+    try assert_eq_bool(demo_font.render_kind == FontRenderKind.BitmapAtlas, true);
+    try assert_eq_bool(text_width("测", 3usize, demo_font) > 0, true);
 }
 
 test "font antialiases diagonal edges" {
