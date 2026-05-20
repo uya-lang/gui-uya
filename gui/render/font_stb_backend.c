@@ -155,3 +155,15 @@ int uya_c_stb_font_render_glyph(void * handle, uint16_t glyph_id, unsigned char 
     }
     return 1;
 }
+
+__attribute__((weak)) int32_t uya_gui_web_host_request_bitmap_font(uint16_t pixel_height)
+{
+    (void)pixel_height;
+    return 0;
+}
+
+__attribute__((weak)) int32_t uya_gui_web_host_bitmap_font_state(uint16_t pixel_height)
+{
+    (void)pixel_height;
+    return 0;
+}

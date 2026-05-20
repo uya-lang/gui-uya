@@ -163,6 +163,28 @@ EM_JS(void, uya_gui_web_js_ensure_runtime_dirs, (void), {
     try { FS.mkdir('/app'); } catch (e) {}
 })
 
+EM_JS(int, uya_gui_web_js_request_bitmap_font, (int pixel_height), {
+    if (!Module.uyaGuiRequestBitmapFont) {
+        return 0;
+    }
+    return Module.uyaGuiRequestBitmapFont(pixel_height | 0) | 0;
+})
+
+EM_JS(int, uya_gui_web_js_bitmap_font_state, (int pixel_height), {
+    if (!Module.uyaGuiBitmapFontState) {
+        return 0;
+    }
+    return Module.uyaGuiBitmapFontState(pixel_height | 0) | 0;
+})
+
+int32_t uya_gui_web_host_request_bitmap_font(uint16_t pixel_height) {
+    return uya_gui_web_js_request_bitmap_font((int)pixel_height);
+}
+
+int32_t uya_gui_web_host_bitmap_font_state(uint16_t pixel_height) {
+    return uya_gui_web_js_bitmap_font_state((int)pixel_height);
+}
+
 EMSCRIPTEN_KEEPALIVE void uya_gui_web_host_feed_event(uint8_t kind, int16_t x, int16_t y, int32_t value, uint16_t key_code, uint16_t modifiers) {
     (void)web_feed_host_event(kind, x, y, value, key_code, modifiers);
     if (kind == UYA_GUI_WEB_EVT_REFRESH && g_web_display != NULL) {

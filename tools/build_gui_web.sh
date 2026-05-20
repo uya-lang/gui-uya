@@ -26,6 +26,9 @@ WEB_CJK_FONT_ASSET_NAME="${WEB_CJK_FONT_ASSET_NAME:-system_ui_cjk_font.data}"
 VENDORED_WEB_CJK_FONT_SRC="$ROOT_DIR/third_party/fonts/wqy/wqy-microhei.ttc"
 WEB_CJK_FONT_SRC="${WEB_CJK_FONT_SRC:-$VENDORED_WEB_CJK_FONT_SRC}"
 WEB_MINIFY_HTML="${WEB_MINIFY_HTML:-auto}"
+WQY_BITMAP_STAGE_DIR="$BUILD_DIR/gui/render/generated"
+WQY_BITMAP_SRC_DIR="$ROOT_DIR/gui/render/generated"
+WQY_BITMAP_FONT_SIZES=(10 11 12 13 14 15 16 17 18 20 22 24 25 26 29 31 35)
 
 pick_emcc_stack_flag() {
     local probe_dir probe_c probe_js
@@ -78,6 +81,19 @@ pick_web_cjk_font() {
     done
 
     return 1
+}
+
+stage_web_bitmap_fonts() {
+    local size
+
+    mkdir -p "$WQY_BITMAP_STAGE_DIR"
+    rm -f "$WQY_BITMAP_STAGE_DIR"/wqy_microhei_demo_*.a8
+    rm -f "$WQY_BITMAP_STAGE_DIR"/wqy_microhei_demo_*.fnt
+
+    for size in "${WQY_BITMAP_FONT_SIZES[@]}"; do
+        cp "$WQY_BITMAP_SRC_DIR/wqy_microhei_demo_${size}.fnt" "$WQY_BITMAP_STAGE_DIR/"
+        cp "$WQY_BITMAP_SRC_DIR/wqy_microhei_demo_${size}.a8" "$WQY_BITMAP_STAGE_DIR/"
+    done
 }
 
 transpile_web_js_legacy() {
@@ -165,7 +181,6 @@ declare -a CIMPORT_LDFLAGS=()
 declare -a HTML_MINIFY_FLAGS=()
 declare -a WEB_COMPAT_FLAGS=()
 declare -a PRELOAD_FILES=(
-    --preload-file "$ROOT_DIR/gui@/app/gui"
     --preload-file "$ROOT_DIR/.uya_sim_root_probe@/app/.uya_sim_root_probe"
 )
 
@@ -194,6 +209,9 @@ else
     rm -f "$BUILD_DIR/$WEB_CJK_FONT_ASSET_NAME"
     echo "warning: no scalable CJK font found for web build; browser fallback will stay on builtin 8x8 glyphs." >&2
 fi
+
+stage_web_bitmap_fonts
+echo "info: staged external web bitmap font assets under: $WQY_BITMAP_STAGE_DIR" >&2
 
 if [ -f "$OUT_CIMPORT_SIDECAR" ]; then
     # shellcheck disable=SC1090

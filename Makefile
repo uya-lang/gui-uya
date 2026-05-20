@@ -209,7 +209,7 @@ sim-web-serve: sim-web-build
 	@PORT=$(SIM_WEB_PORT) BUILD_DIR=$(abspath $(SIM_WEB_BUILD_DIR)) bash tools/serve_gui_web.sh
 
 sim-web-smoke: sim-web-build
-	@BUILD_DIR=$(abspath $(SIM_WEB_BUILD_DIR)) bash tools/smoke_gui_web.sh
+	@BUILD_DIR=$(abspath $(SIM_WEB_BUILD_DIR)) SMOKE_EXPECT_BITMAP_READY_AT_LEAST=1 SMOKE_EXPECT_BITMAP_REQUESTED_AT_MOST=6 bash tools/smoke_gui_web.sh
 
 sim-web-pages: sim-web-build
 	@BUILD_DIR=$(abspath $(SIM_WEB_BUILD_DIR)) PAGES_DIR=$(abspath $(SIM_WEB_PAGES_DIR)) bash tools/stage_gui_web_pages.sh

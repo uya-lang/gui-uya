@@ -272,6 +272,17 @@
         }
         var defaultCanvasId = findArgValue(bootArgs, '--canvas-id', 'uya-gui-canvas');
         var defaultFontAsset = findArgValue(bootArgs, '--font-asset', 'system_ui_cjk_font.data');
+        var bitmapFontSizes = [10, 11, 12, 13, 14, 15, 16, 17, 18, 20, 22, 24, 25, 26, 29, 31, 35];
+        var bitmapFontAssetsBySize = Object.create(null);
+        for (var bitmapFontIndex = 0; bitmapFontIndex < bitmapFontSizes.length; bitmapFontIndex += 1) {
+          var bitmapFontSize = bitmapFontSizes[bitmapFontIndex];
+          bitmapFontAssetsBySize[bitmapFontSize] = {
+            descPath: '/app/gui/render/generated/wqy_microhei_demo_' + bitmapFontSize + '.fnt',
+            descUrl: resolveAssetUrl('gui/render/generated/wqy_microhei_demo_' + bitmapFontSize + '.fnt'),
+            bitmapPath: '/app/gui/render/generated/wqy_microhei_demo_' + bitmapFontSize + '.a8',
+            bitmapUrl: resolveAssetUrl('gui/render/generated/wqy_microhei_demo_' + bitmapFontSize + '.a8')
+          };
+        }
         var fitWindow = resolveBoolFlag(bootArgs, '--fit-window', '--fixed-window', true);
         var persistData = resolveBoolFlag(bootArgs, '--persist-data', '--no-persist-data', false);
         var outputElement = null;
@@ -306,6 +317,8 @@
           uyaGuiFitWindow: fitWindow,
           uyaGuiPersistData: persistData,
           uyaGuiFontAsset: resolveAssetUrl(defaultFontAsset),
+          uyaGuiBitmapFontAssetsBySize: bitmapFontAssetsBySize,
+          uyaGuiBitmapFontStates: Object.create(null),
           uyaGuiFontLoadStarted: false,
           uyaGuiFontLoadFinished: false,
           uyaGuiCompleted: false,
@@ -342,6 +355,85 @@
             applyStatusVisibility(debugPanel || !Module.uyaGuiHasPresented || !!Module.uyaGuiStatusText);
           },
           canvas: document.getElementById(defaultCanvasId),
+        };
+
+        Module.uyaGuiBitmapFontState = function(pixelHeight) {
+          var state = Module.uyaGuiBitmapFontStates[pixelHeight | 0];
+          if (state === 'loading') {
+            return 1;
+          }
+          if (state === 'ready') {
+            return 2;
+          }
+          if (state === 'failed') {
+            return 3;
+          }
+          return 0;
+        };
+
+        Module.uyaGuiRequestBitmapFont = function(pixelHeight) {
+          var size = pixelHeight | 0;
+          var asset = Module.uyaGuiBitmapFontAssetsBySize[size];
+          var state = Module.uyaGuiBitmapFontStates[size];
+
+          if (!asset) {
+            return 0;
+          }
+          if (state === 'loading' || state === 'ready') {
+            return 1;
+          }
+          if (typeof fetch !== 'function') {
+            Module.uyaGuiBitmapFontStates[size] = 'failed';
+            Module.printErr('[web] bitmap font request failed: fetch is unavailable for size', size);
+            if (typeof Module._uya_gui_web_host_feed_event === 'function') {
+              Module._uya_gui_web_host_feed_event(8, 0, 0, 0, 0, 0);
+            }
+            return 0;
+          }
+
+          function fetchBinary(url, label) {
+            return fetch(url).then(function(response) {
+              if (!response.ok) {
+                throw new Error(label + ': HTTP ' + response.status);
+              }
+              return response.arrayBuffer();
+            }).then(function(buffer) {
+              return new Uint8Array(buffer);
+            });
+          }
+
+          Module.uyaGuiBitmapFontStates[size] = 'loading';
+          Promise.all([
+            fetchBinary(asset.descUrl, 'desc ' + size),
+            fetchBinary(asset.bitmapUrl, 'bitmap ' + size)
+          ]).then(function(results) {
+            try {
+              FS.mkdirTree('/app/gui/render/generated');
+            } catch (err) {
+            }
+            try {
+              FS.unlink(asset.descPath);
+            } catch (err) {
+            }
+            try {
+              FS.unlink(asset.bitmapPath);
+            } catch (err) {
+            }
+            FS.writeFile(asset.descPath, results[0], { canOwn: true });
+            FS.writeFile(asset.bitmapPath, results[1], { canOwn: true });
+            Module.uyaGuiBitmapFontStates[size] = 'ready';
+            Module.print('[web] bitmap font loaded:', size);
+            if (typeof Module._uya_gui_web_host_feed_event === 'function') {
+              Module._uya_gui_web_host_feed_event(8, 0, 0, 0, 0, 0);
+            }
+          }).catch(function(err) {
+            Module.uyaGuiBitmapFontStates[size] = 'failed';
+            Module.printErr('[web] bitmap font load failed for size', size + ':', err && err.message ? err.message : err);
+            if (typeof Module._uya_gui_web_host_feed_event === 'function') {
+              Module._uya_gui_web_host_feed_event(8, 0, 0, 0, 0, 0);
+            }
+          });
+          return 1;
         };
 
         window.Module = Module;

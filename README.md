@@ -234,12 +234,13 @@ make sim-web-run
 make sim-web-pages
 ```
 
-- `make sim-web-build` 会生成 `build/web/index.html`、`index.js`、`index.wasm`、`index.data`
+- `make sim-web-build` 会生成 `build/web/index.html`、`index.js`、`index.wasm`、`index.data`，以及独立的 `gui/render/generated/wqy_microhei_demo_*.{fnt,a8}` 外部字体资源
 - `make sim-web-run` 会启动本地静态服务器，便于浏览器调试
 - `make sim-web-pages` 会把 GitHub Pages 需要的公开文件整理到 `build/pages/`，并写入 `.nojekyll`
 - 仓库内置 `.github/workflows/sim-web-pages.yml`，推送到 `main` 后会自动构建并部署 Pages
 - 页面支持用查询参数直接切换 demo，例如 `index.html?demo=dashboard`、`index.html?demo=music&debug=1`
 - Web 构建默认使用仓库内固定的 [wqy-microhei.ttc](/media/winger/_dde_home/winger/uya/gui-uya/third_party/fonts/wqy/wqy-microhei.ttc)，避免 CI 依赖宿主机是否自带 CJK 字体
+- Web 运行时不再 preload 整个 `gui/` 目录；`index.data` 仅保留最小运行时子集，WQY demo 位图字体会作为独立静态资源在启动前注入到 `/app/gui/render/generated/`
 - 如需兼容旧版 Android WebView / 内置浏览器，可在构建前附加 `WEB_LEGACY_VM_SUPPORT=1`
 - 如需改成别的字体，可在构建前覆盖 `WEB_CJK_FONT_SRC=/path/to/font.ttf`
 

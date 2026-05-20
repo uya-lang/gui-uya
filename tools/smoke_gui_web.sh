@@ -8,6 +8,9 @@ PORT="${PORT:-0}"
 VENV_DIR="${VENV_DIR:-$BUILD_DIR/.web-smoke-venv}"
 SMOKE_ARGS="${SMOKE_ARGS:---backend web --demo dashboard --max-frames 3 --screenshot /tmp/last_frame.png}"
 SMOKE_TIMEOUT_MS="${SMOKE_TIMEOUT_MS:-30000}"
+SMOKE_EXPECT_BITMAP_READY_SIZES="${SMOKE_EXPECT_BITMAP_READY_SIZES:-}"
+SMOKE_EXPECT_BITMAP_READY_AT_LEAST="${SMOKE_EXPECT_BITMAP_READY_AT_LEAST:-0}"
+SMOKE_EXPECT_BITMAP_REQUESTED_AT_MOST="${SMOKE_EXPECT_BITMAP_REQUESTED_AT_MOST:-}"
 PORT_FILE="$(mktemp)"
 
 cleanup() {
@@ -62,7 +65,19 @@ fi
 
 SMOKE_URL="$("$VENV_DIR/bin/python" -c 'import sys, urllib.parse; print("http://127.0.0.1:%s/index.html?args=%s" % (sys.argv[1], urllib.parse.quote(sys.argv[2])))' "$PORT" "$SMOKE_ARGS")"
 
+declare -a EXTRA_SMOKE_ARGS=()
+if [ -n "$SMOKE_EXPECT_BITMAP_READY_SIZES" ]; then
+    EXTRA_SMOKE_ARGS+=(--expect-bitmap-ready-size "$SMOKE_EXPECT_BITMAP_READY_SIZES")
+fi
+if [ "${SMOKE_EXPECT_BITMAP_READY_AT_LEAST:-0}" != "0" ]; then
+    EXTRA_SMOKE_ARGS+=(--expect-bitmap-ready-at-least "$SMOKE_EXPECT_BITMAP_READY_AT_LEAST")
+fi
+if [ -n "$SMOKE_EXPECT_BITMAP_REQUESTED_AT_MOST" ]; then
+    EXTRA_SMOKE_ARGS+=(--expect-bitmap-requested-at-most "$SMOKE_EXPECT_BITMAP_REQUESTED_AT_MOST")
+fi
+
 "$VENV_DIR/bin/python" "$ROOT_DIR/tools/smoke_gui_web.py" \
     --url "$SMOKE_URL" \
     --screenshot-path "/tmp/last_frame.png" \
-    --timeout-ms "$SMOKE_TIMEOUT_MS"
+    --timeout-ms "$SMOKE_TIMEOUT_MS" \
+    "${EXTRA_SMOKE_ARGS[@]}"
