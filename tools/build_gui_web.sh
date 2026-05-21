@@ -11,6 +11,7 @@ OUT_NAME="${OUT_NAME:-gui_uya_web}"
 OUT_C="$BUILD_DIR/${OUT_NAME}.c"
 OUT_GEN_O="$BUILD_DIR/${OUT_NAME}.generated.o"
 OUT_WEB_O="$BUILD_DIR/${OUT_NAME}.web_host.o"
+OUT_OPENAI_WEB_O="$BUILD_DIR/${OUT_NAME}.openai_web_host.o"
 OUT_HTML="$BUILD_DIR/index.html"
 OUT_JS="$BUILD_DIR/index.js"
 OUT_CIMPORT_SIDECAR="${OUT_C}imports.sh"
@@ -176,6 +177,10 @@ sed -i 's/^int32_t main(int32_t argc, char \*\*argv) {$/__attribute__((used, vis
     -c "$ROOT_DIR/gui/platform/web/web_host.c" \
     -o "$OUT_WEB_O"
 
+"$EMCC_BIN" -std=gnu99 "$EMCC_OPT" -Wall -Wextra -pedantic -fvisibility=hidden \
+    -c "$ROOT_DIR/gui/platform/web/openai_web_host.c" \
+    -o "$OUT_OPENAI_WEB_O"
+
 declare -a CIMPORT_OBJECTS=()
 declare -a CIMPORT_LDFLAGS=()
 declare -a HTML_MINIFY_FLAGS=()
@@ -254,6 +259,7 @@ declare -a LINK_CMD=(
     "$EMCC_OPT"
     "$OUT_GEN_O"
     "$OUT_WEB_O"
+    "$OUT_OPENAI_WEB_O"
     "${CIMPORT_OBJECTS[@]}"
     -o "$OUT_HTML"
     -sALLOW_MEMORY_GROWTH=1

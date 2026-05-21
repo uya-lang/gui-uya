@@ -771,7 +771,7 @@ function isOriginAllowed(origin, env) {
     return true;
   }
   if (!origin) {
-    return true;
+    return false;
   }
   return allowedOrigins.includes("*") || allowedOrigins.includes(origin);
 }

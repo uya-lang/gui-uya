@@ -140,6 +140,24 @@ make dashboard-compare-report
 再把 `OPENAI_API_PATH` 设成斗地主专用接口 `/ddz/decision`。
 游戏侧发的是斗地主业务 JSON，Worker 再在服务端拼接上游 OpenAI chat 请求。
 
+Web / GitHub Pages 版本不会读取 `.uya_openai.env`。浏览器侧会从 URL query 或
+`localStorage` 读取 Worker 配置，常用参数是：
+
+- `openai_base_url`
+- `openai_api_path`
+- `openai_api_key`
+- `openai_model`
+- `openai_save=1`
+
+例如首次在 GitHub Pages 上启用网页版 AI：
+
+```text
+https://uya-lang.github.io/gui-uya/?demo=doudizhu&openai_base_url=https%3A%2F%2Fyour-worker.workers.dev&openai_api_path=%2Fddz%2Fdecision&openai_save=1
+```
+
+访问一次后，浏览器会把这组配置保存到 `localStorage`，后续直接打开
+`https://uya-lang.github.io/gui-uya/` 也会保持在线。
+
 示例：
 
 ```bash
