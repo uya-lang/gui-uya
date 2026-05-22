@@ -38,7 +38,7 @@ SIM_WEB_PAGES_DIR ?= $(BUILD_DIR)/pages
 SIM_WEB_ARGS ?= --backend web --demo dashboard --max-frames 3
 SIM_WEB_PORT ?= 8000
 SIM_WEB_OPENAI_ENV ?= dev
-SIM_WEB_AUTO_DEPLOY_OPENAI ?= 1
+SIM_WEB_AUTO_DEPLOY_OPENAI ?= 0
 DDZ_OPENAI_PROXY_DIR ?= cloudflare/ddz-openai-proxy
 WQY_DEMO_FONT_DIR ?= gui/render/generated
 WQY_DEMO_FONT_TOOL ?= $(BUILD_DIR)/tools/gen_wqy_demo_bitmap_font
@@ -206,7 +206,9 @@ sim-web-build:
 
 sim-web-prepare-openai:
 	@if [ "$(SIM_WEB_AUTO_DEPLOY_OPENAI)" = "0" ] || [ "$(SIM_WEB_AUTO_DEPLOY_OPENAI)" = "false" ]; then \
-		echo "info: skipping Cloudflare Worker deploy for sim-web"; \
+		echo "info: skipping Cloudflare Worker deploy for sim-web; using local OpenAI web config if available"; \
+	elif ! command -v "$${WRANGLER_BIN:-wrangler}" >/dev/null 2>&1; then \
+		echo "warning: wrangler was not found on PATH; skipping Cloudflare Worker deploy and continuing with local web config"; \
 	else \
 		WORKER_DIR=$(abspath $(DDZ_OPENAI_PROXY_DIR)) bash tools/deploy_ddz_openai_proxy.sh $(SIM_WEB_OPENAI_ENV); \
 	fi
