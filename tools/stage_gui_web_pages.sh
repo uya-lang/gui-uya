@@ -53,6 +53,7 @@ declare -a RUNTIME_ASSETS=()
 declare -a RUNTIME_PATTERNS=(
     "index.html"
     "index.js"
+    "openai_config.js"
     "index.wasm"
     "index.data"
     "*.data"

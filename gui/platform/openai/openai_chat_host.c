@@ -34,6 +34,7 @@ enum {
 
 typedef struct UyaOpenAiResolvedConfig {
     int enabled;
+    int enabled_configured;
     char api_key[256];
     char model[128];
     char base_url[256];
@@ -244,6 +245,7 @@ static void uya_openai_chat_apply_kv(UyaOpenAiResolvedConfig *cfg, const char *k
         return;
     }
     if (strcmp(key, "UYA_DDZ_USE_OPENAI") == 0) {
+        cfg->enabled_configured = 1;
         cfg->enabled = uya_openai_chat_env_truthy(value);
     }
 }
@@ -340,8 +342,8 @@ static UyaOpenAiResolvedConfig uya_openai_chat_resolve_config(void) {
     const char *env_value;
     memset(&cfg, 0, sizeof(cfg));
     cfg.enabled = 0;
+    cfg.enabled_configured = 0;
     uya_openai_chat_copy_value(cfg.model, sizeof(cfg.model), "gpt-5.4-mini");
-    uya_openai_chat_copy_value(cfg.base_url, sizeof(cfg.base_url), "https://api.openai.com/v1");
     uya_openai_chat_copy_value(cfg.api_path, sizeof(cfg.api_path), "/ddz/decision");
     uya_openai_chat_copy_value(cfg.config_source, sizeof(cfg.config_source), "defaults");
 
@@ -349,6 +351,7 @@ static UyaOpenAiResolvedConfig uya_openai_chat_resolve_config(void) {
 
     env_value = getenv("UYA_DDZ_USE_OPENAI");
     if (env_value != NULL && env_value[0] != '\0') {
+        cfg.enabled_configured = 1;
         cfg.enabled = uya_openai_chat_env_truthy(env_value);
         uya_openai_chat_copy_value(cfg.config_source, sizeof(cfg.config_source), "env");
     }
@@ -377,10 +380,10 @@ static UyaOpenAiResolvedConfig uya_openai_chat_resolve_config(void) {
 
 static int uya_openai_chat_enabled(void) {
     UyaOpenAiResolvedConfig cfg = uya_openai_chat_resolve_config();
-    if (!cfg.enabled) {
+    if (cfg.base_url[0] == '\0' || cfg.api_path[0] == '\0') {
         return 0;
     }
-    if (cfg.api_key[0] == '\0') {
+    if (cfg.enabled_configured && !cfg.enabled) {
         return 0;
     }
     return 1;
@@ -708,9 +711,10 @@ static int uya_openai_chat_exec_request(UyaOpenAiChatRequest *req) {
     }
 
     uya_openai_chat_join_url(endpoint, sizeof(endpoint), req->base_url, req->api_path);
-    (void)snprintf(auth_header, sizeof(auth_header), "Authorization: Bearer %s", req->api_key);
-
-    headers = curl_slist_append(headers, auth_header);
+    if (req->api_key[0] != '\0') {
+        (void)snprintf(auth_header, sizeof(auth_header), "Authorization: Bearer %s", req->api_key);
+        headers = curl_slist_append(headers, auth_header);
+    }
     headers = curl_slist_append(headers, "Content-Type: application/json");
 
     curl_easy_setopt(curl, CURLOPT_URL, endpoint);
@@ -834,11 +838,6 @@ int32_t uya_openai_chat_start(const uint8_t *request_body, size_t request_len) {
         uya_openai_chat_debugf("start request rejected: disabled");
         return UYA_OPENAI_CHAT_DISABLED;
     }
-    if (cfg.api_key[0] == '\0') {
-        uya_openai_chat_debugf("start request rejected: missing api key");
-        return UYA_OPENAI_CHAT_DISABLED;
-    }
-
     body_copy = (char *)malloc(request_len + 1u);
     if (body_copy == NULL) {
         return UYA_OPENAI_CHAT_TRANSPORT_ERROR;

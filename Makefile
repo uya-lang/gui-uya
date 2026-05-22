@@ -26,7 +26,7 @@ UYA_DASHBOARD_COMPARE_DIR ?= $(BUILD_DIR)/dashboard_compare
 UYA_DASHBOARD_COMPARE_BIN ?= $(UYA_DASHBOARD_COMPARE_DIR)/uya_dashboard_compare
 DASHBOARD_COMPARE_REPORT ?= $(BUILD_DIR)/dashboard_compare/dashboard_compare_report.md
 
-.PHONY: build test bench bench-report bench-json bench-snapshot bench-verify docs-api ci release release-artifacts clean hooks build-arm build-riscv build-esp32 sim-build sim-run sim-debug sim-headless sim-web-build sim-web-run sim-web-serve sim-web-smoke sim-web-pages text-compare lvgl-text-compare uya-dashboard-compare-build uya-dashboard-compare lvgl-dashboard-compare-build lvgl-dashboard-compare dashboard-compare dashboard-compare-report font-backend-compare demo-font-atlas
+.PHONY: build test bench bench-report bench-json bench-snapshot bench-verify docs-api ci release release-artifacts clean hooks build-arm build-riscv build-esp32 sim-build sim-run sim-debug sim-headless sim-web-build sim-web-run sim-web-serve sim-web-smoke sim-web-pages text-compare lvgl-text-compare uya-dashboard-compare-build uya-dashboard-compare lvgl-dashboard-compare-build lvgl-dashboard-compare dashboard-compare dashboard-compare-report font-backend-compare demo-font-atlas ddz-openai-proxy-secrets ddz-openai-proxy-secrets-dev ddz-openai-proxy-deploy ddz-openai-proxy-deploy-dev
 
 SIM_BUILD_DIR ?= $(BUILD_DIR)/sim
 SIM_BIN ?= $(SIM_BUILD_DIR)/gui_uya_sim
@@ -37,6 +37,9 @@ SIM_WEB_BUILD_DIR ?= $(BUILD_DIR)/web
 SIM_WEB_PAGES_DIR ?= $(BUILD_DIR)/pages
 SIM_WEB_ARGS ?= --backend web --demo dashboard --max-frames 3
 SIM_WEB_PORT ?= 8000
+SIM_WEB_OPENAI_ENV ?= dev
+SIM_WEB_AUTO_DEPLOY_OPENAI ?= 1
+DDZ_OPENAI_PROXY_DIR ?= cloudflare/ddz-openai-proxy
 WQY_DEMO_FONT_DIR ?= gui/render/generated
 WQY_DEMO_FONT_TOOL ?= $(BUILD_DIR)/tools/gen_wqy_demo_bitmap_font
 WQY_DEMO_FONT_SRC ?= third_party/fonts/wqy/wqy-microhei.ttc
@@ -201,11 +204,22 @@ sim-web-build:
 	@mkdir -p $(SIM_WEB_BUILD_DIR)
 	@MODE=$(MODE) BUILD_DIR=$(abspath $(SIM_WEB_BUILD_DIR)) bash tools/build_gui_web.sh
 
-sim-web-run: sim-web-build
+sim-web-prepare-openai:
+	@if [ "$(SIM_WEB_AUTO_DEPLOY_OPENAI)" = "0" ] || [ "$(SIM_WEB_AUTO_DEPLOY_OPENAI)" = "false" ]; then \
+		echo "info: skipping Cloudflare Worker deploy for sim-web"; \
+	else \
+		WORKER_DIR=$(abspath $(DDZ_OPENAI_PROXY_DIR)) bash tools/deploy_ddz_openai_proxy.sh $(SIM_WEB_OPENAI_ENV); \
+	fi
+
+sim-web-run:
+	@$(MAKE) sim-web-prepare-openai SIM_WEB_AUTO_DEPLOY_OPENAI=$(SIM_WEB_AUTO_DEPLOY_OPENAI) SIM_WEB_OPENAI_ENV=$(SIM_WEB_OPENAI_ENV) DDZ_OPENAI_PROXY_DIR=$(DDZ_OPENAI_PROXY_DIR)
+	@$(MAKE) sim-web-build MODE=$(MODE) SIM_WEB_BUILD_DIR=$(abspath $(SIM_WEB_BUILD_DIR))
 	@echo "Open http://127.0.0.1:$(SIM_WEB_PORT)/index.html?args=$(SIM_WEB_ARGS)"
 	@PORT=$(SIM_WEB_PORT) BUILD_DIR=$(abspath $(SIM_WEB_BUILD_DIR)) bash tools/serve_gui_web.sh
 
-sim-web-serve: sim-web-build
+sim-web-serve:
+	@$(MAKE) sim-web-prepare-openai SIM_WEB_AUTO_DEPLOY_OPENAI=$(SIM_WEB_AUTO_DEPLOY_OPENAI) SIM_WEB_OPENAI_ENV=$(SIM_WEB_OPENAI_ENV) DDZ_OPENAI_PROXY_DIR=$(DDZ_OPENAI_PROXY_DIR)
+	@$(MAKE) sim-web-build MODE=$(MODE) SIM_WEB_BUILD_DIR=$(abspath $(SIM_WEB_BUILD_DIR))
 	@PORT=$(SIM_WEB_PORT) BUILD_DIR=$(abspath $(SIM_WEB_BUILD_DIR)) bash tools/serve_gui_web.sh
 
 sim-web-smoke: sim-web-build
@@ -213,3 +227,15 @@ sim-web-smoke: sim-web-build
 
 sim-web-pages: sim-web-build
 	@BUILD_DIR=$(abspath $(SIM_WEB_BUILD_DIR)) PAGES_DIR=$(abspath $(SIM_WEB_PAGES_DIR)) bash tools/stage_gui_web_pages.sh
+
+ddz-openai-proxy-secrets:
+	@WORKER_DIR=$(abspath $(DDZ_OPENAI_PROXY_DIR)) bash tools/push_ddz_openai_proxy_secrets.sh production
+
+ddz-openai-proxy-secrets-dev:
+	@WORKER_DIR=$(abspath $(DDZ_OPENAI_PROXY_DIR)) bash tools/push_ddz_openai_proxy_secrets.sh dev
+
+ddz-openai-proxy-deploy:
+	@WORKER_DIR=$(abspath $(DDZ_OPENAI_PROXY_DIR)) bash tools/deploy_ddz_openai_proxy.sh production
+
+ddz-openai-proxy-deploy-dev:
+	@WORKER_DIR=$(abspath $(DDZ_OPENAI_PROXY_DIR)) bash tools/deploy_ddz_openai_proxy.sh dev

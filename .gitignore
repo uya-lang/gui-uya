@@ -13,3 +13,5 @@ gui/build/
 !.vscode/tasks.json
 .uya_openai.env
 openai.env
+cloudflare/ddz-openai-proxy/.dev.vars*
+!cloudflare/ddz-openai-proxy/.dev.vars.example

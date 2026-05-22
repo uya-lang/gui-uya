@@ -30,6 +30,7 @@ WEB_MINIFY_HTML="${WEB_MINIFY_HTML:-auto}"
 WQY_BITMAP_STAGE_DIR="$BUILD_DIR/gui/render/generated"
 WQY_BITMAP_SRC_DIR="$ROOT_DIR/gui/render/generated"
 WQY_BITMAP_FONT_SIZES=(10 11 12 13 14 15 16 17 18 20 22 24 25 26 29 31 35)
+WEB_OPENAI_CONFIG_JS="$BUILD_DIR/openai_config.js"
 
 pick_emcc_stack_flag() {
     local probe_dir probe_c probe_js
@@ -135,7 +136,85 @@ EOF
     rm -rf "$tmp_dir"
 }
 
+load_openai_runtime_config() {
+    local config_file=""
+
+    if [ -n "${UYA_OPENAI_CONFIG_FILE:-}" ]; then
+        config_file="${UYA_OPENAI_CONFIG_FILE}"
+    elif [ -f "$ROOT_DIR/.uya_openai.env" ]; then
+        config_file="$ROOT_DIR/.uya_openai.env"
+    elif [ -f "$ROOT_DIR/openai.env" ]; then
+        config_file="$ROOT_DIR/openai.env"
+    fi
+
+    if [ -z "$config_file" ]; then
+        return 0
+    fi
+    if [ ! -f "$config_file" ]; then
+        echo "error: OpenAI config file not found: $config_file" >&2
+        exit 2
+    fi
+
+    set -a
+    # shellcheck disable=SC1090
+    . "$config_file"
+    set +a
+    echo "info: loaded web OpenAI config source: $config_file" >&2
+}
+
+write_web_openai_runtime_config() {
+    local enabled_text="${UYA_DDZ_USE_OPENAI:-}"
+    local base_url="${OPENAI_BASE_URL:-}"
+    local api_path="${OPENAI_API_PATH:-/ddz/decision}"
+    local api_key="${OPENAI_API_KEY:-}"
+    local model="${OPENAI_MODEL:-gpt-5.4-mini}"
+    local enabled="false"
+
+    case "$(printf '%s' "$enabled_text" | tr '[:upper:]' '[:lower:]')" in
+        1|true|yes|on)
+            enabled="true"
+            ;;
+        0|false|no|off)
+            enabled="false"
+            ;;
+        *)
+            if [ -n "$base_url" ]; then
+                enabled="true"
+            fi
+            ;;
+    esac
+
+    python3 - "$WEB_OPENAI_CONFIG_JS" "$enabled" "$base_url" "$api_path" "$api_key" "$model" <<'PY'
+import json
+import pathlib
+import sys
+
+out_path = pathlib.Path(sys.argv[1])
+enabled = sys.argv[2] == "true"
+base_url = sys.argv[3].strip()
+api_path = sys.argv[4].strip() or "/ddz/decision"
+api_key = sys.argv[5].strip()
+model = sys.argv[6].strip() or "gpt-5.4-mini"
+
+config = {}
+if base_url:
+    config["enabled"] = enabled
+    config["baseUrl"] = base_url
+    config["apiPath"] = api_path
+    if api_key:
+        config["apiKey"] = api_key
+    if model:
+        config["model"] = model
+
+out_path.write_text(
+    "window.UYA_GUI_OPENAI_CONFIG = " + json.dumps(config, ensure_ascii=False) + ";\n",
+    encoding="utf-8",
+)
+PY
+}
+
 mkdir -p "$BUILD_DIR"
+load_openai_runtime_config
 
 if ! command -v "$EMCC_BIN" >/dev/null 2>&1; then
     echo "error: emcc was not found. Please install Emscripten and ensure 'emcc' is on PATH." >&2
@@ -277,6 +356,7 @@ declare -a LINK_CMD=(
 )
 
 "${LINK_CMD[@]}"
+write_web_openai_runtime_config
 
 if [ "$WEB_LEGACY_VM_SUPPORT" = "1" ] || [ "$WEB_LEGACY_VM_SUPPORT" = "true" ]; then
     transpile_web_js_legacy || true

@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <title>UyaGUI Web</title>
+    <script src="openai_config.js"></script>
     <style>
       :root {
         color-scheme: dark;
@@ -1091,7 +1092,7 @@
           }, 0);
         } else {
           setTimeout(function() {
-            Module.print('[web] Dou Dizhu online bridge disabled: set openai_base_url in query or localStorage to enable web AI.');
+            Module.print('[web] Dou Dizhu online bridge disabled: deploy the Cloudflare Worker and set openai_base_url in query or localStorage to enable web AI.');
           }, 0);
         }
 
