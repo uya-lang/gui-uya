@@ -27,10 +27,6 @@
         grid-template-rows: 1fr;
       }
 
-      body.status-visible {
-        grid-template-rows: auto 1fr;
-      }
-
       body.debug-panel {
         grid-template-rows: auto 1fr var(--uya-gui-log-height);
       }
@@ -47,10 +43,6 @@
         display: block;
       }
 
-      body.status-visible #uya-gui-status {
-        display: block;
-      }
-
       #uya-gui-root {
         position: relative;
         min-height: 0;
@@ -60,6 +52,96 @@
         overflow: hidden;
         padding: var(--uya-gui-shell-padding);
         box-sizing: border-box;
+      }
+
+      #uya-gui-loading {
+        position: absolute;
+        inset: 0;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        box-sizing: border-box;
+        pointer-events: none;
+        z-index: 10;
+        background:
+          radial-gradient(circle at top, rgba(76, 115, 196, 0.16), transparent 42%),
+          linear-gradient(180deg, rgba(9, 12, 17, 0.86), rgba(11, 15, 22, 0.78));
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+      }
+
+      body.loading-visible #uya-gui-loading {
+        display: flex;
+      }
+
+      #uya-gui-loading-card {
+        width: min(420px, calc(100vw - 48px));
+        padding: 24px 24px 20px;
+        border: 1px solid rgba(143, 173, 255, 0.18);
+        border-radius: 24px;
+        box-sizing: border-box;
+        background:
+          linear-gradient(180deg, rgba(26, 32, 43, 0.96), rgba(15, 19, 27, 0.94));
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.42);
+      }
+
+      #uya-gui-loading-title {
+        color: #f5f7fb;
+        font: 700 20px/1.2 system-ui, sans-serif;
+        letter-spacing: 0.01em;
+      }
+
+      #uya-gui-loading-detail {
+        min-height: 1.4em;
+        margin-top: 10px;
+        color: rgba(225, 232, 242, 0.8);
+        font: 13px/1.4 ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+      }
+
+      #uya-gui-loading-bar {
+        position: relative;
+        height: 12px;
+        margin-top: 18px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.08);
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+      }
+
+      #uya-gui-loading-fill {
+        width: 0;
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #7ec8ff 0%, #7be0c3 100%);
+        box-shadow: 0 0 24px rgba(126, 200, 255, 0.42);
+        transition: width 180ms ease;
+      }
+
+      #uya-gui-loading-percent {
+        margin-top: 12px;
+        color: rgba(240, 245, 252, 0.9);
+        font: 700 12px/1 system-ui, sans-serif;
+        letter-spacing: 0.08em;
+        text-align: right;
+        text-transform: uppercase;
+      }
+
+      #uya-gui-loading.indeterminate #uya-gui-loading-fill {
+        width: 36%;
+        animation: uya-gui-loading-slide 1.15s ease-in-out infinite;
+      }
+
+      @keyframes uya-gui-loading-slide {
+        0% {
+          transform: translateX(-115%);
+        }
+        50% {
+          transform: translateX(90%);
+        }
+        100% {
+          transform: translateX(240%);
+        }
       }
 
       #uya-gui-stage {
@@ -123,36 +205,8 @@
         -webkit-backdrop-filter: blur(10px);
       }
 
-      #uya-gui-mobile-rotate {
-        position: absolute;
-        left: 50%;
-        top: 50%;
-        transform: translate(-50%, -50%);
-        width: min(88vw, 360px);
-        padding: 18px 20px;
-        border-radius: 20px;
-        background: rgba(8, 10, 14, 0.9);
-        color: #f4f7fb;
-        text-align: center;
-        box-shadow: 0 16px 48px rgba(0, 0, 0, 0.36);
-        opacity: 0;
-        transition: opacity 160ms ease;
-      }
-
-      #uya-gui-mobile-rotate strong {
-        display: block;
-        margin-bottom: 8px;
-        font: 700 18px/1.2 system-ui, sans-serif;
-      }
-
-      #uya-gui-mobile-rotate span {
-        display: block;
-        color: rgba(232, 238, 246, 0.82);
-        font: 14px/1.45 system-ui, sans-serif;
-      }
-
       body.mobile-doudizhu,
-      body.mobile-doudizhu.status-visible,
+      body.mobile-doudizhu.loading-visible,
       body.mobile-doudizhu.debug-panel {
         grid-template-rows: 1fr;
         background:
@@ -190,12 +244,16 @@
         display: block;
       }
 
-      body.mobile-doudizhu.uya-gui-portrait-warning #uya-gui-mobile-rotate {
-        opacity: 1;
+      body.mobile-doudizhu #uya-gui-loading {
+        padding:
+          max(18px, env(safe-area-inset-top))
+          max(18px, env(safe-area-inset-right))
+          max(18px, env(safe-area-inset-bottom))
+          max(18px, env(safe-area-inset-left));
       }
 
-      body.mobile-doudizhu.uya-gui-portrait-warning #uya-gui-stage {
-        opacity: 0.28;
+      body.mobile-doudizhu #uya-gui-loading-card {
+        width: min(100%, 420px);
       }
 
       body.mobile-doudizhu.uya-gui-fullscreen-active #uya-gui-mobile-fullscreen {
@@ -647,21 +705,143 @@
         var webOpenAiConfig = resolveWebOpenAiConfig();
         var outputElement = null;
         var statusElement = null;
+        var loadingElement = null;
+        var loadingDetailElement = null;
+        var loadingFillElement = null;
+        var loadingPercentElement = null;
+        var loadingBarElement = null;
 
-        function applyStatusVisibility(visible) {
+        function applyLoadingVisibility(visible) {
           if (typeof document === 'undefined') {
             return;
           }
           if (!document.body) {
             document.addEventListener('DOMContentLoaded', function() {
-              applyStatusVisibility(visible);
+              applyLoadingVisibility(visible);
             }, { once: true });
             return;
           }
           if (visible) {
-            document.body.classList.add('status-visible');
+            document.body.classList.add('loading-visible');
           } else {
-            document.body.classList.remove('status-visible');
+            document.body.classList.remove('loading-visible');
+          }
+        }
+
+        function clampNumber(value, minValue, maxValue) {
+          if (!isFinite(value)) {
+            return minValue;
+          }
+          if (value < minValue) {
+            return minValue;
+          }
+          if (value > maxValue) {
+            return maxValue;
+          }
+          return value;
+        }
+
+        function parseStatusProgress(text) {
+          var normalized = typeof text === 'string' ? text.replace(/\s+/g, ' ').trim() : '';
+          if (!normalized) {
+            return {
+              label: '',
+              progress: null
+            };
+          }
+
+          var fractionMatch = normalized.match(/^(.*?)(?:\s+)?\((\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?)\)$/);
+          if (fractionMatch) {
+            var current = parseFloat(fractionMatch[2]);
+            var total = parseFloat(fractionMatch[3]);
+            if (isFinite(current) && isFinite(total) && total > 0) {
+              return {
+                label: fractionMatch[1].trim(),
+                progress: clampNumber(current / total, 0, 1)
+              };
+            }
+          }
+
+          var percentMatch = normalized.match(/^(.*?)(?:\s+)?\((\d+(?:\.\d+)?)%\)$/);
+          if (percentMatch) {
+            var percentValue = parseFloat(percentMatch[2]);
+            if (isFinite(percentValue)) {
+              return {
+                label: percentMatch[1].trim(),
+                progress: clampNumber(percentValue / 100, 0, 1)
+              };
+            }
+          }
+
+          return {
+            label: normalized,
+            progress: null
+          };
+        }
+
+        function ensureStatusElements() {
+          if (typeof document === 'undefined') {
+            return false;
+          }
+          if (!document.body) {
+            document.addEventListener('DOMContentLoaded', function() {
+              updateStatusUi();
+            }, { once: true });
+            return false;
+          }
+          if (!statusElement) {
+            statusElement = document.getElementById('uya-gui-status');
+          }
+          if (!loadingElement) {
+            loadingElement = document.getElementById('uya-gui-loading');
+          }
+          if (!loadingDetailElement) {
+            loadingDetailElement = document.getElementById('uya-gui-loading-detail');
+          }
+          if (!loadingFillElement) {
+            loadingFillElement = document.getElementById('uya-gui-loading-fill');
+          }
+          if (!loadingPercentElement) {
+            loadingPercentElement = document.getElementById('uya-gui-loading-percent');
+          }
+          if (!loadingBarElement) {
+            loadingBarElement = document.getElementById('uya-gui-loading-bar');
+          }
+          return true;
+        }
+
+        function updateStatusUi() {
+          var visible = !Module.uyaGuiHasPresented || !!Module.uyaGuiStatusText;
+          var status = parseStatusProgress(Module.uyaGuiStatusText);
+          var detailText = status.label || (visible ? 'Loading data...' : '');
+          var hasProgress = status.progress !== null;
+          var percent = hasProgress ? Math.round(status.progress * 100) : 0;
+
+          applyLoadingVisibility(visible);
+          if (!ensureStatusElements()) {
+            return;
+          }
+          if (statusElement) {
+            statusElement.textContent = Module.uyaGuiStatusText || detailText;
+          }
+          if (loadingDetailElement) {
+            loadingDetailElement.textContent = detailText;
+          }
+          if (loadingElement) {
+            loadingElement.classList.toggle('indeterminate', visible && !hasProgress);
+          }
+          if (loadingFillElement) {
+            loadingFillElement.style.width = hasProgress ? (percent + '%') : '36%';
+          }
+          if (loadingPercentElement) {
+            loadingPercentElement.textContent = hasProgress ? (percent + '%') : 'Loading';
+          }
+          if (loadingBarElement) {
+            if (hasProgress) {
+              loadingBarElement.setAttribute('aria-valuenow', String(percent));
+            } else {
+              loadingBarElement.removeAttribute('aria-valuenow');
+            }
           }
         }
 
@@ -692,6 +872,7 @@
           uyaGuiHasPresented: false,
           uyaGuiMobileControlsBound: false,
           uyaGuiFullscreenAutoAttempted: false,
+          uyaGuiRunDependencyMax: 0,
           uyaGuiStatusText: '',
           uyaGuiLastPresentAt: 0,
           uyaGuiLastScreenshotPath: null,
@@ -714,13 +895,28 @@
           },
           setStatus: function(text) {
             Module.uyaGuiStatusText = text || '';
-            if (!statusElement) {
-              statusElement = document.getElementById('uya-gui-status');
+            updateStatusUi();
+          },
+          monitorRunDependencies: function(left) {
+            var remaining = left | 0;
+            if (remaining <= 0) {
+              var finishedTotal = Module.uyaGuiRunDependencyMax | 0;
+              Module.uyaGuiRunDependencyMax = 0;
+              if (finishedTotal > 0) {
+                Module.setStatus('Loading data... (' + finishedTotal + '/' + finishedTotal + ')');
+              } else if (!Module.uyaGuiHasPresented) {
+                Module.setStatus('Starting runtime...');
+              } else {
+                updateStatusUi();
+              }
+              return;
             }
-            if (statusElement) {
-              statusElement.textContent = Module.uyaGuiStatusText;
+            if (remaining > Module.uyaGuiRunDependencyMax) {
+              Module.uyaGuiRunDependencyMax = remaining;
             }
-            applyStatusVisibility(debugPanel || !Module.uyaGuiHasPresented || !!Module.uyaGuiStatusText);
+            var total = Module.uyaGuiRunDependencyMax || remaining;
+            var done = total - remaining;
+            Module.setStatus('Loading data... (' + done + '/' + total + ')');
           },
           canvas: document.getElementById(defaultCanvasId),
         };
@@ -920,12 +1116,10 @@
           if (!Module.uyaGuiMobileDoudizhuMode || typeof document === 'undefined' || !document.body) {
             return;
           }
-          var portraitWarning = typeof window !== 'undefined' && window.innerHeight > window.innerWidth;
-          document.body.classList.toggle('uya-gui-portrait-warning', portraitWarning);
           document.body.classList.toggle('uya-gui-fullscreen-active', Module.uyaGuiIsFullscreen());
           var fullscreenButton = document.getElementById('uya-gui-mobile-fullscreen');
           if (fullscreenButton) {
-            fullscreenButton.textContent = portraitWarning ? '横屏后全屏' : '进入全屏';
+            fullscreenButton.textContent = '进入全屏';
           }
           if (typeof window !== 'undefined') {
             window.scrollTo(0, 0);
@@ -998,16 +1192,10 @@
         };
 
         window.Module = Module;
-        applyStatusVisibility(true);
+        applyLoadingVisibility(true);
         if (typeof document !== 'undefined' && !document.body) {
           document.addEventListener('DOMContentLoaded', function() {
-            if (!statusElement) {
-              statusElement = document.getElementById('uya-gui-status');
-            }
-            if (statusElement) {
-              statusElement.textContent = Module.uyaGuiStatusText;
-            }
-            applyStatusVisibility(debugPanel || !Module.uyaGuiHasPresented || !!Module.uyaGuiStatusText);
+            updateStatusUi();
           }, { once: true });
         }
 
@@ -1577,15 +1765,21 @@
   <body>
     <div id="uya-gui-status">Booting Web runtime...</div>
     <div id="uya-gui-root">
+      <div id="uya-gui-loading" aria-live="polite" aria-atomic="true">
+        <div id="uya-gui-loading-card">
+          <div id="uya-gui-loading-title">数据加载中</div>
+          <div id="uya-gui-loading-detail">Booting Web runtime...</div>
+          <div id="uya-gui-loading-bar" role="progressbar" aria-label="Loading progress" aria-valuemin="0" aria-valuemax="100">
+            <div id="uya-gui-loading-fill"></div>
+          </div>
+          <div id="uya-gui-loading-percent">Loading</div>
+        </div>
+      </div>
       <div id="uya-gui-stage">
         <canvas id="uya-gui-canvas" tabindex="-1"></canvas>
         <canvas id="uya-gui-overlay" tabindex="-1"></canvas>
       </div>
       <div id="uya-gui-mobile-hud" aria-live="polite">
-        <div id="uya-gui-mobile-rotate">
-          <strong>请横屏游玩</strong>
-          <span>手机版斗地主会在横屏下铺满显示，轻触右下角可进入全屏。</span>
-        </div>
         <button id="uya-gui-mobile-fullscreen" type="button">进入全屏</button>
       </div>
     </div>

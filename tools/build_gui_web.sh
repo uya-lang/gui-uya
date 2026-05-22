@@ -167,6 +167,7 @@ sed -i '/@syscall C99 backend: supported targets/d' "$OUT_C"
 sed -i 's/^int32_t main(int32_t argc, char \*\*argv) {$/__attribute__((used, visibility("default"))) int32_t main(int32_t argc, char **argv) {/' "$OUT_C"
 
 "$EMCC_BIN" -std=c99 "$EMCC_OPT" -fno-builtin -w \
+    -include "$ROOT_DIR/gui/platform/web/posix_decl_shim.h" \
     -include fcntl.h \
     -include sys/uio.h \
     -include sys/mman.h \
