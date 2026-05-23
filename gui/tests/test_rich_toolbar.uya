@@ -19,8 +19,12 @@ use platform.disp.framebuffer_new;
 use render.ctx.RenderCtx;
 use render.ctx.ctx_pixel;
 use render.ctx.render_ctx_new;
+use render.scheduler.RenderFrameResult;
+use render.scheduler.RenderPresentMode;
+use render.scheduler.render_schedule_tree_frame;
 use std.testing.assert_eq_bool;
 use std.testing.assert_eq_i32;
+use platform.text_host.rich_text_host_active_session;
 use style.StyleProp;
 use widget.base.WIDGET_TYPE_RICH_TOOLBAR;
 use widget.base.widget_inner_rect;
@@ -351,4 +355,111 @@ test "rich toolbar observes editor format changes after bind_editor" {
     }), true);
     try assert_eq_bool(toolbar.widget.base.flags.invalid, true);
     try assert_eq_bool(toolbar.format_active(toolbar.registry.formats[0]), true);
+}
+
+test "rich toolbar click immediately restores editor host focus" {
+    var input: RichTextInput = RichTextInput.new("" as &const byte);
+    defer input.dispose();
+    input.widget.at(0, 48);
+    input.widget.size(180, 72);
+    try input.set_plain_text("hello" as &const byte);
+    try assert_eq_bool(input.exec(RichCommand{
+        kind: RichCommandKind.SelectAll,
+        text_ptr: null,
+        text_len: 0usize,
+    }), true);
+
+    var toolbar: RichToolbar = RichToolbar.new(&input);
+    toolbar.widget.at(0, 0);
+    toolbar.widget.size(420, 38);
+
+    try assert_eq_bool(toolbar.trigger_format(0), true);
+    try assert_eq_bool(input.widget.state == WidgetState.Focused, true);
+    try assert_eq_i32(rich_text_host_active_session() as i32, input.session_id as i32);
+    try assert_eq_bool(toolbar.format_active(toolbar.registry.formats[0]), true);
+}
+
+test "rich toolbar release after press toggles format when click is absent" {
+    var input: RichTextInput = RichTextInput.new("" as &const byte);
+    defer input.dispose();
+    try input.set_plain_text("hello" as &const byte);
+    try assert_eq_bool(input.exec(RichCommand{
+        kind: RichCommandKind.SelectAll,
+        text_ptr: null,
+        text_len: 0usize,
+    }), true);
+
+    var toolbar: RichToolbar = RichToolbar.new(&input);
+    toolbar.widget.at(0, 0);
+    toolbar.widget.size(420, 38);
+
+    var press_evt: Event = event_point(EventType.Press, InputDev.Touch, 1, 300u32, Point{ x: rich_toolbar_smoke_click_x(0), y: 18i16 });
+    var release_evt: Event = event_point(EventType.Release, InputDev.Touch, 1, 301u32, Point{ x: rich_toolbar_smoke_click_x(0), y: 18i16 });
+    try assert_eq_bool(toolbar.handle_event(&press_evt), true);
+    try assert_eq_bool(toolbar.handle_event(&release_evt), true);
+    try assert_eq_bool(input.format_has_mark(RICH_MARK_BOLD), true);
+    try assert_eq_bool(toolbar.format_active(toolbar.registry.formats[0]), true);
+}
+
+test "rich toolbar dirty render updates active button in same frame" {
+    gui_obj_reset_registry();
+
+    var root: Panel = Panel.new();
+    root.widget.at(0, 0);
+    root.widget.size(480, 160);
+    root.widget.base.style.set_u32(StyleProp.PaddingLeft, 0u32);
+    root.widget.base.style.set_u32(StyleProp.PaddingRight, 0u32);
+    root.widget.base.style.set_u32(StyleProp.PaddingTop, 0u32);
+    root.widget.base.style.set_u32(StyleProp.PaddingBottom, 0u32);
+
+    var input: RichTextInput = RichTextInput.new("" as &const byte);
+    defer input.dispose();
+    input.widget.at(0, 48);
+    input.widget.size(180, 72);
+    try input.set_plain_text("hello" as &const byte);
+
+    var toolbar: RichToolbar = RichToolbar.new(&input);
+    toolbar.widget.at(0, 0);
+    toolbar.widget.size(420, 38);
+
+    _ = gui_obj_register(0, root.obj());
+    _ = gui_obj_register(1, toolbar.obj());
+    _ = gui_obj_register(2, input.obj());
+    _ = root.add(toolbar.obj());
+    _ = root.add(input.obj());
+
+    var tree: ObjTree = obj_tree_new();
+    tree.set_root(0, root.obj());
+
+    var bytes: [byte: 307200] = [];
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 480, 160, 1920, PixelFormat.ARGB8888));
+
+    var full_result: RenderFrameResult = render_schedule_tree_frame(
+        &ctx,
+        &tree,
+        Rect{ x: 0, y: 0, w: 480, h: 160 },
+        true,
+        Color{ r: 0, g: 0, b: 0, a: 255 },
+        null,
+        null,
+        null
+    );
+    try assert_eq_i32(full_result.present_mode as i32, RenderPresentMode.Full as i32);
+    try assert_eq_bool(ctx_pixel(&ctx, 12, 11) == Color{ r: 255, g: 255, b: 255, a: 255 }, true);
+
+    var dispatcher: EventDispatcher = event_dispatcher_new();
+    _ = dispatcher.dispatch(event_point(EventType.Click, InputDev.Touch, -1, 1u32, Point{ x: rich_toolbar_smoke_click_x(0), y: 18i16 }), &tree);
+
+    const dirty_result: RenderFrameResult = render_schedule_tree_frame(
+        &ctx,
+        &tree,
+        Rect{ x: 0, y: 0, w: 480, h: 160 },
+        false,
+        Color{ r: 0, g: 0, b: 0, a: 255 },
+        null,
+        null,
+        null
+    );
+    try assert_eq_i32(dirty_result.present_mode as i32, RenderPresentMode.Dirty as i32);
+    try assert_eq_bool(ctx_pixel(&ctx, 12, 11) == Color{ r: 37, g: 99, b: 235, a: 255 }, true);
 }

@@ -849,6 +849,16 @@ RichTextInput {
         }
     }
 
+    fn restore_focus_after_external_action(self: &Self) void {
+        if self.widget.state != WidgetState.Disabled {
+            self.widget.set_state(WidgetState.Focused);
+        }
+        self.scroll_selection_into_view();
+        self.sync_host_state();
+        self.widget.base.invalidate();
+        self.notify_format_observer();
+    }
+
     fn invalidate_caret_region(self: &Self, before_rect: Rect, before_scroll_y: i32) void {
         const area: Rect = self.widget.base.screen_area();
         const after_rect: Rect = self.current_caret_rect();
