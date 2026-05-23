@@ -203,6 +203,29 @@
         pointer-events: none;
       }
 
+      #uya-gui-overlay-canvas {
+        position: absolute;
+        inset: 0;
+        display: none;
+        pointer-events: none;
+      }
+
+      #uya-gui-ime-sink {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        border: 0;
+        margin: 0;
+        opacity: 0;
+        pointer-events: none;
+        resize: none;
+        background: transparent;
+        color: transparent;
+      }
+
       #uya-gui-view-controls {
         position: fixed;
         top: max(12px, env(safe-area-inset-top));
@@ -1442,10 +1465,11 @@
         Module.uyaGuiUpdateCanvasCss = function() {
           var canvas = Module.uyaGuiCanvas;
           var overlay = Module.uyaGuiOverlayCanvas;
+          var overlayRoot = Module.uyaGuiOverlayRoot;
           var stage = document.getElementById('uya-gui-stage');
           var root = document.getElementById('uya-gui-root');
           var viewport = document.getElementById('uya-gui-viewport');
-          if (!canvas || !overlay || !stage || !viewport) {
+          if (!canvas || !overlay || !overlayRoot || !stage || !viewport) {
             return;
           }
           Module.uyaGuiUpdateFullscreenUi();
@@ -1476,6 +1500,8 @@
           stage.style.height = stageHeight + 'px';
           canvas.style.width = cssWidth + 'px';
           canvas.style.height = cssHeight + 'px';
+          overlayRoot.style.width = cssWidth + 'px';
+          overlayRoot.style.height = cssHeight + 'px';
           overlay.style.width = cssWidth + 'px';
           overlay.style.height = cssHeight + 'px';
           Module.uyaGuiApplyViewportTransform();
@@ -1542,45 +1568,26 @@
             return 0;
           }
           var canvas = ensureStageCanvas(Module.uyaGuiCanvasId || 'uya-gui-canvas');
-          var overlay = document.getElementById('uya-gui-overlay');
+          var overlayRoot = document.getElementById('uya-gui-overlay');
+          var overlay = document.getElementById('uya-gui-overlay-canvas');
           var stage = document.getElementById('uya-gui-stage');
-          var stageShell = document.getElementById('uya-gui-stage-shell') || stage || document.body;
           var imeSink = document.getElementById('uya-gui-ime-sink');
-          if (!imeSink) {
-            imeSink = document.createElement('textarea');
-            imeSink.id = 'uya-gui-ime-sink';
-            imeSink.setAttribute('aria-hidden', 'true');
-            imeSink.setAttribute('autocomplete', 'off');
-            imeSink.setAttribute('autocorrect', 'off');
-            imeSink.setAttribute('autocapitalize', 'off');
-            imeSink.setAttribute('spellcheck', 'false');
-            imeSink.rows = 1;
-            imeSink.style.position = 'fixed';
-            imeSink.style.opacity = '0';
-            imeSink.style.pointerEvents = 'none';
-            imeSink.style.width = '1px';
-            imeSink.style.height = '1px';
-            imeSink.style.left = '0px';
-            imeSink.style.top = '0px';
-            imeSink.style.padding = '0';
-            imeSink.style.border = '0';
-            imeSink.style.margin = '0';
-            imeSink.style.resize = 'none';
-            imeSink.style.background = 'transparent';
-            imeSink.style.color = 'transparent';
-            stageShell.appendChild(imeSink);
+          if (!overlayRoot || !overlay || !imeSink) {
+            return 0;
           }
           canvas.width = width;
           canvas.height = height;
           canvas.tabIndex = 0;
           canvas.style.touchAction = 'none';
           canvas.style.overscrollBehavior = 'contain';
+          overlayRoot.style.touchAction = 'none';
           overlay.width = 0;
           overlay.height = 0;
           overlay.style.display = 'none';
           overlay.style.touchAction = 'none';
           Module.canvas = canvas;
           Module.uyaGuiCanvas = canvas;
+          Module.uyaGuiOverlayRoot = overlayRoot;
           Module.uyaGuiOverlayCanvas = overlay;
           Module.uyaGuiImeSink = imeSink;
           Module.uyaGuiScale = Math.max(scale || 1, 1);
@@ -1637,13 +1644,34 @@
             return out;
           }
 
-          function placeImeSink(clientX, clientY) {
+          function setImeSinkMode(mode) {
             if (!imeSink) {
               return;
             }
-            var fallbackRect = stage ? stage.getBoundingClientRect() : canvas.getBoundingClientRect();
-            var x = typeof clientX === 'number' && isFinite(clientX) ? clientX : (fallbackRect.left + 8);
-            var y = typeof clientY === 'number' && isFinite(clientY) ? clientY : (fallbackRect.top + 8);
+            imeSink.dataset.uyaImeMode = mode || 'idle';
+          }
+
+          function imeSinkMode() {
+            if (!imeSink || !imeSink.dataset || !imeSink.dataset.uyaImeMode) {
+              return 'idle';
+            }
+            return imeSink.dataset.uyaImeMode;
+          }
+
+          function placeImeSink(canvasX, canvasY) {
+            if (!imeSink) {
+              return;
+            }
+            var cssWidth = Math.max(Module.uyaGuiDisplayCssWidth || canvas.width || 1, 1);
+            var cssHeight = Math.max(Module.uyaGuiDisplayCssHeight || canvas.height || 1, 1);
+            var x = 8;
+            var y = 8;
+            if (typeof canvasX === 'number' && isFinite(canvasX) && canvas && canvas.width > 0) {
+              x = (canvasX / canvas.width) * cssWidth;
+            }
+            if (typeof canvasY === 'number' && isFinite(canvasY) && canvas && canvas.height > 0) {
+              y = (canvasY / canvas.height) * cssHeight;
+            }
             imeSink.style.left = Math.max(Math.round(x), 0) + 'px';
             imeSink.style.top = Math.max(Math.round(y), 0) + 'px';
           }
@@ -1739,13 +1767,45 @@
             }
           }
 
-          function focusImeSink(clientX, clientY) {
+          function resetImeSinkState(nextMode, blurSink) {
             if (!imeSink) {
               return;
             }
-            placeImeSink(clientX, clientY);
+            imeComposing = false;
+            imeCommitHandled = false;
+            imeAwaitingFinalInput = false;
+            clearImeClosingKeyGuard();
+            clearPendingPrintableKey();
+            clearImeSink();
+            imeSink.dataset.uyaRichtextActive = '0';
+            setImeSinkMode(nextMode || 'idle');
+            if (blurSink && document.activeElement === imeSink && typeof imeSink.blur === 'function') {
+              try {
+                imeSink.blur();
+              } catch (err) {
+              }
+            }
+          }
+
+          function releaseRichTextImeSink() {
+            if (!imeSink) {
+              return;
+            }
+            imeSink.dataset.uyaRichtextActive = '0';
+            if (imeSinkMode() !== 'richtext') {
+              return;
+            }
+            resetImeSinkState('idle', true);
+          }
+
+          function focusImeSink(canvasX, canvasY, mode) {
+            if (!imeSink) {
+              return;
+            }
+            placeImeSink(canvasX, canvasY);
             clearImeSink();
             clearPendingPrintableKey();
+            setImeSinkMode(mode || 'pointer');
             if (document.activeElement !== imeSink) {
               try {
                 imeSink.focus({ preventScroll: true });
@@ -1970,7 +2030,7 @@
               return;
             }
             if (!richTextSessionActive()) {
-              imeSink.dataset.uyaRichtextActive = '0';
+              releaseRichTextImeSink();
               return;
             }
             if (!Module._uya_gui_web_host_richtext_caret_x
@@ -1981,9 +2041,9 @@
             var caretX = Module._uya_gui_web_host_richtext_caret_x() | 0;
             var caretY = Module._uya_gui_web_host_richtext_caret_y() | 0;
             var caretH = Module._uya_gui_web_host_richtext_caret_h() | 0;
-            var client = clientPointFromCanvasPoint(caretX, caretY + Math.max(Math.floor(caretH / 2), 0));
-            placeImeSink(client.x, client.y);
+            placeImeSink(caretX, caretY + Math.max(Math.floor(caretH / 2), 0));
             imeSink.dataset.uyaRichtextActive = '1';
+            setImeSinkMode('richtext');
             if (document.activeElement !== imeSink) {
               try {
                 imeSink.focus({ preventScroll: true });
@@ -1995,7 +2055,7 @@
 
           canvas.addEventListener('mousedown', function(evt) {
             var p = pointFromEvent(evt.clientX, evt.clientY);
-            focusImeSink(evt.clientX, evt.clientY);
+            focusImeSink(p.x, p.y, 'pointer');
             feed(2, p.x, p.y, 0, 0, modifierBits(evt));
             evt.preventDefault();
           });
@@ -2014,7 +2074,7 @@
             }
             var touch = evt.changedTouches[0];
             var p = pointFromEvent(touch.clientX, touch.clientY);
-            focusImeSink(touch.clientX, touch.clientY);
+            focusImeSink(p.x, p.y, 'pointer');
             feed(2, p.x, p.y, 0, 0, 0);
             evt.preventDefault();
           }, { passive: false });
@@ -2217,22 +2277,12 @@
           });
           if (!Module.uyaGuiWindowBound) {
             window.addEventListener('blur', function() {
-              imeComposing = false;
-              imeCommitHandled = false;
-              imeAwaitingFinalInput = false;
-              clearImeClosingKeyGuard();
-              clearPendingPrintableKey();
-              clearImeSink();
+              resetImeSinkState('idle', true);
               feed(7, 0, 0, 0, 0, 0);
             });
             document.addEventListener('visibilitychange', function() {
               if (document.hidden) {
-                imeComposing = false;
-                imeCommitHandled = false;
-                imeAwaitingFinalInput = false;
-                clearImeClosingKeyGuard();
-                clearPendingPrintableKey();
-                clearImeSink();
+                resetImeSinkState('idle', true);
                 feed(7, 0, 0, 0, 0, 0);
               } else {
                 Module.uyaGuiUpdateCanvasCss();
@@ -2261,6 +2311,8 @@
             });
             Module.uyaGuiWindowBound = true;
           }
+          imeSink.dataset.uyaRichtextActive = '0';
+          setImeSinkMode('idle');
           canvas.__uyaGuiBound = true;
           return 1;
         };
@@ -2524,7 +2576,17 @@
         <div id="uya-gui-stage">
           <div id="uya-gui-viewport">
             <canvas id="uya-gui-canvas" tabindex="-1"></canvas>
-            <canvas id="uya-gui-overlay" tabindex="-1"></canvas>
+            <div id="uya-gui-overlay" aria-hidden="true">
+              <canvas id="uya-gui-overlay-canvas" tabindex="-1"></canvas>
+              <textarea
+                id="uya-gui-ime-sink"
+                aria-hidden="true"
+                autocomplete="off"
+                autocorrect="off"
+                autocapitalize="off"
+                spellcheck="false"
+                rows="1"></textarea>
+            </div>
           </div>
         </div>
       </div>

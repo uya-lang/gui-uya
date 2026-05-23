@@ -297,9 +297,9 @@
 
 ### TODO
 
-- [ ] 在 `gui/platform/web/shell.html` 的 overlay 内创建隐藏 `textarea`
+- [x] 在 `gui/platform/web/shell.html` 的 overlay 内创建隐藏 `textarea`
 - [x] 焦点进入时同步激活隐藏输入层
-- [ ] 焦点离开时回收隐藏输入层
+- [x] 焦点离开时回收隐藏输入层
 - [x] 同步 caret rect 到宿主
 - [x] 监听 `beforeinput`
 - [x] 监听 `input`
@@ -335,10 +335,11 @@
 
 ### TODO
 
-- [ ] 为 SDL2 添加最小 clipboard bridge
-- [ ] 评估 SDL IME caret 定位是否纳入当前版本
-- [ ] 新增 demo 页面
-- [ ] 在 `gui/sim/app.uya` 或独立 demo 中接入 `RichTextInput`
+- [x] 为 SDL2 添加最小 clipboard bridge
+- [x] 评估 SDL IME caret 定位是否纳入当前版本
+  评估结论：纳入当前版本。当前环境已提供 `SDL_SetTextInputRect`，且现有 `rich_text_host` 已暴露 caret rect，可先用最小宿主同步改善桌面 IME 候选窗定位。
+- [x] 新增 demo 页面
+- [x] 在 `gui/sim/app.uya` 或独立 demo 中接入 `RichTextInput`
 - [ ] 新增文档层单测
 - [ ] 新增布局层单测
 - [ ] 新增 HTML 序列化单测

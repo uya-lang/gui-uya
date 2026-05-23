@@ -81,6 +81,10 @@ use examples.demo_perf.perf_retained_new;
 use examples.demo_perf.perf_retained_init;
 use examples.demo_perf.render_demo_perf;
 use examples.demo_perf.render_demo_perf_retained;
+use examples.demo_richtext.RichTextRetained;
+use examples.demo_richtext.render_demo_richtext_retained_state;
+use examples.demo_richtext.richtext_retained_new;
+use examples.demo_richtext.richtext_retained_sync;
 use examples.demo_settings.SettingsRetained;
 use examples.demo_settings.settings_retained_new;
 use examples.demo_settings.settings_retained_sync;
@@ -219,7 +223,7 @@ const DASHBOARD_BUTTON_Y: i16 = 110;
 const DASHBOARD_BUTTON_W: i16 = 128;
 const DASHBOARD_BUTTON_H: i16 = 56;
 const DASHBOARD_BUTTON_STEP_Y: i16 = 66;
-const HOME_NAV_BUTTON_COUNT: i32 = 11;
+const HOME_NAV_BUTTON_COUNT: i32 = 12;
 const HOME_NAV_BUTTON_COLS: i32 = 4;
 const HOME_NAV_BUTTON_ROWS: i32 = 3;
 const HOME_NAV_BUTTON_GAP: i32 = 8;
@@ -253,6 +257,7 @@ export struct SimApp {
     perf_demo: PerfRetained,
     widgets_demo: WidgetsRetained,
     custom_demo: CustomRetained,
+    richtext_demo: RichTextRetained,
     game_page: GamePageRetained,
     novel_page: NovelPageRetained,
     doudizhu_page: DdzPageRetained,
@@ -641,6 +646,9 @@ SimApp {
         if index == 9 {
             return SimDemoKind.Custom;
         }
+        if index == 10 {
+            return SimDemoKind.RichText;
+        }
         return SimDemoKind.Doudizhu;
     }
 
@@ -676,6 +684,9 @@ SimApp {
         if index == 9 {
             return "自定义";
         }
+        if index == 10 {
+            return "富文本";
+        }
         return "斗地主";
     }
 
@@ -707,6 +718,9 @@ SimApp {
         }
         if demo == SimDemoKind.Widgets {
             return "已切到控件总览 demo";
+        }
+        if demo == SimDemoKind.RichText {
+            return "已切到富文本 demo";
         }
         if demo == SimDemoKind.Doudizhu {
             return "已切到斗地主 demo";
@@ -1065,7 +1079,15 @@ SimApp {
         if self.config.demo == SimDemoKind.Custom {
             return &self.custom_demo.tree;
         }
+        if self.config.demo == SimDemoKind.RichText {
+            return &self.richtext_demo.tree;
+        }
         return null;
+    }
+
+    fn sync_richtext_demo(self: &Self) void {
+        richtext_retained_sync(&self.richtext_demo);
+        self.richtext_demo.page.widget.at(self.current_demo_origin_x(), self.current_demo_origin_y());
     }
 
     fn sync_current_retained_demo(self: &Self) void {
@@ -1128,6 +1150,10 @@ SimApp {
                 self.custom_uppercase,
                 &self.status_text[0]
             );
+            return;
+        }
+        if self.config.demo == SimDemoKind.RichText {
+            self.sync_richtext_demo();
             return;
         }
     }
@@ -1199,6 +1225,10 @@ SimApp {
                 self.custom_uppercase,
                 &self.status_text[0]
             );
+            return;
+        }
+        if self.config.demo == SimDemoKind.RichText {
+            render_demo_richtext_retained_state(&self.richtext_demo, ctx, origin_x, origin_y);
         }
     }
 
@@ -1219,6 +1249,7 @@ SimApp {
         self.custom_gauge_cpu = 32;
         self.custom_gauge_mem = 68;
         self.custom_gauge_net = 91;
+        self.richtext_demo = richtext_retained_new();
         self.custom_input_reset();
         self.dashboard_metric = 0;
         game_retained_reset(&self.game_demo);
@@ -1667,6 +1698,12 @@ SimApp {
         if evt.event_type == EventType.Click && self.handle_standalone_back_click(evt.point()) {
             return;
         }
+        if self.config.demo == SimDemoKind.RichText {
+            self.sync_richtext_demo();
+            var working_evt: Event = evt[0];
+            _ = self.dispatcher.dispatch(working_evt, &self.richtext_demo.tree);
+            return;
+        }
         const local: Point = self.standalone_local_point(evt.point());
         if self.config.demo == SimDemoKind.Animation {
             if animation_retained_handle_touch(&self.animation_demo, evt, local) {
@@ -1888,7 +1925,8 @@ SimApp {
             || self.config.demo == SimDemoKind.Novel
             || self.config.demo == SimDemoKind.Perf
             || self.config.demo == SimDemoKind.Widgets
-            || self.config.demo == SimDemoKind.Custom;
+            || self.config.demo == SimDemoKind.Custom
+            || self.config.demo == SimDemoKind.RichText;
     }
 
     fn render_retained(self: &Self, ctx: &RenderCtx, force_full: bool) RenderFrameResult {
@@ -1965,6 +2003,10 @@ SimApp {
             if sim_demo_is_phase(self.config.demo) {
                 var working_text_evt: Event = evt[0];
                 _ = self.dispatcher.dispatch(working_text_evt, &self.tree);
+            } else if self.config.demo == SimDemoKind.RichText {
+                self.sync_richtext_demo();
+                var working_text_evt: Event = evt[0];
+                _ = self.dispatcher.dispatch(working_text_evt, &self.richtext_demo.tree);
             }
             self.refresh_input_label();
             return;
@@ -1987,6 +2029,13 @@ SimApp {
                     self.refresh_input_label();
                     return;
                 }
+            } else if self.config.demo == SimDemoKind.RichText {
+                self.sync_richtext_demo();
+                var working_key_evt: Event = evt[0];
+                if self.dispatcher.dispatch(working_key_evt, &self.richtext_demo.tree) {
+                    self.refresh_input_label();
+                    return;
+                }
             }
             self.handle_key_event(evt.key_code(), evt.event_type == EventType.KeyDown, evt.timestamp, false, key_repeat);
             return;
@@ -2003,6 +2052,10 @@ SimApp {
             _ = self.recorder.record_event(now_ms, RecorderEventKind.Hover, hover_point.x, hover_point.y, 0, 0u16, 0u16);
         }
         if !sim_demo_is_phase(self.config.demo) {
+            if self.config.demo == SimDemoKind.RichText {
+                self.sync_richtext_demo();
+                _ = self.dispatcher.process_hover(&self.richtext_demo.tree, hover_point, now_ms);
+            }
             self.refresh_input_label();
             return;
         }
@@ -2263,6 +2316,8 @@ SimApp {
                 self.switch_demo(SimDemoKind.Perf, "已切到性能 demo");
             } else if key_code == 'n' as u16 || key_code == 'N' as u16 {
                 self.switch_demo(SimDemoKind.Novel, "已切到小说 demo");
+            } else if key_code == 'e' as u16 || key_code == 'E' as u16 {
+                self.switch_demo(SimDemoKind.RichText, "已切到富文本 demo");
             } else if key_code == 'w' as u16 || key_code == 'W' as u16 {
                 self.switch_demo(SimDemoKind.Widgets, "已切到控件总览 demo");
             } else if key_code == 'k' as u16 || key_code == 'K' as u16 {
@@ -2426,6 +2481,7 @@ fn sim_app_init_defaults(app: &SimApp) void {
     app.perf_demo = perf_retained_new();
     app.widgets_demo = widgets_retained_new();
     app.custom_demo = custom_retained_new();
+    app.richtext_demo = richtext_retained_new();
     app.game_page = game_page_retained_new();
     app.novel_page = novel_page_retained_new();
     app.doudizhu_page = doudizhu_page_retained_new();

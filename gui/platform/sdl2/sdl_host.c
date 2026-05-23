@@ -1,5 +1,6 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_opengles2.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <dlfcn.h>
 #include <stdio.h>
@@ -195,11 +196,115 @@ static void *(*g_host_calloc_fn)(size_t, size_t) = NULL;
 static void *(*g_host_realloc_fn)(void *, size_t) = NULL;
 static void (*g_host_free_fn)(void *) = NULL;
 
+extern uint32_t rich_text_host_active_session(void);
+extern int16_t rich_text_host_caret_rect_x(void);
+extern int16_t rich_text_host_caret_rect_y(void);
+extern uint16_t rich_text_host_caret_rect_w(void);
+extern uint16_t rich_text_host_caret_rect_h(void);
+extern const uint8_t *rich_text_host_selection_text_ptr(void);
+extern size_t rich_text_host_selection_text_len(void);
+extern bool rich_text_host_feed_command(uint8_t kind);
+extern bool rich_text_host_feed_text_command(uint8_t kind, const uint8_t *text, size_t len);
+
+enum {
+    RICH_TEXT_HOST_CMD_PASTE_TEXT = 5,
+    RICH_TEXT_HOST_CMD_CUT = 6,
+    RICH_TEXT_HOST_CMD_COPY = 7,
+};
+
 static int uya_gui_sim_sdl_text_is_single_ascii_printable(const char *text) {
     if (text == NULL || text[0] == '\0' || text[1] != '\0') {
         return 0;
     }
     return text[0] >= 32 && text[0] <= 126;
+}
+
+static int uya_gui_sim_sdl_has_shortcut_modifier(SDL_Keymod mod) {
+    return (mod & KMOD_CTRL) != 0 || (mod & KMOD_GUI) != 0;
+}
+
+static int uya_gui_sim_sdl_handle_richtext_clipboard_shortcut(const SDL_KeyboardEvent *key) {
+    const uint8_t *selection_text = NULL;
+    size_t selection_len = 0u;
+    char *clipboard_text = NULL;
+
+    if (key == NULL || rich_text_host_active_session() == 0u || !uya_gui_sim_sdl_has_shortcut_modifier((SDL_Keymod)key->keysym.mod)) {
+        return 0;
+    }
+
+    switch (key->keysym.sym) {
+        case SDLK_c:
+            selection_text = rich_text_host_selection_text_ptr();
+            selection_len = rich_text_host_selection_text_len();
+            if (selection_text != NULL && selection_len > 0u) {
+                if (SDL_SetClipboardText((const char *)selection_text) == 0) {
+                    (void)rich_text_host_feed_command(RICH_TEXT_HOST_CMD_COPY);
+                }
+            }
+            return 1;
+        case SDLK_x:
+            selection_text = rich_text_host_selection_text_ptr();
+            selection_len = rich_text_host_selection_text_len();
+            if (selection_text != NULL && selection_len > 0u) {
+                if (SDL_SetClipboardText((const char *)selection_text) == 0) {
+                    (void)rich_text_host_feed_command(RICH_TEXT_HOST_CMD_CUT);
+                }
+            }
+            return 1;
+        case SDLK_v:
+            clipboard_text = SDL_GetClipboardText();
+            if (clipboard_text != NULL && clipboard_text[0] != '\0') {
+                (void)rich_text_host_feed_text_command(
+                    RICH_TEXT_HOST_CMD_PASTE_TEXT,
+                    (const uint8_t *)clipboard_text,
+                    strlen(clipboard_text)
+                );
+            }
+            if (clipboard_text != NULL) {
+                SDL_free(clipboard_text);
+            }
+            return 1;
+        default:
+            return 0;
+    }
+}
+
+static void uya_gui_sim_sdl_sync_text_input_rect(const UyaGuiSimDisplay *display) {
+    SDL_Rect rect = { 0, 0, 1, 1 };
+    int window_w = 0;
+    int window_h = 0;
+    int logical_w = 0;
+    int logical_h = 0;
+
+    if (display == NULL || display->window == NULL) {
+        return;
+    }
+    if (rich_text_host_active_session() == 0u) {
+        SDL_SetTextInputRect(&rect);
+        return;
+    }
+
+    rect.x = (int)rich_text_host_caret_rect_x();
+    rect.y = (int)rich_text_host_caret_rect_y();
+    logical_w = (int)rich_text_host_caret_rect_w();
+    logical_h = (int)rich_text_host_caret_rect_h();
+    rect.w = logical_w > 0 ? logical_w : 1;
+    rect.h = logical_h > 0 ? logical_h : 1;
+
+    SDL_GetWindowSize(display->window, &window_w, &window_h);
+    if (window_w > 0 && window_h > 0 && display->width > 0 && display->height > 0) {
+        rect.x = (rect.x * window_w) / display->width;
+        rect.y = (rect.y * window_h) / display->height;
+        rect.w = (rect.w * window_w + display->width - 1) / display->width;
+        rect.h = (rect.h * window_h + display->height - 1) / display->height;
+        if (rect.w < 1) {
+            rect.w = 1;
+        }
+        if (rect.h < 1) {
+            rect.h = 1;
+        }
+    }
+    SDL_SetTextInputRect(&rect);
 }
 
 static void uya_gui_sim_init_host_allocators(void) {
@@ -2170,6 +2275,7 @@ int32_t uya_gui_sim_sdl_display_present_end(void *handle) {
         uya_gui_sim_set_error("display null");
         return 0;
     }
+    uya_gui_sim_sdl_sync_text_input_rect(display);
     if (!display->pending_present) {
         return 1;
     }
@@ -2322,6 +2428,7 @@ void *uya_gui_sim_sdl_display_open(int32_t width, int32_t height, int32_t scale,
                 if (uya_gui_sim_init_gles2_pipeline(display)) {
                     g_active_display = display;
                     SDL_StartTextInput();
+                    uya_gui_sim_sdl_sync_text_input_rect(display);
                     g_last_error[0] = '\0';
                     return display;
                 }
@@ -2359,6 +2466,7 @@ void *uya_gui_sim_sdl_display_open(int32_t width, int32_t height, int32_t scale,
 
     g_active_display = display;
     SDL_StartTextInput();
+    uya_gui_sim_sdl_sync_text_input_rect(display);
     g_last_error[0] = '\0';
     return display;
 }
@@ -2390,6 +2498,7 @@ int32_t uya_gui_sim_sdl_display_present(void *handle, const uint8_t *pixels, int
         uya_gui_sim_set_error("display/pixels null");
         return 0;
     }
+    uya_gui_sim_sdl_sync_text_input_rect(display);
     if (format_tag != 2) {
         uya_gui_sim_set_error("unsupported framebuffer format (expected ARGB8888/BGRA texture)");
         return 0;
@@ -2485,6 +2594,7 @@ int32_t uya_gui_sim_sdl_poll_event(SdlHostEvent *out_evt) {
     if (g_active_display == NULL) {
         return 0;
     }
+    uya_gui_sim_sdl_sync_text_input_rect(g_active_display);
     if (evt.type == SDL_WINDOWEVENT) {
         if (evt.window.event == SDL_WINDOWEVENT_EXPOSED
             || evt.window.event == SDL_WINDOWEVENT_RESTORED
@@ -2536,6 +2646,9 @@ int32_t uya_gui_sim_sdl_poll_event(SdlHostEvent *out_evt) {
             return 1;
         }
         case SDL_KEYDOWN:
+            if (uya_gui_sim_sdl_handle_richtext_clipboard_shortcut(&evt.key) != 0) {
+                return 0;
+            }
             if (g_text_editing_active) {
                 return 0;
             }
