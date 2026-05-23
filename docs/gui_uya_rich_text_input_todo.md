@@ -2,7 +2,7 @@
 
 > 版本: v0.1.0  
 > 日期: 2026-05-23  
-> 状态: 执行中（W3）
+> 状态: W3 已完成，W4 未开始
 
 > 说明: 本文是 `RichTextInput` 控件的实施路线图，目标是在 UyaGUI 现有 `Widget` / `RenderCtx` / `platform/*` 架构上落地一个参考 Quill 的轻量富文本输入框。本文强调分阶段实施、真实验收和风险前置，不把“未来可能有”的能力当作已完成项。
 
@@ -37,7 +37,7 @@
 | 剪贴板抽象 | [ ] 缺失 | 尚无统一 clipboard bridge |
 | Web hidden textarea | [ ] 缺失 | 当前 Web 仅有 commit 文本输入 |
 | RichText widget API | [ ] 缺失 | 尚无控件对外接口 |
-| 富文本测试集 | [x] 初始基线 | 已有 document/delta/history/layout 单测 |
+| 富文本测试集 | [x] 初始基线 | 已有 document/delta/history/layout/render 单测 |
 
 ## 关键决策
 
@@ -55,7 +55,7 @@
 | W0 | 方案收口、目录与接口定稿 | 已完成 |
 | W1 | 文档树、Delta、normalize 基线 | 已完成 |
 | W2 | 选择区、编辑命令、历史记录 | 已完成 |
-| W3 | 布局与渲染 MVP | 进行中 |
+| W3 | 布局与渲染 MVP | 已完成 |
 | W4 | `RichTextInput` 控件 API 与交互 MVP | 未开始 |
 | W5 | 纯文本粘贴、HTML/Delta 导出 | 未开始 |
 | W6 | Web hidden textarea、clipboard、IME | 未开始 |
@@ -205,19 +205,19 @@
 - [x] 实现 block 测量
 - [x] 实现软换行
 - [x] 实现标题、引用、列表、代码块的基础段落样式
-- [ ] 实现选区矩形切分
-- [ ] 实现光标绘制
-- [ ] 实现 placeholder 绘制
-- [ ] 实现 block 级增量重排
-- [ ] 实现点击命中测试
-- [ ] 实现 `point -> RichPos`
+- [x] 实现选区矩形切分
+- [x] 实现光标绘制
+- [x] 实现 placeholder 绘制
+- [x] 实现 block 级增量重排
+- [x] 实现点击命中测试
+- [x] 实现 `point -> RichPos`
 
 ### 验收
 
-- [ ] 多段落内容能正确换行
-- [ ] 选区高亮覆盖范围正确
-- [ ] 光标在长文本中可定位
-- [ ] 宽度变化后布局可重新计算
+- [x] 多段落内容能正确换行
+- [x] 选区高亮覆盖范围正确
+- [x] 光标在长文本中可定位
+- [x] 宽度变化后布局可重新计算
 
 ---
 

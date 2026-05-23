@@ -2,8 +2,13 @@ use tests.test_richtext_delta;
 use tests.test_richtext_document;
 use tests.test_richtext_history;
 use tests.test_richtext_layout;
+use tests.test_richtext_render;
 
 test "richtext suite loads" {
-    const sentinel: i32 = TEST_RICHTEXT_DELTA_MODULE + TEST_RICHTEXT_DOCUMENT_MODULE + TEST_RICHTEXT_HISTORY_MODULE + TEST_RICHTEXT_LAYOUT_MODULE;
+    const sentinel: i32 = TEST_RICHTEXT_DELTA_MODULE
+        + TEST_RICHTEXT_DOCUMENT_MODULE
+        + TEST_RICHTEXT_HISTORY_MODULE
+        + TEST_RICHTEXT_LAYOUT_MODULE
+        + TEST_RICHTEXT_RENDER_MODULE;
     _ = sentinel;
 }
