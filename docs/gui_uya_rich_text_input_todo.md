@@ -2,7 +2,7 @@
 
 > 版本: v0.1.0  
 > 日期: 2026-05-23  
-> 状态: 规划中
+> 状态: 执行中（W2）
 
 > 说明: 本文是 `RichTextInput` 控件的实施路线图，目标是在 UyaGUI 现有 `Widget` / `RenderCtx` / `platform/*` 架构上落地一个参考 Quill 的轻量富文本输入框。本文强调分阶段实施、真实验收和风险前置，不把“未来可能有”的能力当作已完成项。
 
@@ -52,9 +52,9 @@
 
 | 阶段 | 目标 | 当前状态 |
 |------|------|----------|
-| W0 | 方案收口、目录与接口定稿 | 未开始 |
-| W1 | 文档树、Delta、normalize 基线 | 未开始 |
-| W2 | 选择区、编辑命令、历史记录 | 未开始 |
+| W0 | 方案收口、目录与接口定稿 | 已完成 |
+| W1 | 文档树、Delta、normalize 基线 | 已完成 |
+| W2 | 选择区、编辑命令、历史记录 | 进行中 |
 | W3 | 布局与渲染 MVP | 未开始 |
 | W4 | `RichTextInput` 控件 API 与交互 MVP | 未开始 |
 | W5 | 纯文本粘贴、HTML/Delta 导出 | 未开始 |
@@ -72,45 +72,45 @@
 
 ### TODO
 
-- [ ] 确认最终目录布局
-  - [ ] `gui/richtext/document.uya`
-  - [ ] `gui/richtext/delta.uya`
-  - [ ] `gui/richtext/selection.uya`
-  - [ ] `gui/richtext/layout.uya`
-  - [ ] `gui/richtext/render.uya`
-  - [ ] `gui/richtext/history.uya`
-  - [ ] `gui/widget/rich_text_input.uya`
-  - [ ] `gui/platform/text_host.uya`
-- [ ] 确认首版内建格式集合
-  - [ ] `bold`
-  - [ ] `italic`
-  - [ ] `underline`
-  - [ ] `strike`
-  - [ ] `inline code`
-  - [ ] `link`
-  - [ ] `paragraph`
-  - [ ] `heading1/2/3`
-  - [ ] `quote`
-  - [ ] `bullet list`
-  - [ ] `ordered list`
-  - [ ] `code block`
-- [ ] 确认首版不做的内容
-  - [ ] 图片
-  - [ ] Markdown 双向
-  - [ ] 表格
-  - [ ] 任意颜色字号
-- [ ] 确认 `RichDocument` 为真源，`RichDelta` 为变更与存储格式
-- [ ] 确认线性文档投影规则
-  - [ ] 每个 block 都带尾部 `BlockBreak`
-  - [ ] block attrs 绑定在 `BlockBreak`
-  - [ ] Delta 计数单位以线性原子为准
-- [ ] 确认 Web bridge 是否并入现有 `web_host.c`
+- [x] 确认最终目录布局
+  - [x] `gui/richtext/document.uya`
+  - [x] `gui/richtext/delta.uya`
+  - [x] `gui/richtext/selection.uya`
+  - [x] `gui/richtext/layout.uya`
+  - [x] `gui/richtext/render.uya`
+  - [x] `gui/richtext/history.uya`
+  - [x] `gui/widget/rich_text_input.uya`
+  - [x] `gui/platform/text_host.uya`
+- [x] 确认首版内建格式集合
+  - [x] `bold`
+  - [x] `italic`
+  - [x] `underline`
+  - [x] `strike`
+  - [x] `inline code`
+  - [x] `link`
+  - [x] `paragraph`
+  - [x] `heading1/2/3`
+  - [x] `quote`
+  - [x] `bullet list`
+  - [x] `ordered list`
+  - [x] `code block`
+- [x] 确认首版不做的内容
+  - [x] 图片
+  - [x] Markdown 双向
+  - [x] 表格
+  - [x] 任意颜色字号
+- [x] 确认 `RichDocument` 为真源，`RichDelta` 为变更与存储格式
+- [x] 确认线性文档投影规则
+  - [x] 每个 block 都带尾部 `BlockBreak`
+  - [x] block attrs 绑定在 `BlockBreak`
+  - [x] Delta 计数单位以线性原子为准
+- [x] 确认 Web bridge 是否并入现有 `web_host.c`
 
 ### 验收
 
-- [ ] 目录、命名、模块边界定稿
-- [ ] 文档树 vs Delta 的角色不再摇摆
-- [ ] 首版范围有明确边界
+- [x] 目录、命名、模块边界定稿
+- [x] 文档树 vs Delta 的角色不再摇摆
+- [x] 首版范围有明确边界
 
 ---
 
@@ -122,38 +122,38 @@
 
 ### TODO
 
-- [ ] 新增 `RichBlockType`
-- [ ] 新增 `RichInlineMarks`
-- [ ] 新增 `RichSpan`
-- [ ] 新增 `RichBlock`
-- [ ] 新增 `RichDocument`
-- [ ] 实现 block/span 基础增删改
-- [ ] 实现 UTF-8 安全 split/merge
-- [ ] 实现 `RichPos <-> linear_offset` 统一转换
-- [ ] 定义并实现 snapshot delta 规范
-  - [ ] snapshot 只输出 `InsertText` / `InsertBreak`
-  - [ ] snapshot 始终包含尾部 `BlockBreak`
-  - [ ] block attrs 挂在 `InsertBreak`
-- [ ] 定义并实现 patch delta 规范
-  - [ ] patch 允许 `Retain` / `Insert*` / `Delete`
-  - [ ] patch 不允许 `Toggle*` 命令型 op
-- [ ] 实现 normalize
-  - [ ] 合并相邻同样式 span
-  - [ ] 移除非法空 span
-  - [ ] 保证文档至少有一个 block
-- [ ] 新增 `RichDelta`
-- [ ] 实现 `apply_delta()`
-- [ ] 实现 `document_to_delta()`
-- [ ] 新增 plain text 导出
+- [x] 新增 `RichBlockType`
+- [x] 新增 `RichInlineMarks`
+- [x] 新增 `RichSpan`
+- [x] 新增 `RichBlock`
+- [x] 新增 `RichDocument`
+- [x] 实现 block/span 基础增删改
+- [x] 实现 UTF-8 安全 split/merge
+- [x] 实现 `RichPos <-> linear_offset` 统一转换
+- [x] 定义并实现 snapshot delta 规范
+  - [x] snapshot 只输出 `InsertText` / `InsertBreak`
+  - [x] snapshot 始终包含尾部 `BlockBreak`
+  - [x] block attrs 挂在 `InsertBreak`
+- [x] 定义并实现 patch delta 规范
+  - [x] patch 允许 `Retain` / `Insert*` / `Delete`
+  - [x] patch 不允许 `Toggle*` 命令型 op
+- [x] 实现 normalize
+  - [x] 合并相邻同样式 span
+  - [x] 移除非法空 span
+  - [x] 保证文档至少有一个 block
+- [x] 新增 `RichDelta`
+- [x] 实现 `apply_delta()`
+- [x] 实现 `document_to_delta()`
+- [x] 新增 plain text 导出
 
 ### 验收
 
-- [ ] 可以从纯文本构造基础文档
-- [ ] 可以把文档导出成 Delta
-- [ ] 可以把 Delta 回放回文档
-- [ ] 线性偏移与 block/span 位置互转结果一致
-- [ ] snapshot delta 结果稳定、可比较、无 toggle 型语义
-- [ ] 复杂 UTF-8 字符不会被截断成非法字节序列
+- [x] 可以从纯文本构造基础文档
+- [x] 可以把文档导出成 Delta
+- [x] 可以把 Delta 回放回文档
+- [x] 线性偏移与 block/span 位置互转结果一致
+- [x] snapshot delta 结果稳定、可比较、无 toggle 型语义
+- [x] 复杂 UTF-8 字符不会被截断成非法字节序列
 
 ---
 
@@ -165,12 +165,12 @@
 
 ### TODO
 
-- [ ] 新增 `RichPos`
-- [ ] 新增 `RichRange`
-- [ ] 实现选区归一化
-- [ ] 实现左右移动
+- [x] 新增 `RichPos`
+- [x] 新增 `RichRange`
+- [x] 实现选区归一化
+- [x] 实现左右移动
 - [ ] 实现上下移动
-- [ ] 实现段首段尾移动
+- [x] 实现段首段尾移动
 - [ ] 实现选区删除
 - [ ] 实现插入文本
 - [ ] 实现退格 / 前删

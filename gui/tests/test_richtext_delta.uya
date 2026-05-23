@@ -1,0 +1,107 @@
+use libc.strncmp;
+use richtext.delta.RichDelta;
+use richtext.delta.RichOpKind;
+use richtext.delta.apply_delta;
+use richtext.delta.document_to_delta;
+use richtext.delta.rich_delta_attrs_inline;
+use richtext.delta.rich_delta_attrs_none;
+use richtext.delta.rich_delta_new;
+use richtext.document.RICH_MARK_BOLD;
+use richtext.document.RichBlockType;
+use richtext.document.RichDocument;
+use richtext.document.RichInlineMarks;
+use richtext.document.rich_document_new;
+use std.testing.assert_eq_bool;
+use std.testing.assert_eq_i32;
+
+export const TEST_RICHTEXT_DELTA_MODULE: i32 = 1;
+
+test "document to delta emits stable snapshot ops" {
+    var doc: RichDocument = rich_document_new();
+    defer doc.dispose();
+
+    try doc.set_plain_text("Hi" as &const byte);
+    doc.blocks[0].block_type = RichBlockType.Quote;
+    doc.blocks[0].spans[0].marks = RichInlineMarks{
+        bits: RICH_MARK_BOLD,
+        link_ref: 0u16,
+    };
+
+    var delta: RichDelta = rich_delta_new();
+    defer delta.dispose();
+    try document_to_delta(&doc, &delta);
+
+    try assert_eq_i32(delta.op_count as i32, 2);
+    try assert_eq_i32(delta.ops[0].kind as i32, RichOpKind.InsertText as i32);
+    try assert_eq_i32(delta.ops[0].count as i32, 2);
+    try assert_eq_bool(delta.ops[0].attrs.has_inline, true);
+    try assert_eq_i32(delta.ops[0].attrs.inline_marks.bits as i32, RICH_MARK_BOLD as i32);
+    try assert_eq_bool(strncmp(delta.ops[0].text_ptr as *const byte, "Hi" as *const byte, 2usize) == 0, true);
+    try assert_eq_i32(delta.ops[1].kind as i32, RichOpKind.InsertBreak as i32);
+    try assert_eq_bool(delta.ops[1].attrs.has_block, true);
+    try assert_eq_i32(delta.ops[1].attrs.block.block_type as i32, RichBlockType.Quote as i32);
+}
+
+test "apply delta can rebuild document from snapshot delta" {
+    var source: RichDocument = rich_document_new();
+    defer source.dispose();
+    try source.set_plain_text("One\nTwo" as &const byte);
+
+    var snapshot: RichDelta = rich_delta_new();
+    defer snapshot.dispose();
+    try document_to_delta(&source, &snapshot);
+
+    var target: RichDocument = rich_document_new();
+    defer target.dispose();
+    try apply_delta(&target, &snapshot);
+
+    var out: [byte: 32] = [];
+    const written: usize = target.export_plain_text(&out[0], 32usize);
+    try assert_eq_i32(written as i32, 7);
+    try assert_eq_bool(strncmp(&out[0] as *const byte, "One\nTwo" as *const byte, 7usize) == 0, true);
+}
+
+test "patch delta can insert text after retained block break" {
+    var doc: RichDocument = rich_document_new();
+    defer doc.dispose();
+    try doc.set_plain_text("A\nB" as &const byte);
+
+    var patch: RichDelta = rich_delta_new();
+    defer patch.dispose();
+    try patch.push_retain(2u32, rich_delta_attrs_none());
+    try patch.push_insert_text("X" as &const byte, 1usize, rich_delta_attrs_none());
+    try apply_delta(&doc, &patch);
+
+    var out: [byte: 16] = [];
+    const written: usize = doc.export_plain_text(&out[0], 16usize);
+    try assert_eq_i32(written as i32, 4);
+    try assert_eq_bool(strncmp(&out[0] as *const byte, "A\nXB" as *const byte, 4usize) == 0, true);
+}
+
+test "patch delta retain attrs can rewrite inline marks without toggle ops" {
+    var doc: RichDocument = rich_document_new();
+    defer doc.dispose();
+    try doc.set_plain_text("ab" as &const byte);
+
+    var patch: RichDelta = rich_delta_new();
+    defer patch.dispose();
+    const bold: RichInlineMarks = RichInlineMarks{
+        bits: RICH_MARK_BOLD,
+        link_ref: 0u16,
+    };
+    try patch.push_retain(1u32, rich_delta_attrs_inline(bold));
+    try apply_delta(&doc, &patch);
+
+    var snapshot: RichDelta = rich_delta_new();
+    defer snapshot.dispose();
+    try document_to_delta(&doc, &snapshot);
+
+    try assert_eq_i32(snapshot.op_count as i32, 3);
+    try assert_eq_i32(snapshot.ops[0].kind as i32, RichOpKind.InsertText as i32);
+    try assert_eq_bool(snapshot.ops[0].attrs.has_inline, true);
+    try assert_eq_i32(snapshot.ops[0].attrs.inline_marks.bits as i32, RICH_MARK_BOLD as i32);
+    try assert_eq_bool(strncmp(snapshot.ops[0].text_ptr as *const byte, "a" as *const byte, 1usize) == 0, true);
+    try assert_eq_i32(snapshot.ops[1].kind as i32, RichOpKind.InsertText as i32);
+    try assert_eq_bool(snapshot.ops[1].attrs.has_inline, false);
+    try assert_eq_bool(strncmp(snapshot.ops[1].text_ptr as *const byte, "b" as *const byte, 1usize) == 0, true);
+}

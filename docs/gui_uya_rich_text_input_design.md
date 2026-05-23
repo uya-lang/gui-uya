@@ -2,7 +2,7 @@
 
 > 版本: v0.1.0  
 > 日期: 2026-05-23  
-> 状态: 方案设计（未实现）
+> 状态: W0 方案收口完成，尚未实现
 
 > 说明: 本文设计一个参考 Quill 的 `RichTextInput` 控件，目标是轻量、易用、可扩展，适合聊天回复、评论、工单描述、后台 CMS 文本域、知识库条目等大多数应用场景。控件应在 UyaGUI 现有 `Widget` / `RenderCtx` / `platform/*` 架构上增量落地，而不是引入 DOM/CSS 依赖或重量级文档编辑器。
 
@@ -147,13 +147,13 @@
 
 ### 4.2 首版不内建但预留扩展点
 
-- 文本颜色
+- 任意颜色 / 任意字号
 - 背景高亮
 - 图片
 - mention/tag
 - checklist
 - divider
-- Markdown
+- Markdown 双向导入导出
 - 粘贴保留样式
 
 ## 5. 总体架构
@@ -161,13 +161,11 @@
 ```text
 App / Form / Toolbar
   -> widget.rich_text_input.RichTextInput
-      -> richtext.editor.RichEditorCore
-          -> richtext.document.RichDocument
-          -> richtext.selection.RichSelection
-          -> richtext.history.RichHistory
-          -> richtext.layout.RichLayoutCache
-          -> richtext.command.RichCommandExecutor
-          -> richtext.serialize.{plain,delta,html}
+      -> richtext.document.RichDocument
+      -> richtext.delta.RichDelta
+      -> richtext.selection.RichSelection
+      -> richtext.history.RichHistory
+      -> richtext.layout.RichLayoutCache
       -> richtext.render.RichTextRenderer
       -> platform.text_host.IRichTextHostBridge (optional)
 
@@ -189,33 +187,23 @@ backend differences:
 
 ## 6. 目录与文件设计
 
-建议新增以下文件：
+W0 定稿后的首版目录布局如下：
 
 ```text
 gui/
   richtext/
     document.uya
     delta.uya
-    format.uya
     selection.uya
-    command.uya
     history.uya
     layout.uya
     render.uya
-    serialize_plain.uya
-    serialize_html.uya
-    normalize.uya
-    clipboard.uya
   widget/
     rich_text_input.uya
-    rich_toolbar.uya              # 可选，首版可一起落
   platform/
     text_host.uya
     web/
-      rich_text_web_host.c        # 可并入现有 web_host.c
-      rich_text_web.uya
-    sdl2/
-      rich_text_sdl.c             # 可选
+      web_host.c                  # RichText 首版桥接直接并入现有宿主
   tests/
     test_richtext_document.uya
     test_richtext_delta.uya
@@ -228,10 +216,30 @@ docs/
   gui_uya_rich_text_input_todo.md
 ```
 
-说明：
+W0 模块边界说明：
 
-- 如果希望减少新增宿主文件数量，Web 侧可以先把富文本桥并入现有 `gui/platform/web/web_host.c`。
-- `rich_toolbar.uya` 应是可选配套，而不是 `RichTextInput` 的硬依赖。
+- `gui/richtext/document.uya`
+  - 承载 `RichBlockType`、`RichInlineMarks`、`RichSpan`、`RichBlock`、`RichDocument`、normalize、plain text 导出和 `RichPos <-> linear_offset` 公共 helper。
+- `gui/richtext/delta.uya`
+  - 承载 snapshot / patch 两类 `RichDelta` 规范、`apply_delta()` 和 `document_to_delta()`。
+- `gui/richtext/selection.uya`
+  - 承载 `RichPos`、`RichRange`、选区归一化与光标移动辅助逻辑。
+- `gui/richtext/history.uya`
+  - 承载 undo / redo 栈和连续输入合并策略。
+- `gui/richtext/layout.uya`
+  - 承载 block 测量、visual line、命中测试和 block 级增量重排。
+- `gui/richtext/render.uya`
+  - 承载基于 layout cache 的绘制逻辑，不直接持有文档真源。
+- `gui/widget/rich_text_input.uya`
+  - 暴露 Widget API，承接焦点、滚动、输入事件和 `on_change` 回调。
+- `gui/platform/text_host.uya`
+  - 只暴露跨后端 `IRichTextHostBridge` 抽象，不放任何 Web / SDL2 / FB 专有实现细节。
+
+延后拆分说明：
+
+- `command`、`format`、`serialize_*`、`normalize`、`clipboard` 首版不作为额外顶层文件；它们先作为上述模块的内部类型或 helper 收敛，等实现压力真实出现后再拆分，避免在 W1 前把模块面做得过宽。
+- `rich_toolbar.uya` 是 W8 的可选配套，不是 `RichTextInput` 的首版硬依赖。
+- Web 富文本宿主桥首版明确并入现有 `gui/platform/web/web_host.c`，不新增 `rich_text_web_host.c`；这样可以复用现有 canvas / overlay 生命周期、减少一套并行宿主初始化逻辑。
 
 ---
 

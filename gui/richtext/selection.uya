@@ -1,0 +1,69 @@
+export struct RichPos {
+    block_index: u32,
+    span_index: u16,
+    utf8_offset: u32,
+    affinity: u8,
+}
+
+export struct RichRange {
+    anchor: RichPos,
+    focus: RichPos,
+}
+
+export fn rich_pos_zero() RichPos {
+    return RichPos{
+        block_index: 0u32,
+        span_index: 0u16,
+        utf8_offset: 0u32,
+        affinity: 0u8,
+    };
+}
+
+export fn rich_range_collapsed(pos: RichPos) RichRange {
+    return RichRange{
+        anchor: pos,
+        focus: pos,
+    };
+}
+
+export fn rich_pos_compare(a: RichPos, b: RichPos) i32 {
+    if a.block_index < b.block_index {
+        return -1;
+    }
+    if a.block_index > b.block_index {
+        return 1;
+    }
+    if a.span_index < b.span_index {
+        return -1;
+    }
+    if a.span_index > b.span_index {
+        return 1;
+    }
+    if a.utf8_offset < b.utf8_offset {
+        return -1;
+    }
+    if a.utf8_offset > b.utf8_offset {
+        return 1;
+    }
+    if a.affinity < b.affinity {
+        return -1;
+    }
+    if a.affinity > b.affinity {
+        return 1;
+    }
+    return 0;
+}
+
+export fn rich_range_is_collapsed(range: RichRange) bool {
+    return rich_pos_compare(range.anchor, range.focus) == 0;
+}
+
+export fn rich_range_normalized(range: RichRange) RichRange {
+    if rich_pos_compare(range.anchor, range.focus) <= 0 {
+        return range;
+    }
+    return RichRange{
+        anchor: range.focus,
+        focus: range.anchor,
+    };
+}
