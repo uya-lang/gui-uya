@@ -13,6 +13,7 @@ use render.font.Font;
 use render.font.draw_text;
 use style.StyleProp;
 use widget.base.Widget;
+use widget.base.WidgetState;
 use widget.base.WIDGET_TYPE_RICH_TOOLBAR;
 use widget.base.widget_bind_callbacks;
 use widget.base.widget_draw_surface;
@@ -93,14 +94,14 @@ export fn rich_format_registry_new() RichFormatRegistry {
         image_reserved: true,
         embed_reserved: true,
     };
-    _ = registry.register(rich_toolbar_format_spec(RichToolbarFormatKind.Bold, "B" as &const byte, RichCommandKind.ToggleBold, RICH_MARK_BOLD, RichBlockType.Paragraph));
-    _ = registry.register(rich_toolbar_format_spec(RichToolbarFormatKind.Italic, "I" as &const byte, RichCommandKind.ToggleItalic, RICH_MARK_ITALIC, RichBlockType.Paragraph));
-    _ = registry.register(rich_toolbar_format_spec(RichToolbarFormatKind.Underline, "U" as &const byte, RichCommandKind.ToggleUnderline, RICH_MARK_UNDERLINE, RichBlockType.Paragraph));
-    _ = registry.register(rich_toolbar_format_spec(RichToolbarFormatKind.Strike, "S" as &const byte, RichCommandKind.ToggleStrike, RICH_MARK_STRIKE, RichBlockType.Paragraph));
-    _ = registry.register(rich_toolbar_format_spec(RichToolbarFormatKind.InlineCode, "Code" as &const byte, RichCommandKind.ToggleInlineCode, RICH_MARK_INLINE_CODE, RichBlockType.Paragraph));
-    _ = registry.register(rich_toolbar_format_spec(RichToolbarFormatKind.Heading1, "H1" as &const byte, RichCommandKind.SetHeading1, 0u16, RichBlockType.Heading1));
-    _ = registry.register(rich_toolbar_format_spec(RichToolbarFormatKind.Quote, "Quote" as &const byte, RichCommandKind.ToggleQuote, 0u16, RichBlockType.Quote));
-    _ = registry.register(rich_toolbar_format_spec(RichToolbarFormatKind.BulletList, "List" as &const byte, RichCommandKind.ToggleBulletList, 0u16, RichBlockType.BulletItem));
+    _ = registry.register(rich_toolbar_format_spec(RichToolbarFormatKind.Bold, "粗体" as &const byte, RichCommandKind.ToggleBold, RICH_MARK_BOLD, RichBlockType.Paragraph));
+    _ = registry.register(rich_toolbar_format_spec(RichToolbarFormatKind.Italic, "斜体" as &const byte, RichCommandKind.ToggleItalic, RICH_MARK_ITALIC, RichBlockType.Paragraph));
+    _ = registry.register(rich_toolbar_format_spec(RichToolbarFormatKind.Underline, "下划线" as &const byte, RichCommandKind.ToggleUnderline, RICH_MARK_UNDERLINE, RichBlockType.Paragraph));
+    _ = registry.register(rich_toolbar_format_spec(RichToolbarFormatKind.Strike, "删除线" as &const byte, RichCommandKind.ToggleStrike, RICH_MARK_STRIKE, RichBlockType.Paragraph));
+    _ = registry.register(rich_toolbar_format_spec(RichToolbarFormatKind.InlineCode, "代码" as &const byte, RichCommandKind.ToggleInlineCode, RICH_MARK_INLINE_CODE, RichBlockType.Paragraph));
+    _ = registry.register(rich_toolbar_format_spec(RichToolbarFormatKind.Heading1, "标题" as &const byte, RichCommandKind.SetHeading1, 0u16, RichBlockType.Heading1));
+    _ = registry.register(rich_toolbar_format_spec(RichToolbarFormatKind.Quote, "引用" as &const byte, RichCommandKind.ToggleQuote, 0u16, RichBlockType.Quote));
+    _ = registry.register(rich_toolbar_format_spec(RichToolbarFormatKind.BulletList, "列表" as &const byte, RichCommandKind.ToggleBulletList, 0u16, RichBlockType.BulletItem));
     return registry;
 }
 
@@ -177,12 +178,14 @@ fn rich_toolbar_command_for_spec(spec: RichToolbarFormatSpec) RichCommand {
 
 RichToolbar {
     fn new(editor: &RichTextInput) RichToolbar {
-        var widget: Widget = widget_new("RichToolbar", WIDGET_TYPE_RICH_TOOLBAR, true, true);
+        // Toolbar clicks should not steal focus from the editor, otherwise the
+        // current selection highlight disappears even though the range still exists.
+        var widget: Widget = widget_new("RichToolbar", WIDGET_TYPE_RICH_TOOLBAR, true, false);
         widget.size(420, 38);
         widget.base.style.set_color(StyleProp.BgColor, Color{ r: 248, g: 250, b: 252, a: 255 });
         widget.base.style.set_color(StyleProp.BgHoverColor, Color{ r: 241, g: 245, b: 249, a: 255 });
         widget.base.style.set_color(StyleProp.BgPressColor, Color{ r: 219, g: 234, b: 254, a: 255 });
-        widget.base.style.set_color(StyleProp.BgFocusColor, Color{ r: 219, g: 234, b: 254, a: 255 });
+        widget.base.style.set_color(StyleProp.BgFocusColor, Color{ r: 37, g: 99, b: 235, a: 255 });
         widget.base.style.set_color(StyleProp.FgColor, Color{ r: 15, g: 23, b: 42, a: 255 });
         widget.base.style.set_color(StyleProp.BorderColor, Color{ r: 203, g: 213, b: 225, a: 255 });
         widget.base.style.set_u32(StyleProp.BorderWidth, 1u32);
@@ -272,6 +275,10 @@ RichToolbar {
         const cmd: RichCommand = rich_toolbar_command_for_spec(spec);
         const handled: bool = self.editor.exec(cmd);
         if handled {
+            if self.editor.widget.state != WidgetState.Disabled {
+                self.editor.widget.set_state(WidgetState.Focused);
+                self.editor.widget.base.invalidate();
+            }
             self.widget.base.invalidate();
         }
         return handled;
@@ -279,7 +286,7 @@ RichToolbar {
 
     fn handle_event(self: &Self, evt: &Event) bool {
         const base_handled: bool = self.widget.handle_input(evt);
-        if evt.event_type == EventType.Click || evt.event_type == EventType.Release {
+        if evt.event_type == EventType.Click {
             const point: Point = evt.point();
             const hit: i32 = self.hit_format_index(point.x, point.y);
             if hit >= 0 {
@@ -294,7 +301,9 @@ RichToolbar {
         const font: &Font = widget_font(&self.widget.base.style);
         const fg: Color = self.widget.base.style.get_color_or(StyleProp.FgColor, Color{ r: 15, g: 23, b: 42, a: 255 });
         const border: Color = self.widget.base.style.get_color_or(StyleProp.BorderColor, Color{ r: 203, g: 213, b: 225, a: 255 });
-        const active_bg: Color = self.widget.base.style.get_color_or(StyleProp.BgFocusColor, Color{ r: 219, g: 234, b: 254, a: 255 });
+        const active_bg: Color = self.widget.base.style.get_color_or(StyleProp.BgFocusColor, Color{ r: 37, g: 99, b: 235, a: 255 });
+        const active_border: Color = Color{ r: 29, g: 78, b: 216, a: 255 };
+        const active_fg: Color = WHITE;
         const inactive_bg: Color = WHITE;
         var idx: u8 = 0u8;
         while idx < self.registry.count {
@@ -302,16 +311,22 @@ RichToolbar {
             if spec.enabled {
                 const rect: Rect = self.format_rect(idx, inner);
                 var bg: Color = inactive_bg;
+                var stroke: Color = border;
+                var stroke_w: u8 = 1u8;
+                var text_color: Color = fg;
                 if self.format_active(spec) {
                     bg = active_bg;
+                    stroke = active_border;
+                    stroke_w = 2u8;
+                    text_color = active_fg;
                 }
                 ctx.fill_round_rect(rect, 6, bg);
-                ctx.draw_round_rect(rect, 6, border, 1u8);
+                ctx.draw_round_rect(rect, 6, stroke, stroke_w);
                 if spec.label_len > 0usize {
                     const text_w: u16 = widget_measure_text(spec.label, font);
                     const text_x: i16 = rect.x + ((rect.w as i32 - text_w as i32) / 2) as i16;
                     const text_y: i16 = rect.y + ((rect.h as i32 - font.glyph_height as i32) / 2) as i16;
-                    draw_text(ctx, text_x, text_y, spec.label, spec.label_len, font, fg);
+                    draw_text(ctx, text_x, text_y, spec.label, spec.label_len, font, text_color);
                 }
             }
             idx = idx + 1u8;

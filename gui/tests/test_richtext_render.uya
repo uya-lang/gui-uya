@@ -7,6 +7,10 @@ use render.ctx.ctx_pixel;
 use render.ctx.render_ctx_new;
 use render.font.Font;
 use render.font.font_system_default;
+use richtext.document.RICH_MARK_ITALIC;
+use richtext.document.RICH_MARK_INLINE_CODE;
+use richtext.document.RICH_MARK_STRIKE;
+use richtext.document.RICH_MARK_UNDERLINE;
 use richtext.document.RichDocument;
 use richtext.document.rich_document_new;
 use richtext.layout.RichLayoutCache;
@@ -107,4 +111,77 @@ test "rich text renderer draws placeholder text when asked" {
     renderer.draw_placeholder(&ctx, Rect{ x: 0, y: 0, w: 16u16, h: 16u16 }, "I" as &const byte, 1usize, &font, &white);
 
     try assert_eq_bool(ctx_pixel(&ctx, 2, 3) == white, true);
+}
+
+test "rich text renderer draws inline formatting feedback" {
+    var doc: RichDocument = rich_document_new();
+    defer doc.dispose();
+    try doc.set_plain_text("III" as &const byte);
+    doc.blocks[0].spans[0].marks.bits = RICH_MARK_UNDERLINE | RICH_MARK_STRIKE | RICH_MARK_INLINE_CODE;
+
+    var font: Font = font_system_default();
+    var layout: RichLayoutCache = rich_layout_cache_new();
+    defer layout.dispose();
+    try layout.relayout(&doc, &font, 32u16, 0u32);
+
+    var bytes: [byte: 2048] = [];
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 32, 16, 128, PixelFormat.ARGB8888));
+    const white: Color = Color{ r: 255, g: 255, b: 255, a: 255 };
+    ctx.clear(Color{ r: 0, g: 0, b: 0, a: 255 });
+
+    var renderer: RichTextRenderer = rich_text_renderer_new();
+    try renderer.draw_document(&ctx, Rect{ x: 0, y: 0, w: 32u16, h: 16u16 }, &doc, &layout, &font, &white);
+
+    const line: RichVisualLine = layout.lines[0];
+    try assert_eq_bool(ctx_pixel(&ctx, 1, line.y + 2i16) != Color{ r: 0, g: 0, b: 0, a: 255 }, true);
+    try assert_eq_bool(ctx_pixel(&ctx, 2, line.baseline + 1i16) != Color{ r: 0, g: 0, b: 0, a: 255 }, true);
+    try assert_eq_bool(ctx_pixel(&ctx, 2, line.baseline - font.height as i16 / 3i16) != Color{ r: 0, g: 0, b: 0, a: 255 }, true);
+}
+
+test "rich text renderer italic changes glyph shape not just content" {
+    var normal_doc: RichDocument = rich_document_new();
+    defer normal_doc.dispose();
+    try normal_doc.set_plain_text("hello" as &const byte);
+
+    var italic_doc: RichDocument = rich_document_new();
+    defer italic_doc.dispose();
+    try italic_doc.set_plain_text("hello" as &const byte);
+    italic_doc.blocks[0].spans[0].marks.bits = RICH_MARK_ITALIC;
+
+    var font: Font = font_system_default();
+    var normal_layout: RichLayoutCache = rich_layout_cache_new();
+    defer normal_layout.dispose();
+    try normal_layout.relayout(&normal_doc, &font, 64u16, 0u32);
+
+    var italic_layout: RichLayoutCache = rich_layout_cache_new();
+    defer italic_layout.dispose();
+    try italic_layout.relayout(&italic_doc, &font, 64u16, 0u32);
+
+    var normal_bytes: [byte: 4096] = [];
+    var normal_ctx: RenderCtx = render_ctx_new(framebuffer_new(&normal_bytes[0], 64, 16, 256, PixelFormat.ARGB8888));
+    normal_ctx.clear(Color{ r: 0, g: 0, b: 0, a: 255 });
+
+    var italic_bytes: [byte: 4096] = [];
+    var italic_ctx: RenderCtx = render_ctx_new(framebuffer_new(&italic_bytes[0], 64, 16, 256, PixelFormat.ARGB8888));
+    italic_ctx.clear(Color{ r: 0, g: 0, b: 0, a: 255 });
+
+    const white: Color = Color{ r: 255, g: 255, b: 255, a: 255 };
+    var renderer: RichTextRenderer = rich_text_renderer_new();
+    try renderer.draw_document(&normal_ctx, Rect{ x: 0, y: 0, w: 64u16, h: 16u16 }, &normal_doc, &normal_layout, &font, &white);
+    try renderer.draw_document(&italic_ctx, Rect{ x: 0, y: 0, w: 64u16, h: 16u16 }, &italic_doc, &italic_layout, &font, &white);
+
+    var diff_found: bool = false;
+    var y: i16 = 0i16;
+    while y < 16i16 && !diff_found {
+        var x: i16 = 0i16;
+        while x < 64i16 {
+            if ctx_pixel(&normal_ctx, x, y) != ctx_pixel(&italic_ctx, x, y) {
+                diff_found = true;
+                break;
+            }
+            x = x + 1i16;
+        }
+        y = y + 1i16;
+    }
+    try assert_eq_bool(diff_found, true);
 }

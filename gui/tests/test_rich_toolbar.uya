@@ -3,8 +3,17 @@ use core.event.Event;
 use core.event.EventType;
 use core.event.InputDev;
 use core.event.event_point;
+use core.event_dispatch.EventDispatcher;
+use core.event_dispatch.event_dispatcher_new;
+use core.obj.GuiObj;
+use core.obj.gui_obj_default;
+use core.obj.gui_obj_register;
+use core.obj.gui_obj_reset_registry;
+use core.obj_tree.ObjTree;
+use core.obj_tree.obj_tree_new;
 use core.point.Point;
 use core.rect.Rect;
+use libc.strncmp;
 use platform.disp.PixelFormat;
 use platform.disp.framebuffer_new;
 use render.ctx.RenderCtx;
@@ -15,6 +24,7 @@ use std.testing.assert_eq_i32;
 use style.StyleProp;
 use widget.base.WIDGET_TYPE_RICH_TOOLBAR;
 use widget.base.widget_inner_rect;
+use widget.base.widget_text_len;
 use widget.panel.Panel;
 use widget.rich_text_input.RichCommand;
 use widget.rich_text_input.RichCommandKind;
@@ -27,6 +37,40 @@ use richtext.document.RICH_MARK_BOLD;
 use richtext.document.RichBlockType;
 
 export const TEST_RICH_TOOLBAR_MODULE: i32 = 1;
+
+fn rich_toolbar_smoke_click_x(index: i32) i16 {
+    return 18i16 + (index as i16) * 50i16;
+}
+
+fn rich_toolbar_assert_click_html(index: i32, expected_html: &const byte) !void {
+    var input: RichTextInput = RichTextInput.new("" as &const byte);
+    defer input.dispose();
+    try input.set_plain_text("hello" as &const byte);
+    try assert_eq_bool(input.exec(RichCommand{
+        kind: RichCommandKind.SelectAll,
+        text_ptr: null,
+        text_len: 0usize,
+    }), true);
+
+    var toolbar: RichToolbar = RichToolbar.new(&input);
+    toolbar.widget.at(0, 0);
+    toolbar.widget.size(420, 38);
+
+    var click_evt: Event = event_point(
+        EventType.Click,
+        InputDev.Touch,
+        1,
+        (index as! u32).value + 1u32,
+        Point{ x: rich_toolbar_smoke_click_x(index), y: 18i16 },
+    );
+    try assert_eq_bool(toolbar.handle_event(&click_evt), true);
+
+    var html: [byte: 128] = [];
+    const written: usize = input.export_html(&html[0], 128usize);
+    const expected_len: usize = widget_text_len(expected_html);
+    try assert_eq_i32(written as i32, expected_len as i32);
+    try assert_eq_bool(strncmp(&html[0] as *const byte, expected_html as *const byte, expected_len) == 0, true);
+}
 
 test "rich toolbar drives editor marks and block formats" {
     var input: RichTextInput = RichTextInput.new("" as &const byte);
@@ -93,4 +137,131 @@ test "rich toolbar renders inside panel dispatch" {
     panel.render(&ctx);
     const inner: Rect = widget_inner_rect(&toolbar.widget);
     try assert_eq_bool(ctx_pixel(&ctx, inner.x + 2i16, inner.y + 2i16) != Color{ r: 0, g: 0, b: 0, a: 255 }, true);
+}
+
+test "rich toolbar active state tracks inline and block commands" {
+    var input: RichTextInput = RichTextInput.new("" as &const byte);
+    defer input.dispose();
+    try input.set_plain_text("hello" as &const byte);
+
+    var toolbar: RichToolbar = RichToolbar.new(&input);
+    toolbar.widget.at(0, 0);
+    toolbar.widget.size(420, 38);
+
+    try assert_eq_bool(toolbar.widget.base.style.get_color_or(StyleProp.BgFocusColor, Color{ r: 0, g: 0, b: 0, a: 0 }) == Color{ r: 37, g: 99, b: 235, a: 255 }, true);
+    try assert_eq_bool(toolbar.format_active(toolbar.registry.formats[0]), false);
+    try assert_eq_bool(toolbar.format_active(toolbar.registry.formats[5]), false);
+    try assert_eq_bool(toolbar.format_active(toolbar.registry.formats[6]), false);
+    try assert_eq_bool(toolbar.format_active(toolbar.registry.formats[7]), false);
+
+    var bold_evt: Event = event_point(EventType.Click, InputDev.Touch, 1, 100u32, Point{ x: rich_toolbar_smoke_click_x(0), y: 18i16 });
+    try assert_eq_bool(toolbar.handle_event(&bold_evt), true);
+    try assert_eq_bool(toolbar.format_active(toolbar.registry.formats[0]), true);
+
+    var h1_evt: Event = event_point(EventType.Click, InputDev.Touch, 1, 101u32, Point{ x: rich_toolbar_smoke_click_x(5), y: 18i16 });
+    try assert_eq_bool(toolbar.handle_event(&h1_evt), true);
+    try assert_eq_bool(toolbar.format_active(toolbar.registry.formats[5]), true);
+
+    var quote_evt: Event = event_point(EventType.Click, InputDev.Touch, 1, 102u32, Point{ x: rich_toolbar_smoke_click_x(6), y: 18i16 });
+    try assert_eq_bool(toolbar.handle_event(&quote_evt), true);
+    try assert_eq_bool(toolbar.format_active(toolbar.registry.formats[6]), true);
+
+    var list_evt: Event = event_point(EventType.Click, InputDev.Touch, 1, 103u32, Point{ x: rich_toolbar_smoke_click_x(7), y: 18i16 });
+    try assert_eq_bool(toolbar.handle_event(&list_evt), true);
+    try assert_eq_bool(toolbar.format_active(toolbar.registry.formats[7]), true);
+}
+
+test "rich toolbar click smoke covers every visible button" {
+    try rich_toolbar_assert_click_html(0, "<p><strong>hello</strong></p>" as &const byte);
+    try rich_toolbar_assert_click_html(1, "<p><em>hello</em></p>" as &const byte);
+    try rich_toolbar_assert_click_html(2, "<p><u>hello</u></p>" as &const byte);
+    try rich_toolbar_assert_click_html(3, "<p><s>hello</s></p>" as &const byte);
+    try rich_toolbar_assert_click_html(4, "<p><code>hello</code></p>" as &const byte);
+    try rich_toolbar_assert_click_html(5, "<h1>hello</h1>" as &const byte);
+    try rich_toolbar_assert_click_html(6, "<blockquote>hello</blockquote>" as &const byte);
+    try rich_toolbar_assert_click_html(7, "<ul><li>hello</li></ul>" as &const byte);
+}
+
+test "rich toolbar release does not toggle format a second time" {
+    var input: RichTextInput = RichTextInput.new("" as &const byte);
+    defer input.dispose();
+    try input.set_plain_text("hello" as &const byte);
+    try assert_eq_bool(input.exec(RichCommand{
+        kind: RichCommandKind.SelectAll,
+        text_ptr: null,
+        text_len: 0usize,
+    }), true);
+
+    var toolbar: RichToolbar = RichToolbar.new(&input);
+    toolbar.widget.at(0, 0);
+    toolbar.widget.size(420, 38);
+
+    var click_evt: Event = event_point(EventType.Click, InputDev.Touch, 1, 200u32, Point{ x: rich_toolbar_smoke_click_x(0), y: 18i16 });
+    var release_evt: Event = event_point(EventType.Release, InputDev.Touch, 1, 201u32, Point{ x: rich_toolbar_smoke_click_x(0), y: 18i16 });
+    try assert_eq_bool(toolbar.handle_event(&click_evt), true);
+    _ = toolbar.handle_event(&release_evt);
+
+    var html: [byte: 64] = [];
+    const written: usize = input.export_html(&html[0], 64usize);
+    const expected_html: &const byte = "<p><strong>hello</strong></p>" as &const byte;
+    const expected_len: usize = widget_text_len(expected_html);
+    try assert_eq_i32(written as i32, expected_len as i32);
+    try assert_eq_bool(strncmp(&html[0] as *const byte, expected_html as *const byte, expected_len) == 0, true);
+    try assert_eq_bool(toolbar.format_active(toolbar.registry.formats[0]), true);
+}
+
+test "rich toolbar click keeps editor focus and selection range" {
+    gui_obj_reset_registry();
+
+    var root: GuiObj = gui_obj_default();
+    root.set_area(Rect{ x: 0, y: 0, w: 480, h: 160 });
+
+    var input: RichTextInput = RichTextInput.new("" as &const byte);
+    defer input.dispose();
+    input.widget.at(0, 48);
+    input.widget.size(180, 72);
+    try input.set_plain_text("hello" as &const byte);
+
+    var toolbar: RichToolbar = RichToolbar.new(&input);
+    toolbar.widget.at(0, 0);
+    toolbar.widget.size(420, 38);
+
+    _ = gui_obj_register(0, &root);
+    _ = gui_obj_register(1, toolbar.obj());
+    _ = gui_obj_register(2, input.obj());
+
+    var tree: ObjTree = obj_tree_new();
+    tree.set_root(0, &root);
+    tree.attach(0, 1);
+    tree.attach(0, 2);
+
+    var dispatcher: EventDispatcher = event_dispatcher_new();
+    _ = dispatcher.dispatch(event_point(EventType.Press, InputDev.Touch, -1, 10u32, Point{ x: 10, y: 60 }), &tree);
+    _ = dispatcher.dispatch(event_point(EventType.Click, InputDev.Touch, -1, 11u32, Point{ x: 10, y: 60 }), &tree);
+    try assert_eq_i32(dispatcher.get_focus(), 2);
+    try assert_eq_bool(input.widget.state == WidgetState.Focused, true);
+
+    try assert_eq_bool(input.exec(RichCommand{
+        kind: RichCommandKind.SelectAll,
+        text_ptr: null,
+        text_len: 0usize,
+    }), true);
+    const anchor_before: i32 = (try input.doc.pos_to_linear_offset(input.selection().anchor)) as i32;
+    const focus_before: i32 = (try input.doc.pos_to_linear_offset(input.selection().focus)) as i32;
+
+    _ = dispatcher.dispatch(event_point(EventType.Press, InputDev.Touch, -1, 20u32, Point{ x: rich_toolbar_smoke_click_x(0), y: 18i16 }), &tree);
+    try assert_eq_i32(dispatcher.get_focus(), 2);
+
+    _ = dispatcher.dispatch(event_point(EventType.Click, InputDev.Touch, -1, 21u32, Point{ x: rich_toolbar_smoke_click_x(0), y: 18i16 }), &tree);
+    try assert_eq_i32(dispatcher.get_focus(), 2);
+    try assert_eq_bool(input.widget.state == WidgetState.Focused, true);
+    try assert_eq_i32((try input.doc.pos_to_linear_offset(input.selection().anchor)) as i32, anchor_before);
+    try assert_eq_i32((try input.doc.pos_to_linear_offset(input.selection().focus)) as i32, focus_before);
+
+    var html: [byte: 64] = [];
+    const written: usize = input.export_html(&html[0], 64usize);
+    const expected_html: &const byte = "<p><strong>hello</strong></p>" as &const byte;
+    const expected_len: usize = widget_text_len(expected_html);
+    try assert_eq_i32(written as i32, expected_len as i32);
+    try assert_eq_bool(strncmp(&html[0] as *const byte, expected_html as *const byte, expected_len) == 0, true);
 }
