@@ -138,6 +138,63 @@ fn label_line_x(label: &Label, area: Rect, line_w: i16) i16 {
     return area.x;
 }
 
+fn label_utf8_span(first: u8) usize {
+    if (first & 0x80u8) == 0u8 {
+        return 1usize;
+    }
+    if (first & 0xE0u8) == 0xC0u8 {
+        return 2usize;
+    }
+    if (first & 0xF0u8) == 0xE0u8 {
+        return 3usize;
+    }
+    if (first & 0xF8u8) == 0xF0u8 {
+        return 4usize;
+    }
+    return 1usize;
+}
+
+fn label_utf8_cont_byte(value: u8) bool {
+    return (value & 0xC0u8) == 0x80u8;
+}
+
+fn label_utf8_next_index(text: &const byte, len: usize, index: usize) usize {
+    if text == null || index >= len {
+        return len;
+    }
+    const span: usize = label_utf8_span(text[index]);
+    if span <= 1usize || index + span > len {
+        return index + 1usize;
+    }
+    var cont_idx: usize = 1usize;
+    while cont_idx < span {
+        if !label_utf8_cont_byte(text[index + cont_idx]) {
+            return index + 1usize;
+        }
+        cont_idx = cont_idx + 1usize;
+    }
+    return index + span;
+}
+
+fn label_wrap_break_after(text: &const byte, start: usize, end: usize) bool {
+    if text == null || end <= start {
+        return false;
+    }
+    if end - start != 1usize {
+        return true;
+    }
+    const ch: u8 = text[start];
+    return ch == ' ' || ch == '\t' || ch == '-' || ch == '/' || ch == ',' || ch == '.' || ch == ';' || ch == ':' || ch == '!' || ch == '?';
+}
+
+fn label_measure_slice(text: &const byte, start: usize, end: usize, font: &Font) i16 {
+    if text == null || font == null || end <= start {
+        return 0i16;
+    }
+    const slice_ptr: &const byte = @ptr_from_usize(@usize_from_ptr(text as &void) + start) as &const byte;
+    return text_width(slice_ptr, end - start, font);
+}
+
 Label {
     fn new(text: &const byte) Label {
         var widget: Widget = widget_new("Label", WIDGET_TYPE_LABEL, false, false);
@@ -201,10 +258,9 @@ Label {
 
         const font: &Font = widget_font(&self.widget.base.style);
         const inner: Rect = widget_inner_rect(&self.widget);
-        const advance: i32 = font.glyph_width as i32 + font.tracking as i32;
-        var max_chars: i32 = inner.w as i32 / advance;
-        if max_chars < 1 {
-            max_chars = 1;
+        var max_width: i32 = inner.w as i32;
+        if max_width < 1 {
+            max_width = 1;
         }
 
         self.line_count = 0;
@@ -229,30 +285,60 @@ Label {
 
         var cursor: usize = 0usize;
         while cursor < self.text_len && self.line_count < MAX_LABEL_LINES as u8 {
-            var line_len: usize = 0usize;
-            var line_width: i32 = 0;
-            while cursor + line_len < self.text_len && line_len < max_chars as usize {
-                if self.text[cursor + line_len] == '\n' {
+            if self.text[cursor] == '\n' {
+                self.lines[self.line_count as usize] = TextLine{
+                    start: cursor,
+                    len: 0usize,
+                    width: 0u16,
+                };
+                self.line_count = self.line_count + 1;
+                cursor = cursor + 1usize;
+                continue;
+            }
+
+            var scan: usize = cursor;
+            var line_end: usize = cursor;
+            var line_width: i16 = 0i16;
+            var preferred_end: usize = cursor;
+            var preferred_width: i16 = 0i16;
+
+            while scan < self.text_len {
+                if self.text[scan] == '\n' {
                     break;
                 }
-                line_len = line_len + 1usize;
-                line_width = line_width + advance;
+                const next_scan: usize = label_utf8_next_index(self.text, self.text_len, scan);
+                const next_width: i16 = label_measure_slice(self.text, cursor, next_scan, font);
+                if next_width as i32 > max_width {
+                    if preferred_end > cursor {
+                        line_end = preferred_end;
+                        line_width = preferred_width;
+                    }
+                    break;
+                }
+                line_end = next_scan;
+                line_width = next_width;
+                if label_wrap_break_after(self.text, scan, next_scan) {
+                    preferred_end = next_scan;
+                    preferred_width = next_width;
+                }
+                scan = next_scan;
             }
-            if line_len == 0usize {
-                line_len = 1usize;
-                line_width = advance;
+
+            if line_end == cursor {
+                line_end = label_utf8_next_index(self.text, self.text_len, cursor);
+                line_width = label_measure_slice(self.text, cursor, line_end, font);
             }
 
             self.lines[self.line_count as usize] = TextLine{
                 start: cursor,
-                len: line_len,
-                width: line_width as u16,
+                len: line_end - cursor,
+                width: (line_width as! u16).value,
             };
             self.line_count = self.line_count + 1;
-            if line_width > self.text_w as i32 {
-                self.text_w = line_width as u16;
+            if line_width > self.text_w as i16 {
+                self.text_w = (line_width as! u16).value;
             }
-            cursor = cursor + line_len;
+            cursor = line_end;
             if cursor < self.text_len && self.text[cursor] == '\n' {
                 cursor = cursor + 1usize;
             }

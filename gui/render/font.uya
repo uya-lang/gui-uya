@@ -3190,6 +3190,13 @@ fn resolve_glyph_for_font(font: &Font, codepoint: u32) ResolvedGlyph {
         };
     }
 
+    if font_has_codepoint(font, codepoint) {
+        return ResolvedGlyph{
+            font: font,
+            glyph: font.get_glyph(codepoint),
+        };
+    }
+
     if font_latin_companion_candidate(font, codepoint) {
         const latin_font: &Font = font_ui_default_ref(font_runtime_height(font));
         if latin_font != null && latin_font != font && font_has_codepoint(latin_font, codepoint) {
@@ -3198,13 +3205,6 @@ fn resolve_glyph_for_font(font: &Font, codepoint: u32) ResolvedGlyph {
                 glyph: latin_font.get_glyph(codepoint),
             };
         }
-    }
-
-    if font_has_codepoint(font, codepoint) {
-        return ResolvedGlyph{
-            font: font,
-            glyph: font.get_glyph(codepoint),
-        };
     }
 
     const outline_font: &Font = system_ui_outline_fallback(font, codepoint);

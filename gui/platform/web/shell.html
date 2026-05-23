@@ -1488,8 +1488,18 @@
               cssScale = containScale;
             }
           }
-          var cssWidth = Math.max(canvas.width * cssScale, 1);
-          var cssHeight = Math.max(canvas.height * cssScale, 1);
+          var cssWidth = Math.max(Math.round(canvas.width * cssScale), 1);
+          var cssHeight = Math.max(Math.round(canvas.height * cssScale), 1);
+          var effectiveScaleX = cssWidth / Math.max(canvas.width, 1);
+          var effectiveScaleY = cssHeight / Math.max(canvas.height, 1);
+          var integerScaleX = Math.round(effectiveScaleX);
+          var integerScaleY = Math.round(effectiveScaleY);
+          var usePixelated =
+            integerScaleX >= 1 &&
+            integerScaleY >= 1 &&
+            Math.abs(effectiveScaleX - integerScaleX) <= 0.001 &&
+            Math.abs(effectiveScaleY - integerScaleY) <= 0.001;
+          var imageRendering = usePixelated ? 'pixelated' : 'auto';
           var stageWidth = (rotation & 1) ? cssHeight : cssWidth;
           var stageHeight = (rotation & 1) ? cssWidth : cssHeight;
           Module.uyaGuiDisplayCssWidth = cssWidth;
@@ -1500,10 +1510,12 @@
           stage.style.height = stageHeight + 'px';
           canvas.style.width = cssWidth + 'px';
           canvas.style.height = cssHeight + 'px';
+          canvas.style.imageRendering = imageRendering;
           overlayRoot.style.width = cssWidth + 'px';
           overlayRoot.style.height = cssHeight + 'px';
           overlay.style.width = cssWidth + 'px';
           overlay.style.height = cssHeight + 'px';
+          overlay.style.imageRendering = imageRendering;
           Module.uyaGuiApplyViewportTransform();
           Module.uyaGuiUpdateRotationUi();
         };

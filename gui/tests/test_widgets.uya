@@ -21,6 +21,7 @@ use render.font.font_ui_reset_runtime;
 use render.font.font_ui_set_dpi;
 use render.img.ImageData;
 use render.img.image_data_new;
+use richtext.document.rich_utf8_is_boundary;
 use style.StyleProp;
 use std.testing.assert_eq_bool;
 use std.testing.assert_eq_i32;
@@ -688,6 +689,33 @@ test "label relayouts when runtime font generation changes" {
 
     try assert_eq_bool(label.text_h > initial_text_h, true);
     try assert_eq_bool(label.layout_dirty, false);
+    font_ui_reset_runtime();
+}
+
+test "label wrap keeps utf8 boundaries and real widths for mixed cjk text" {
+    font_ui_reset_runtime();
+    var bytes: [byte: 24576] = [];
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 96, 64, 384, PixelFormat.ARGB8888));
+    const text: &const byte = "当前示例使用真实 RichTextInput 控件。首版 HTML 导出和宿主桥会继续在后续里程碑补强。";
+    var label: Label = Label.new(text);
+    label.widget.at(0, 0);
+    label.widget.size(220, 48);
+    label.overflow = TextOverflow.Wrap;
+    label.render(&ctx);
+
+    try assert_eq_bool(label.line_count > 1u8, true);
+
+    var total_len: usize = 0usize;
+    var idx: usize = 0usize;
+    while idx < label.line_count as usize {
+        const line_end: usize = label.lines[idx].start + label.lines[idx].len;
+        try assert_eq_bool(rich_utf8_is_boundary(text, label.text_len, label.lines[idx].start), true);
+        try assert_eq_bool(rich_utf8_is_boundary(text, label.text_len, line_end), true);
+        try assert_eq_bool(label.lines[idx].width as i32 <= widget_inner_rect(&label.widget).w as i32, true);
+        total_len = total_len + label.lines[idx].len;
+        idx = idx + 1usize;
+    }
+    try assert_eq_i32(total_len as i32, label.text_len as i32);
     font_ui_reset_runtime();
 }
 
