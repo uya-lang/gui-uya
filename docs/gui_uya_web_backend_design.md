@@ -44,7 +44,7 @@
 ## 2. 非目标
 
 - 不把 UyaGUI 直接改造成 DOM/CSS 渲染器。
-- 不在第一阶段接入浏览器专用控件、IME、文本输入法、系统剪贴板等高级能力。
+- 不在第一阶段接入浏览器专用控件、完整 IME 预编辑 UI、系统剪贴板等高级能力；当前仅支持 UTF-8 文本 commit 输入。
 - 不在第一阶段直接实现 `gpu_web.uya`、WebGL batch、OffscreenCanvas worker、多线程。
 - 不以“SDL 编到 Wasm”作为最终结构方案；SDL-to-WASM 只适合临时验证，不作为长期主线。
 

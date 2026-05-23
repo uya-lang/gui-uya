@@ -10,6 +10,7 @@ use libc.sys_write;
 export const SIM_RECORDER_CAPACITY: i32 = 1024;
 export const SIM_RECORDER_MAGIC: u32 = 0x52435955u32;
 export const SIM_RECORDER_VERSION: u16 = 1u16;
+export const RECORDER_EVENT_FLAG_KEY_REPEAT: u16 = 1u16;
 
 export error RecorderIo;
 export error RecorderFormat;
@@ -61,7 +62,7 @@ export struct SimRecorder {
         self.recording = false;
     }
 
-    fn record_event(self: &Self, frame: u32, kind: RecorderEventKind, x: i16, y: i16, value: i32, key_code: u16) bool {
+    fn record_event(self: &Self, frame: u32, kind: RecorderEventKind, x: i16, y: i16, value: i32, key_code: u16, reserved: u16) bool {
         if !self.recording || self.event_count >= SIM_RECORDER_CAPACITY as u16 {
             return false;
         }
@@ -73,7 +74,7 @@ export struct SimRecorder {
             y: y,
             value: value,
             key_code: key_code,
-            reserved: 0u16,
+            reserved: reserved,
         };
         self.event_count = self.event_count + 1u16;
         return true;
@@ -201,4 +202,11 @@ export fn sim_recorder_new() SimRecorder {
         playback_start_frame: 0u32,
         playback_cursor: 0u16,
     };
+}
+
+export fn recorded_event_is_key_repeat(evt: &RecordedEvent) bool {
+    if evt == null {
+        return false;
+    }
+    return (evt.reserved & RECORDER_EVENT_FLAG_KEY_REPEAT) != 0u16;
 }

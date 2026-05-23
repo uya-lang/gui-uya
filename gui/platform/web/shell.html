@@ -1544,6 +1544,32 @@
           var canvas = ensureStageCanvas(Module.uyaGuiCanvasId || 'uya-gui-canvas');
           var overlay = document.getElementById('uya-gui-overlay');
           var stage = document.getElementById('uya-gui-stage');
+          var stageShell = document.getElementById('uya-gui-stage-shell') || stage || document.body;
+          var imeSink = document.getElementById('uya-gui-ime-sink');
+          if (!imeSink) {
+            imeSink = document.createElement('textarea');
+            imeSink.id = 'uya-gui-ime-sink';
+            imeSink.setAttribute('aria-hidden', 'true');
+            imeSink.setAttribute('autocomplete', 'off');
+            imeSink.setAttribute('autocorrect', 'off');
+            imeSink.setAttribute('autocapitalize', 'off');
+            imeSink.setAttribute('spellcheck', 'false');
+            imeSink.rows = 1;
+            imeSink.style.position = 'fixed';
+            imeSink.style.opacity = '0';
+            imeSink.style.pointerEvents = 'none';
+            imeSink.style.width = '1px';
+            imeSink.style.height = '1px';
+            imeSink.style.left = '0px';
+            imeSink.style.top = '0px';
+            imeSink.style.padding = '0';
+            imeSink.style.border = '0';
+            imeSink.style.margin = '0';
+            imeSink.style.resize = 'none';
+            imeSink.style.background = 'transparent';
+            imeSink.style.color = 'transparent';
+            stageShell.appendChild(imeSink);
+          }
           canvas.width = width;
           canvas.height = height;
           canvas.tabIndex = 0;
@@ -1556,6 +1582,7 @@
           Module.canvas = canvas;
           Module.uyaGuiCanvas = canvas;
           Module.uyaGuiOverlayCanvas = overlay;
+          Module.uyaGuiImeSink = imeSink;
           Module.uyaGuiScale = Math.max(scale || 1, 1);
           Module.uyaGuiCtx2d = tryCreate2dContext(canvas);
           Module.uyaGuiOverlayCtx2d = null;
@@ -1580,8 +1607,94 @@
             return 1;
           }
 
+          var utf8Encoder = typeof TextEncoder !== 'undefined' ? new TextEncoder() : null;
+          var imeComposing = false;
+          var imeCommitHandled = false;
+
+          function encodeUtf8(text) {
+            if (!text) {
+              return new Uint8Array(0);
+            }
+            if (utf8Encoder) {
+              return utf8Encoder.encode(text);
+            }
+            var legacy = unescape(encodeURIComponent(text));
+            var out = new Uint8Array(legacy.length);
+            for (var i = 0; i < legacy.length; ++i) {
+              out[i] = legacy.charCodeAt(i) & 0xff;
+            }
+            return out;
+          }
+
+          function placeImeSink(clientX, clientY) {
+            if (!imeSink) {
+              return;
+            }
+            var fallbackRect = stage ? stage.getBoundingClientRect() : canvas.getBoundingClientRect();
+            var x = typeof clientX === 'number' && isFinite(clientX) ? clientX : (fallbackRect.left + 8);
+            var y = typeof clientY === 'number' && isFinite(clientY) ? clientY : (fallbackRect.top + 8);
+            imeSink.style.left = Math.max(Math.round(x), 0) + 'px';
+            imeSink.style.top = Math.max(Math.round(y), 0) + 'px';
+          }
+
+          function clearImeSink() {
+            if (!imeSink) {
+              return;
+            }
+            imeSink.value = '';
+            if (typeof imeSink.setSelectionRange === 'function') {
+              try {
+                imeSink.setSelectionRange(0, 0);
+              } catch (err) {
+              }
+            }
+          }
+
+          function focusImeSink(clientX, clientY) {
+            if (!imeSink) {
+              return;
+            }
+            placeImeSink(clientX, clientY);
+            clearImeSink();
+            if (document.activeElement !== imeSink) {
+              try {
+                imeSink.focus({ preventScroll: true });
+              } catch (err) {
+                imeSink.focus();
+              }
+            }
+          }
+
+          function isSinglePrintableAscii(text) {
+            return !!text && text.length === 1 && text.charCodeAt(0) >= 32 && text.charCodeAt(0) <= 126;
+          }
+
+          function feedTextUtf8(text, modifiers) {
+            var bytes = encodeUtf8(text);
+            var maxBytes = 96;
+            var offset = 0;
+            while (offset < bytes.length) {
+              var end = Math.min(offset + maxBytes, bytes.length);
+              while (end > offset && end < bytes.length && (bytes[end] & 0xc0) === 0x80) {
+                end -= 1;
+              }
+              if (end <= offset) {
+                end = Math.min(offset + maxBytes, bytes.length);
+              }
+              var ptr = Module._malloc(end - offset);
+              Module.HEAPU8.set(bytes.subarray(offset, end), ptr);
+              Module._uya_gui_web_host_feed_text_input(ptr, (end - offset) | 0, modifiers | 0);
+              Module._free(ptr);
+              offset = end;
+            }
+          }
+
           function mapKey(evt) {
             var key = evt && evt.key ? evt.key : '';
+            var legacyCode = evt ? ((evt.keyCode || evt.which || 0) | 0) : 0;
+            if (evt && (evt.isComposing || legacyCode === 229 || key === 'Process' || key === 'Unidentified')) {
+              return 0;
+            }
             switch (key) {
               case 'Escape': return 27;
               case 'Enter': return 13;
@@ -1596,7 +1709,10 @@
               default: break;
             }
             if (!evt.altKey && !evt.ctrlKey && !evt.metaKey && key.length === 1) {
-              return key.charCodeAt(0) & 0xffff;
+              var code = key.charCodeAt(0);
+              if (code >= 32 && code <= 126) {
+                return code & 0xffff;
+              }
             }
             return 0;
           }
@@ -1639,9 +1755,13 @@
             return (evt.altKey ? 1 : 0) | (evt.ctrlKey ? 2 : 0) | (evt.metaKey ? 4 : 0) | (evt.shiftKey ? 8 : 0);
           }
 
+          function keyModifiers(evt) {
+            return modifierBits(evt) | (evt.repeat ? 0x8000 : 0);
+          }
+
           canvas.addEventListener('mousedown', function(evt) {
             var p = pointFromEvent(evt.clientX, evt.clientY);
-            canvas.focus();
+            focusImeSink(evt.clientX, evt.clientY);
             feed(2, p.x, p.y, 0, 0, modifierBits(evt));
             evt.preventDefault();
           });
@@ -1660,7 +1780,7 @@
             }
             var touch = evt.changedTouches[0];
             var p = pointFromEvent(touch.clientX, touch.clientY);
-            canvas.focus();
+            focusImeSink(touch.clientX, touch.clientY);
             feed(2, p.x, p.y, 0, 0, 0);
             evt.preventDefault();
           }, { passive: false });
@@ -1692,15 +1812,21 @@
             feed(4, p.x, p.y, delta, 0, modifierBits(evt));
             evt.preventDefault();
           }, { passive: false });
-          canvas.addEventListener('keydown', function(evt) {
+          imeSink.addEventListener('keydown', function(evt) {
+            if (imeComposing || evt.isComposing) {
+              return;
+            }
             var mapped = mapKey(evt);
             if (!mapped) {
               return;
             }
-            feed(5, 0, 0, 0, mapped, modifierBits(evt));
+            feed(5, 0, 0, 0, mapped, keyModifiers(evt));
             evt.preventDefault();
           });
-          canvas.addEventListener('keyup', function(evt) {
+          imeSink.addEventListener('keyup', function(evt) {
+            if (imeComposing || evt.isComposing) {
+              return;
+            }
             var mapped = mapKey(evt);
             if (!mapped) {
               return;
@@ -1708,8 +1834,42 @@
             feed(6, 0, 0, 0, mapped, modifierBits(evt));
             evt.preventDefault();
           });
+          imeSink.addEventListener('compositionstart', function() {
+            imeComposing = true;
+            imeCommitHandled = false;
+          });
+          imeSink.addEventListener('compositionend', function(evt) {
+            imeComposing = false;
+            imeCommitHandled = false;
+            var text = evt && typeof evt.data === 'string' ? evt.data : '';
+            if (text && !isSinglePrintableAscii(text)) {
+              feedTextUtf8(text, modifierBits(evt));
+              imeCommitHandled = true;
+            }
+            clearImeSink();
+          });
+          imeSink.addEventListener('input', function(evt) {
+            if (imeComposing || evt.isComposing) {
+              return;
+            }
+            if (imeCommitHandled) {
+              imeCommitHandled = false;
+              clearImeSink();
+              return;
+            }
+            var text = imeSink.value || (evt && typeof evt.data === 'string' ? evt.data : '');
+            var inputType = evt && typeof evt.inputType === 'string' ? evt.inputType : '';
+            var fromPaste = inputType.indexOf('insertFromPaste') >= 0 || inputType.indexOf('insertFromDrop') >= 0;
+            if (text && (fromPaste || !isSinglePrintableAscii(text))) {
+              feedTextUtf8(text, modifierBits(evt));
+            }
+            clearImeSink();
+          });
           if (!Module.uyaGuiWindowBound) {
             window.addEventListener('blur', function() {
+              imeComposing = false;
+              imeCommitHandled = false;
+              clearImeSink();
               feed(7, 0, 0, 0, 0, 0);
             });
             document.addEventListener('visibilitychange', function() {

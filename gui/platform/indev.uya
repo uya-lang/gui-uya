@@ -6,7 +6,8 @@ use core.event.GestureConfig;
 use core.event.GestureDetector;
 use core.event.InputDev;
 use core.event.event_point;
-use core.event.event_key;
+use core.event.event_key_repeat;
+use core.event.event_text_input;
 use core.event.event_option_none;
 use core.event.event_queue_new;
 use core.event.event_value;
@@ -223,11 +224,15 @@ export struct KeyDriver : IInputDev {
     queue: EventQueue,
 
     fn feed(self: &Self, target: i32, timestamp: u32, key_code: u16, pressed: bool) void {
+        self.feed_repeat(target, timestamp, key_code, pressed, false);
+    }
+
+    fn feed_repeat(self: &Self, target: i32, timestamp: u32, key_code: u16, pressed: bool, key_repeat: bool) void {
         var event_type: EventType = EventType.KeyUp;
         if pressed {
             event_type = EventType.KeyDown;
         }
-        _ = self.queue.push(event_key(event_type, InputDev.Keypad, target, timestamp, key_code));
+        _ = self.queue.push(event_key_repeat(event_type, InputDev.Keypad, target, timestamp, key_code, key_repeat && pressed));
     }
 
     fn read(self: &Self, out_evt: &Event) bool {
@@ -237,6 +242,23 @@ export struct KeyDriver : IInputDev {
     fn dev_type(self: &Self) InputDev {
         _ = self;
         return InputDev.Keypad;
+    }
+}
+
+export struct TextDriver : IInputDev {
+    queue: EventQueue,
+
+    fn feed(self: &Self, target: i32, timestamp: u32, text: &const byte, len: usize) void {
+        _ = self.queue.push(event_text_input(InputDev.Text, target, timestamp, text, len));
+    }
+
+    fn read(self: &Self, out_evt: &Event) bool {
+        return indev_copy_queue_event(&self.queue, out_evt);
+    }
+
+    fn dev_type(self: &Self) InputDev {
+        _ = self;
+        return InputDev.Text;
     }
 }
 
@@ -419,6 +441,11 @@ export fn mouse_driver_new() MouseDriver {
 /// 创建键盘输入驱动实例。
 export fn key_driver_new() KeyDriver {
     return KeyDriver{ queue: event_queue_new() };
+}
+
+/// 创建文本输入驱动实例。
+export fn text_driver_new() TextDriver {
+    return TextDriver{ queue: event_queue_new() };
 }
 
 /// 创建编码器输入驱动实例。

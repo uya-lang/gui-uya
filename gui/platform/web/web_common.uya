@@ -1,5 +1,6 @@
 use core.point.POINT_ZERO;
 use core.point.Point;
+use core.event.EVENT_TEXT_INPUT_MAX_BYTES;
 
 export const WEB_EVT_NONE: u8 = 0u8;
 export const WEB_EVT_POINTER_MOVE: u8 = 1u8;
@@ -11,7 +12,9 @@ export const WEB_EVT_KEY_UP: u8 = 6u8;
 export const WEB_EVT_RESET_INPUT: u8 = 7u8;
 export const WEB_EVT_REFRESH: u8 = 8u8;
 export const WEB_EVT_TOUCH_CANCEL: u8 = 9u8;
+export const WEB_EVT_TEXT_INPUT: u8 = 10u8;
 export const WEB_HOST_EVENT_CAPACITY: i32 = 256;
+export const WEB_MODIFIER_KEY_REPEAT: u16 = 0x8000u16;
 
 export struct WebHostEvent {
     kind: u8,
@@ -20,6 +23,8 @@ export struct WebHostEvent {
     value: i32,
     key_code: u16,
     modifiers: u16,
+    text_len: u16,
+    text_bytes: [byte: EVENT_TEXT_INPUT_MAX_BYTES],
 }
 
 var g_web_host_events: [WebHostEvent: 256] = [];
@@ -35,6 +40,8 @@ export fn web_host_event_none() WebHostEvent {
         value: 0,
         key_code: 0u16,
         modifiers: 0u16,
+        text_len: 0u16,
+        text_bytes: [],
     };
 }
 
@@ -61,7 +68,26 @@ export fn web_feed_host_event(kind: u8, x: i16, y: i16, value: i32, key_code: u1
         value: value,
         key_code: key_code,
         modifiers: modifiers,
+        text_len: 0u16,
+        text_bytes: [],
     };
+    return web_feed_host_event_raw(&raw);
+}
+
+export fn web_feed_host_text_event(text: &const byte, len: usize, modifiers: u16) bool {
+    var raw: WebHostEvent = web_host_event_none();
+    raw.kind = WEB_EVT_TEXT_INPUT;
+    raw.modifiers = modifiers;
+    var copy_len: usize = len;
+    if copy_len > EVENT_TEXT_INPUT_MAX_BYTES as usize {
+        copy_len = EVENT_TEXT_INPUT_MAX_BYTES as usize;
+    }
+    var i: usize = 0usize;
+    while i < copy_len {
+        raw.text_bytes[i] = text[i];
+        i = i + 1usize;
+    }
+    raw.text_len = (copy_len as! u16).value;
     return web_feed_host_event_raw(&raw);
 }
 
@@ -85,4 +111,11 @@ export fn web_hover_point_default() Point {
 
 export fn web_host_event_queue_len() u16 {
     return g_web_host_count;
+}
+
+export fn web_host_event_is_key_repeat(raw: &WebHostEvent) bool {
+    if raw == null {
+        return false;
+    }
+    return (raw.modifiers & WEB_MODIFIER_KEY_REPEAT) != 0u16;
 }

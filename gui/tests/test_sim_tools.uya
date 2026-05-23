@@ -41,8 +41,8 @@ test "sim recorder saves loads and replays ordered events" {
 
     var recorder: SimRecorder = sim_recorder_new();
     recorder.start_recording(10u32);
-    try assert_eq_bool(recorder.record_event(10u32, RecorderEventKind.TouchDown, 8, 9, 1, 0u16), true);
-    try assert_eq_bool(recorder.record_event(14u32, RecorderEventKind.KeyDown, 0, 0, 0, 32u16), true);
+    try assert_eq_bool(recorder.record_event(10u32, RecorderEventKind.TouchDown, 8, 9, 1, 0u16, 0u16), true);
+    try assert_eq_bool(recorder.record_event(14u32, RecorderEventKind.KeyDown, 0, 0, 0, 32u16, 1u16), true);
     recorder.stop_recording();
     try assert_eq_i32((try recorder.save(record_path as &const byte)) as i32, 2);
 
@@ -51,6 +51,7 @@ test "sim recorder saves loads and replays ordered events" {
     try assert_eq_i32(reloaded.events[0].frame_offset as i32, 0);
     try assert_eq_i32(reloaded.events[1].frame_offset as i32, 4);
     try assert_eq_i32(reloaded.events[1].key_code as i32, 32);
+    try assert_eq_i32(reloaded.events[1].reserved as i32, 1);
     try assert_eq_i32(reloaded.events[0].kind as i32, RecorderEventKind.TouchDown as i32);
     try assert_eq_i32(reloaded.events[1].kind as i32, RecorderEventKind.KeyDown as i32);
 

@@ -10,6 +10,7 @@ use core.event.InputDev;
 use core.event.event_none;
 use core.event.event_focus;
 use core.event.event_key;
+use core.event.event_text_input;
 use core.event.event_point;
 use core.event.event_queue_new;
 use core.event.event_value;
@@ -220,12 +221,18 @@ test "event queue fills overflows and wraps after partial drain" {
 
 test "event helper payloads expose key value focus and phase fields" {
     const key_evt: Event = event_key(EventType.KeyDown, InputDev.Keypad, 7, 11u32, 66u16);
+    const text_evt: Event = event_text_input(InputDev.Text, 8, 12u32, "中文" as &const byte, 6usize);
     const value_evt: Event = event_value(EventType.ValueChange, InputDev.Encoder, 8, 12u32, -3);
     const focus_evt: Event = event_focus(EventType.FocusIn, 9, 13u32);
     const bubbled: Event = event_with_phase(key_evt, EventPhase.Bubble);
     const none_evt: Event = event_none();
 
     try assert_eq_i32(key_evt.key_code() as i32, 66);
+    try assert_eq_i32(text_evt.text_len() as i32, 6);
+    try assert_eq_bool(text_evt.dev_type == InputDev.Text, true);
+    var copied: [byte: 7] = [];
+    try assert_eq_i32(text_evt.copy_text_bytes(&copied[0], 7usize) as i32, 6);
+    try assert_eq_bool(copied[0] != 0u8, true);
     try assert_eq_i32(value_evt.value(), -3);
     try assert_eq_bool(focus_evt.dev_type == InputDev.Keypad, true);
     try assert_eq_bool(focus_evt.event_type == EventType.FocusIn, true);

@@ -38,6 +38,7 @@ typedef struct UyaGuiWebDisplay {
 } UyaGuiWebDisplay;
 
 extern bool web_feed_host_event(uint8_t kind, int16_t x, int16_t y, int32_t value, uint16_t key_code, uint16_t modifiers);
+extern bool web_feed_host_text_event(const uint8_t *text, size_t len, uint16_t modifiers);
 extern int32_t sim_web_frame(int32_t now_ms);
 extern void sim_web_shutdown(void);
 
@@ -344,6 +345,13 @@ EMSCRIPTEN_KEEPALIVE void uya_gui_web_host_feed_event(uint8_t kind, int16_t x, i
     if (kind == UYA_GUI_WEB_EVT_REFRESH && g_web_display != NULL) {
         g_web_display->refresh_requested = 1;
     }
+}
+
+EMSCRIPTEN_KEEPALIVE void uya_gui_web_host_feed_text_input(const uint8_t *text, int32_t len, uint16_t modifiers) {
+    if (text == NULL || len <= 0) {
+        return;
+    }
+    (void)web_feed_host_text_event(text, (size_t)len, modifiers);
 }
 
 void *uya_gui_web_display_open(int32_t width, int32_t height, int32_t scale, const uint8_t *title) {

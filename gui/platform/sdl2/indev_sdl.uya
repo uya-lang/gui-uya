@@ -1,15 +1,18 @@
 use core.event.Event;
+use core.event.EVENT_TEXT_INPUT_MAX_BYTES;
 use core.event.event_none;
 use core.point.POINT_ZERO;
 use core.point.Point;
 use platform.indev.IInputDev;
 use platform.indev.InputManager;
 use platform.indev.KeyDriver;
+use platform.indev.TextDriver;
 use platform.indev.TouchDriver;
 use platform.indev.EncoderDriver;
 use platform.indev.encoder_driver_new;
 use platform.indev.input_manager_new;
 use platform.indev.key_driver_new;
+use platform.indev.text_driver_new;
 use platform.indev.touch_driver_configure_pointer_precision;
 use platform.indev.touch_driver_new;
 use sim.runtime_core.IRuntimeInput;
@@ -22,6 +25,7 @@ const SDL_EVT_POINTER_UP: u8 = 4;
 const SDL_EVT_KEY_DOWN: u8 = 5;
 const SDL_EVT_KEY_UP: u8 = 6;
 const SDL_EVT_WHEEL: u8 = 7;
+const SDL_EVT_TEXT_INPUT: u8 = 8;
 
 extern fn uya_gui_sim_sdl_poll_event(out_evt: &SdlHostEvent) i32;
 extern fn uya_gui_sim_sdl_wait_event(timeout_ms: i32) i32;
@@ -33,15 +37,19 @@ export struct SdlHostEvent {
     value: i32,
     key_code: u16,
     reserved: u16,
+    text_len: u16,
+    text_bytes: [byte: EVENT_TEXT_INPUT_MAX_BYTES],
 }
 
 export struct SdlInputSystem : IRuntimeInput {
     manager: InputManager,
     touch: TouchDriver,
     key: KeyDriver,
+    text: TextDriver,
     encoder: EncoderDriver,
     touch_dev: IInputDev,
     key_dev: IInputDev,
+    text_dev: IInputDev,
     encoder_dev: IInputDev,
     quit_requested: bool,
     hover_pending: bool,
@@ -53,13 +61,16 @@ export struct SdlInputSystem : IRuntimeInput {
         touch_driver_configure_pointer_precision(&self.touch);
         var touch_iface: IInputDev = self.touch;
         var key_iface: IInputDev = self.key;
+        var text_iface: IInputDev = self.text;
         var encoder_iface: IInputDev = self.encoder;
         self.touch_dev = touch_iface;
         self.key_dev = key_iface;
+        self.text_dev = text_iface;
         self.encoder_dev = encoder_iface;
         self.manager = input_manager_new();
         _ = self.manager.attach(&self.touch_dev);
         _ = self.manager.attach(&self.key_dev);
+        _ = self.manager.attach(&self.text_dev);
         _ = self.manager.attach(&self.encoder_dev);
     }
 
@@ -72,6 +83,8 @@ export struct SdlInputSystem : IRuntimeInput {
             value: 0,
             key_code: 0u16,
             reserved: 0u16,
+            text_len: 0u16,
+            text_bytes: [],
         };
         while uya_gui_sim_sdl_poll_event(&raw) != 0 {
             pumped = pumped + 1;
@@ -104,11 +117,15 @@ export struct SdlInputSystem : IRuntimeInput {
                 continue;
             }
             if raw.kind == SDL_EVT_KEY_DOWN {
-                self.key.feed(-1, timestamp, raw.key_code, true);
+                self.key.feed_repeat(-1, timestamp, raw.key_code, true, raw.reserved != 0u16);
                 continue;
             }
             if raw.kind == SDL_EVT_KEY_UP {
                 self.key.feed(-1, timestamp, raw.key_code, false);
+                continue;
+            }
+            if raw.kind == SDL_EVT_TEXT_INPUT {
+                self.text.feed(-1, timestamp, &raw.text_bytes[0], raw.text_len as usize);
                 continue;
             }
             if raw.kind == SDL_EVT_WHEEL {
@@ -161,9 +178,11 @@ export fn sdl_input_system_new() SdlInputSystem {
         manager: input_manager_new(),
         touch: touch_driver_new(),
         key: key_driver_new(),
+        text: text_driver_new(),
         encoder: encoder_driver_new(),
         touch_dev: touch_driver_new(),
         key_dev: key_driver_new(),
+        text_dev: text_driver_new(),
         encoder_dev: encoder_driver_new(),
         quit_requested: false,
         hover_pending: false,

@@ -3,16 +3,20 @@ use core.event.Event;
 use core.event.EventType;
 use core.event.InputDev;
 use core.event.event_key;
+use core.event.event_key_repeat;
+use core.event.event_text_input;
 use core.event.event_point;
 use core.obj.gui_obj_register;
 use core.obj.gui_obj_reset_registry;
 use core.point.Point;
 use core.rect.Rect;
+use libc.strncmp;
 use platform.disp.PixelFormat;
 use platform.disp.framebuffer_new;
 use render.ctx.RenderCtx;
 use render.ctx.ctx_pixel;
 use render.ctx.render_ctx_new;
+use render.font.Font;
 use render.font.font_ui_reset_runtime;
 use render.font.font_ui_set_dpi;
 use render.img.ImageData;
@@ -25,6 +29,10 @@ use widget.base.IWidgetValueCallback;
 use widget.base.Widget;
 use widget.base.WidgetOrientation;
 use widget.base.WidgetState;
+use widget.base.widget_font;
+use widget.base.widget_inner_rect;
+use widget.base.widget_measure_text;
+use widget.base.widget_text_len;
 use widget.btn.Button;
 use widget.btn.BtnVariant;
 use widget.canvas.Canvas;
@@ -171,17 +179,65 @@ test "text input accepts printable keys and backspace while focused" {
     var input: TextInput = TextInput.new("Type");
     var focus_evt: Event = event_point(EventType.FocusIn, InputDev.Keypad, 1, 1u32, Point{ x: 0, y: 0 });
     var key_a_evt: Event = event_key(EventType.KeyDown, InputDev.Keypad, 1, 2u32, 'A' as u16);
-    var key_b_evt: Event = event_key(EventType.KeyDown, InputDev.Keypad, 1, 3u32, 'B' as u16);
-    var backspace_evt: Event = event_key(EventType.KeyDown, InputDev.Keypad, 1, 4u32, 8u16);
+    var repeat_a_evt: Event = event_key_repeat(EventType.KeyDown, InputDev.Keypad, 1, 3u32, 'A' as u16, true);
+    var key_b_evt: Event = event_key(EventType.KeyDown, InputDev.Keypad, 1, 4u32, 'B' as u16);
+    var backspace_evt: Event = event_key_repeat(EventType.KeyDown, InputDev.Keypad, 1, 5u32, 8u16, true);
 
     try assert_eq_bool(input.handle_event(&focus_evt), true);
     try assert_eq_bool(input.handle_event(&key_a_evt), true);
+    try assert_eq_bool(input.handle_event(&repeat_a_evt), true);
     try assert_eq_bool(input.handle_event(&key_b_evt), true);
     try assert_eq_bool(input.text()[0] == 'A' as byte, true);
-    try assert_eq_bool(input.text()[1] == 'B' as byte, true);
+    try assert_eq_bool(input.text()[1] == 'A' as byte, true);
+    try assert_eq_bool(input.text()[2] == 'B' as byte, true);
     try assert_eq_bool(input.handle_event(&backspace_evt), true);
     try assert_eq_bool(input.text()[0] == 'A' as byte, true);
-    try assert_eq_bool(input.text()[1] == 0u8, true);
+    try assert_eq_bool(input.text()[1] == 'A' as byte, true);
+    try assert_eq_bool(input.text()[2] == 0u8, true);
+}
+
+test "text input click repositions cursor for insertion" {
+    var input: TextInput = TextInput.new("Type");
+    input.widget.at(10, 10);
+    input.widget.size(120, 28);
+    _ = input.set_text("ABCD");
+
+    const inner: Rect = widget_inner_rect(&input.widget);
+    const font: &Font = widget_font(&input.widget.base.style);
+    const click_x: i16 = inner.x + 1i16 + widget_measure_text("AB" as &const byte, font);
+    const click_y: i16 = inner.y + inner.h as i16 / 2i16;
+    var click_evt: Event = event_point(EventType.Click, InputDev.Touch, 1, 1u32, Point{ x: click_x, y: click_y });
+    var key_evt: Event = event_key(EventType.KeyDown, InputDev.Keypad, 1, 2u32, 'X' as u16);
+
+    try assert_eq_bool(input.handle_event(&click_evt), true);
+    try assert_eq_bool(input.handle_event(&key_evt), true);
+    try assert_eq_bool(input.text()[0] == 'A' as byte, true);
+    try assert_eq_bool(input.text()[1] == 'B' as byte, true);
+    try assert_eq_bool(input.text()[2] == 'X' as byte, true);
+    try assert_eq_bool(input.text()[3] == 'C' as byte, true);
+    try assert_eq_bool(input.text()[4] == 'D' as byte, true);
+}
+
+test "text input accepts utf8 text events and codepoint editing" {
+    var input: TextInput = TextInput.new("Type");
+    var focus_evt: Event = event_point(EventType.FocusIn, InputDev.Keypad, 1, 1u32, Point{ x: 0, y: 0 });
+    var text_evt: Event = event_text_input(InputDev.Text, 1, 2u32, "中文" as &const byte, 6usize);
+    var left_evt: Event = event_key(EventType.KeyDown, InputDev.Keypad, 1, 3u32, 1000u16);
+    var insert_evt: Event = event_text_input(InputDev.Text, 1, 4u32, "X" as &const byte, 1usize);
+    var backspace_evt: Event = event_key(EventType.KeyDown, InputDev.Keypad, 1, 5u32, 8u16);
+
+    try assert_eq_bool(input.handle_event(&focus_evt), true);
+    try assert_eq_bool(input.handle_event(&text_evt), true);
+    try assert_eq_i32(widget_text_len(input.text()) as i32, 6);
+    try assert_eq_bool(input.handle_event(&backspace_evt), true);
+    try assert_eq_i32(widget_text_len(input.text()) as i32, 3);
+    try assert_eq_bool(strncmp(input.text() as *const byte, "中" as *const byte, 3usize) == 0, true);
+
+    _ = input.set_text("中文" as &const byte);
+    try assert_eq_bool(input.handle_event(&left_evt), true);
+    try assert_eq_bool(input.handle_event(&insert_evt), true);
+    try assert_eq_i32(widget_text_len(input.text()) as i32, 7);
+    try assert_eq_bool(strncmp(input.text() as *const byte, "中X文" as *const byte, 7usize) == 0, true);
 }
 
 test "list view selection and grid view children work" {

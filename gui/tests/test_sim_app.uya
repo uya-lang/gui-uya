@@ -2,6 +2,8 @@ use core.event.Event;
 use core.event.EventType;
 use core.event.InputDev;
 use core.event.event_key;
+use core.event.event_key_repeat;
+use core.event.event_text_input;
 use core.event.event_point;
 use core.color.Color;
 use core.point.Point;
@@ -205,10 +207,75 @@ test "phase page text input captures shortcut letters once focused" {
     app.handle_translated_event(&release_evt);
 
     var key_evt: Event = event_key(EventType.KeyDown, InputDev.Keypad, -1, 12u32, 'm' as u16);
+    var repeat_evt: Event = event_key_repeat(EventType.KeyDown, InputDev.Keypad, -1, 13u32, 'm' as u16, true);
     app.handle_translated_event(&key_evt);
+    app.handle_translated_event(&repeat_evt);
 
     try assert_eq_i32(app.config.demo as i32, SimDemoKind.Phase4 as i32);
     try assert_eq_bool(app.text_input.text()[0] == 'm' as byte, true);
+    try assert_eq_bool(app.text_input.text()[1] == 'm' as byte, true);
+}
+
+test "phase page text input accepts utf8 text events once focused" {
+    const app: &SimApp = sim_app_alloc();
+    try assert_eq_bool(app != null, true);
+    defer {
+        sim_app_free(app);
+    }
+
+    var cfg: SimConfig = sim_config_default();
+    cfg.demo = SimDemoKind.Phase4;
+    try assert_eq_bool(app.init(cfg), true);
+
+    const input_area: Rect = app.text_input.widget.base.screen_area();
+    const input_center: Point = Point{
+        x: input_area.x + input_area.w as i16 / 2,
+        y: input_area.y + input_area.h as i16 / 2,
+    };
+    var press_evt: Event = event_point(
+        EventType.Press,
+        InputDev.Touch,
+        -1,
+        30u32,
+        Point{ x: input_center.x, y: input_center.y }
+    );
+    var release_evt: Event = event_point(
+        EventType.Release,
+        InputDev.Touch,
+        -1,
+        31u32,
+        Point{ x: input_center.x, y: input_center.y }
+    );
+    app.handle_translated_event(&press_evt);
+    app.handle_translated_event(&release_evt);
+
+    var text_evt: Event = event_text_input(InputDev.Text, -1, 32u32, "中文" as &const byte, 6usize);
+    app.handle_translated_event(&text_evt);
+
+    try assert_eq_i32(app.config.demo as i32, SimDemoKind.Phase4 as i32);
+    try assert_eq_bool(app.text_input.text()[0] != 0u8, true);
+}
+
+test "repeated global shortcut keydown does not retrigger toggle actions" {
+    const app: &SimApp = sim_app_alloc();
+    try assert_eq_bool(app != null, true);
+    defer {
+        sim_app_free(app);
+    }
+
+    var cfg: SimConfig = sim_config_default();
+    cfg.demo = SimDemoKind.Phase4;
+    try assert_eq_bool(app.init(cfg), true);
+
+    var key_evt: Event = event_key(EventType.KeyDown, InputDev.Keypad, -1, 20u32, 'r' as u16);
+    var repeat_evt: Event = event_key_repeat(EventType.KeyDown, InputDev.Keypad, -1, 21u32, 'r' as u16, true);
+    app.handle_translated_event(&key_evt);
+    app.handle_translated_event(&repeat_evt);
+
+    try assert_eq_bool(app.recorder.recording, true);
+    try assert_eq_i32(app.recorder.event_count as i32, 1);
+    try assert_eq_i32(app.recorder.events[0].key_code as i32, 'r' as i32);
+    try assert_eq_i32(app.recorder.events[0].reserved as i32, 1);
 }
 
 test "sim app retained render repaints only affected phase widgets" {
@@ -434,7 +501,7 @@ test "standalone dashboard and 2048 demos react to touch and playback taps" {
     app.game_demo.board[0] = 2;
     app.game_demo.board[1] = 2;
 
-    app.handle_key_event(SIM_KEY_LEFT, true, 50u32, false);
+    app.handle_key_event(SIM_KEY_LEFT, true, 50u32, false, false);
     try assert_eq_i32(app.game_demo.board[0], 4);
     try assert_eq_i32(app.game_demo.score, 4);
 
@@ -602,7 +669,7 @@ test "standalone novel demo exposes 10k+ chinese text and supports scrolling" {
     try assert_eq_bool(app.novel_demo.scroll_y > scroll_before, true);
 
     try assert_eq_bool(app.novel_demo.auto_scroll, false);
-    app.handle_key_event(SIM_KEY_SPACE, true, 100u32, false);
+    app.handle_key_event(SIM_KEY_SPACE, true, 100u32, false, false);
     try assert_eq_bool(app.novel_demo.auto_scroll, true);
 }
 

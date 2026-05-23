@@ -147,9 +147,11 @@ use sim.config.sim_demo_name;
 use sim.profiler.ProfilerSnapshot;
 use sim.profiler.SimProfiler;
 use sim.profiler.sim_profiler_new;
+use sim.recorder.RECORDER_EVENT_FLAG_KEY_REPEAT;
 use sim.recorder.RecordedEvent;
 use sim.recorder.RecorderEventKind;
 use sim.recorder.SimRecorder;
+use sim.recorder.recorded_event_is_key_repeat;
 use sim.recorder.sim_recorder_new;
 use sim.screenshot.screenshot_write;
 use std.async.block_on;
@@ -1935,9 +1937,9 @@ SimApp {
     fn record_touch_edge(self: &Self, evt: &Event) void {
         const point: Point = evt.point();
         if evt.event_type == EventType.Press {
-            _ = self.recorder.record_event(evt.timestamp, RecorderEventKind.TouchDown, point.x, point.y, 0, 0u16);
+            _ = self.recorder.record_event(evt.timestamp, RecorderEventKind.TouchDown, point.x, point.y, 0, 0u16, 0u16);
         } else if evt.event_type == EventType.Release {
-            _ = self.recorder.record_event(evt.timestamp, RecorderEventKind.TouchUp, point.x, point.y, 0, 0u16);
+            _ = self.recorder.record_event(evt.timestamp, RecorderEventKind.TouchUp, point.x, point.y, 0, 0u16, 0u16);
         }
     }
 
@@ -1959,13 +1961,26 @@ SimApp {
             self.refresh_input_label();
             return;
         }
+        if evt.dev_type == InputDev.Text {
+            if sim_demo_is_phase(self.config.demo) {
+                var working_text_evt: Event = evt[0];
+                _ = self.dispatcher.dispatch(working_text_evt, &self.tree);
+            }
+            self.refresh_input_label();
+            return;
+        }
         if evt.dev_type == InputDev.Keypad {
             self.last_key = evt.key_code();
+            const key_repeat: bool = evt.is_key_repeat();
             var key_kind: RecorderEventKind = RecorderEventKind.KeyUp;
             if evt.event_type == EventType.KeyDown {
                 key_kind = RecorderEventKind.KeyDown;
             }
-            _ = self.recorder.record_event(evt.timestamp, key_kind, self.last_pointer.x, self.last_pointer.y, 0, evt.key_code());
+            var key_flags: u16 = 0u16;
+            if key_repeat {
+                key_flags = RECORDER_EVENT_FLAG_KEY_REPEAT;
+            }
+            _ = self.recorder.record_event(evt.timestamp, key_kind, self.last_pointer.x, self.last_pointer.y, 0, evt.key_code(), key_flags);
             if sim_demo_is_phase(self.config.demo) {
                 var working_key_evt: Event = evt[0];
                 if self.dispatcher.dispatch(working_key_evt, &self.tree) {
@@ -1973,7 +1988,7 @@ SimApp {
                     return;
                 }
             }
-            self.handle_key_event(evt.key_code(), evt.event_type == EventType.KeyDown, evt.timestamp, false);
+            self.handle_key_event(evt.key_code(), evt.event_type == EventType.KeyDown, evt.timestamp, false, key_repeat);
             return;
         }
         if evt.dev_type == InputDev.Encoder {
@@ -1985,7 +2000,7 @@ SimApp {
         const hover_point: Point = Point{ x: x, y: y };
         self.last_pointer = hover_point;
         if record {
-            _ = self.recorder.record_event(now_ms, RecorderEventKind.Hover, hover_point.x, hover_point.y, 0, 0u16);
+            _ = self.recorder.record_event(now_ms, RecorderEventKind.Hover, hover_point.x, hover_point.y, 0, 0u16, 0u16);
         }
         if !sim_demo_is_phase(self.config.demo) {
             self.refresh_input_label();
@@ -2019,11 +2034,11 @@ SimApp {
                 return;
             }
             if evt.kind == RecorderEventKind.KeyDown {
-                self.handle_key_event(evt.key_code, true, now_ms, false);
+                self.handle_key_event(evt.key_code, true, now_ms, false, recorded_event_is_key_repeat(evt));
                 return;
             }
             if evt.kind == RecorderEventKind.KeyUp {
-                self.handle_key_event(evt.key_code, false, now_ms, false);
+                self.handle_key_event(evt.key_code, false, now_ms, false, recorded_event_is_key_repeat(evt));
                 return;
             }
             if evt.kind == RecorderEventKind.Wheel {
@@ -2048,11 +2063,11 @@ SimApp {
             return;
         }
         if evt.kind == RecorderEventKind.KeyDown {
-            self.handle_key_event(evt.key_code, true, now_ms, false);
+            self.handle_key_event(evt.key_code, true, now_ms, false, recorded_event_is_key_repeat(evt));
             return;
         }
         if evt.kind == RecorderEventKind.KeyUp {
-            self.handle_key_event(evt.key_code, false, now_ms, false);
+            self.handle_key_event(evt.key_code, false, now_ms, false, recorded_event_is_key_repeat(evt));
             return;
         }
         if evt.kind == RecorderEventKind.Wheel {
@@ -2075,23 +2090,26 @@ SimApp {
                 }
             }
             if record {
-                _ = self.recorder.record_event(now_ms, RecorderEventKind.Wheel, self.last_pointer.x, self.last_pointer.y, delta as i32, 0u16);
+                _ = self.recorder.record_event(now_ms, RecorderEventKind.Wheel, self.last_pointer.x, self.last_pointer.y, delta as i32, 0u16, 0u16);
             }
             self.refresh_input_label();
             return;
         }
         self.slider.set_value(self.slider.get_value() + delta as i32 * 4);
         if record {
-            _ = self.recorder.record_event(now_ms, RecorderEventKind.Wheel, self.last_pointer.x, self.last_pointer.y, delta as i32, 0u16);
+            _ = self.recorder.record_event(now_ms, RecorderEventKind.Wheel, self.last_pointer.x, self.last_pointer.y, delta as i32, 0u16, 0u16);
         }
         self.refresh_input_label();
     }
 
-    fn handle_novel_key_event(self: &Self, key_code: u16) bool {
+    fn handle_novel_key_event(self: &Self, key_code: u16, key_repeat: bool) bool {
         if self.config.demo != SimDemoKind.Novel {
             return false;
         }
         if key_code == SIM_KEY_SPACE {
+            if key_repeat {
+                return true;
+            }
             novel_retained_toggle_auto_scroll(&self.novel_demo);
             if self.novel_demo.auto_scroll {
                 self.refresh_status_label("小说自动滚屏已开启");
@@ -2111,7 +2129,7 @@ SimApp {
         return false;
     }
 
-    fn handle_game_key_event(self: &Self, key_code: u16) bool {
+    fn handle_game_key_event(self: &Self, key_code: u16, key_repeat: bool) bool {
         if self.config.demo != SimDemoKind.Game {
             return false;
         }
@@ -2132,13 +2150,16 @@ SimApp {
             return true;
         }
         if key_code == SIM_KEY_SPACE || key_code == SIM_KEY_ENTER {
+            if key_repeat {
+                return true;
+            }
             game_retained_reset(&self.game_demo);
             return true;
         }
         return false;
     }
 
-    fn handle_animation_key_event(self: &Self, key_code: u16) bool {
+    fn handle_animation_key_event(self: &Self, key_code: u16, key_repeat: bool) bool {
         if self.config.demo != SimDemoKind.Animation {
             return false;
         }
@@ -2151,11 +2172,17 @@ SimApp {
             return true;
         }
         if key_code == SIM_KEY_SPACE {
+            if key_repeat {
+                return true;
+            }
             animation_retained_toggle(&self.animation_demo);
             self.standalone_anim_tick_ms = 0u32;
             return true;
         }
         if key_code == SIM_KEY_ENTER {
+            if key_repeat {
+                return true;
+            }
             animation_retained_replay(&self.animation_demo);
             self.standalone_anim_tick_ms = 0u32;
             return true;
@@ -2163,17 +2190,29 @@ SimApp {
         return false;
     }
 
-    fn handle_key_event(self: &Self, key_code: u16, pressed: bool, now_ms: u32, record: bool) void {
+    fn handle_key_event(self: &Self, key_code: u16, pressed: bool, now_ms: u32, record: bool, key_repeat: bool) void {
         self.last_key = key_code;
         if record {
             var kind: RecorderEventKind = RecorderEventKind.KeyUp;
             if pressed {
                 kind = RecorderEventKind.KeyDown;
             }
-            _ = self.recorder.record_event(now_ms, kind, self.last_pointer.x, self.last_pointer.y, 0, key_code);
+            var key_flags: u16 = 0u16;
+            if key_repeat {
+                key_flags = RECORDER_EVENT_FLAG_KEY_REPEAT;
+            }
+            _ = self.recorder.record_event(now_ms, kind, self.last_pointer.x, self.last_pointer.y, 0, key_code, key_flags);
         }
         if pressed {
-            if key_code == SIM_KEY_ESCAPE {
+            if self.handle_animation_key_event(key_code, key_repeat) {
+            } else if self.handle_game_key_event(key_code, key_repeat) {
+            } else if self.handle_novel_key_event(key_code, key_repeat) {
+            } else if key_code == SIM_KEY_LEFT || key_code == SIM_KEY_DOWN {
+                self.slider.set_value(self.slider.get_value() - 4);
+            } else if key_code == SIM_KEY_RIGHT || key_code == SIM_KEY_UP {
+                self.slider.set_value(self.slider.get_value() + 4);
+            } else if key_repeat {
+            } else if key_code == SIM_KEY_ESCAPE {
                 self.pending_exit = true;
             } else if key_code == SIM_KEY_F11 {
                 self.pending_fullscreen_toggle = true;
@@ -2230,13 +2269,6 @@ SimApp {
                 self.switch_demo(SimDemoKind.Custom, "已切到自定义控件 demo");
             } else if key_code == 'z' as u16 || key_code == 'Z' as u16 {
                 self.switch_demo(SimDemoKind.Doudizhu, "已切到斗地主 demo");
-            } else if self.handle_animation_key_event(key_code) {
-            } else if self.handle_game_key_event(key_code) {
-            } else if self.handle_novel_key_event(key_code) {
-            } else if key_code == SIM_KEY_LEFT || key_code == SIM_KEY_DOWN {
-                self.slider.set_value(self.slider.get_value() - 4);
-            } else if key_code == SIM_KEY_RIGHT || key_code == SIM_KEY_UP {
-                self.slider.set_value(self.slider.get_value() + 4);
             }
         }
         self.refresh_input_label();

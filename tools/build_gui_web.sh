@@ -346,7 +346,7 @@ declare -a LINK_CMD=(
     -sINITIAL_MEMORY="$WEB_INITIAL_MEMORY"
     -sNO_EXIT_RUNTIME=1
     -s"$EMCC_STACK_FLAG"="$WEB_STACK_SIZE"
-    -sEXPORTED_FUNCTIONS=_main,_uya_gui_web_host_feed_event
+    -sEXPORTED_FUNCTIONS=_main,_malloc,_free,_uya_gui_web_host_feed_event,_uya_gui_web_host_feed_text_input
     -lidbfs.js
     --shell-file "$SHELL_FILE"
     "${WEB_COMPAT_FLAGS[@]}"

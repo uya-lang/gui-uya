@@ -113,6 +113,8 @@ typedef struct SdlHostEvent {
     int32_t value;
     uint16_t key_code;
     uint16_t reserved;
+    uint16_t text_len;
+    uint8_t text_bytes[96];
 } SdlHostEvent;
 
 typedef struct UyaGuiRectCmd {
@@ -179,6 +181,7 @@ enum {
     SDL_EVT_KEY_DOWN = 5,
     SDL_EVT_KEY_UP = 6,
     SDL_EVT_WHEEL = 7,
+    SDL_EVT_TEXT_INPUT = 8,
 };
 
 static int g_sdl_refcount = 0;
@@ -186,10 +189,18 @@ static UyaGuiSimDisplay *g_active_display = NULL;
 static char g_last_error[256] = {0};
 static SDL_Event g_pending_event;
 static int g_has_pending_event = 0;
+static int g_text_editing_active = 0;
 static void *(*g_host_malloc_fn)(size_t) = NULL;
 static void *(*g_host_calloc_fn)(size_t, size_t) = NULL;
 static void *(*g_host_realloc_fn)(void *, size_t) = NULL;
 static void (*g_host_free_fn)(void *) = NULL;
+
+static int uya_gui_sim_sdl_text_is_single_ascii_printable(const char *text) {
+    if (text == NULL || text[0] == '\0' || text[1] != '\0') {
+        return 0;
+    }
+    return text[0] >= 32 && text[0] <= 126;
+}
 
 static void uya_gui_sim_init_host_allocators(void) {
     if (g_host_malloc_fn != NULL && g_host_calloc_fn != NULL && g_host_realloc_fn != NULL && g_host_free_fn != NULL) {
@@ -2310,6 +2321,7 @@ void *uya_gui_sim_sdl_display_open(int32_t width, int32_t height, int32_t scale,
                 (void)SDL_GL_SetSwapInterval(vsync_enabled != 0 ? 1 : 0);
                 if (uya_gui_sim_init_gles2_pipeline(display)) {
                     g_active_display = display;
+                    SDL_StartTextInput();
                     g_last_error[0] = '\0';
                     return display;
                 }
@@ -2346,6 +2358,7 @@ void *uya_gui_sim_sdl_display_open(int32_t width, int32_t height, int32_t scale,
     }
 
     g_active_display = display;
+    SDL_StartTextInput();
     g_last_error[0] = '\0';
     return display;
 }
@@ -2364,6 +2377,7 @@ void uya_gui_sim_sdl_display_close(void *handle) {
         g_sdl_refcount -= 1;
     }
     if (g_sdl_refcount == 0) {
+        SDL_StopTextInput();
         SDL_Quit();
     }
 }
@@ -2455,6 +2469,8 @@ int32_t uya_gui_sim_sdl_poll_event(SdlHostEvent *out_evt) {
     out_evt->value = 0;
     out_evt->key_code = 0;
     out_evt->reserved = 0;
+    out_evt->text_len = 0;
+    memset(out_evt->text_bytes, 0, sizeof(out_evt->text_bytes));
 
     if (g_has_pending_event != 0) {
         evt = g_pending_event;
@@ -2502,14 +2518,35 @@ int32_t uya_gui_sim_sdl_poll_event(SdlHostEvent *out_evt) {
             out_evt->kind = SDL_EVT_WHEEL;
             out_evt->value = evt.wheel.y;
             return 1;
+        case SDL_TEXTEDITING:
+            g_text_editing_active = evt.edit.text[0] != '\0';
+            return 0;
+        case SDL_TEXTINPUT: {
+            size_t text_len = strlen(evt.text.text);
+            g_text_editing_active = 0;
+            if (text_len == 0 || uya_gui_sim_sdl_text_is_single_ascii_printable(evt.text.text)) {
+                return 0;
+            }
+            if (text_len > sizeof(out_evt->text_bytes)) {
+                text_len = sizeof(out_evt->text_bytes);
+            }
+            out_evt->kind = SDL_EVT_TEXT_INPUT;
+            out_evt->text_len = (uint16_t)text_len;
+            memcpy(out_evt->text_bytes, evt.text.text, text_len);
+            return 1;
+        }
         case SDL_KEYDOWN:
-            if (evt.key.repeat != 0) {
+            if (g_text_editing_active) {
                 return 0;
             }
             out_evt->kind = SDL_EVT_KEY_DOWN;
             out_evt->key_code = (uint16_t)uya_gui_sim_keycode(evt.key.keysym.sym);
+            out_evt->reserved = (uint16_t)(evt.key.repeat != 0 ? 1 : 0);
             return 1;
         case SDL_KEYUP:
+            if (g_text_editing_active) {
+                return 0;
+            }
             out_evt->kind = SDL_EVT_KEY_UP;
             out_evt->key_code = (uint16_t)uya_gui_sim_keycode(evt.key.keysym.sym);
             return 1;
