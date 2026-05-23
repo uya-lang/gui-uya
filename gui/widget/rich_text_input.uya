@@ -211,43 +211,121 @@ fn rich_text_input_html_append_escaped(out: &byte, cap: usize, out_len: &usize, 
     return true;
 }
 
-fn rich_text_input_html_append_marks_open(out: &byte, cap: usize, out_len: &usize, marks: RichInlineMarks, allow_inline_code: bool) bool {
-    if (marks.bits & RICH_MARK_BOLD) != 0u16 && !rich_text_input_html_append_cstr(out, cap, out_len, "<strong>" as &const byte) {
+fn rich_text_input_ascii_lower(ch: byte) byte {
+    if ch >= 'A' as byte && ch <= 'Z' as byte {
+        return ch + 32u8;
+    }
+    return ch;
+}
+
+fn rich_text_input_url_prefix_ci(url: &const byte, url_len: usize, prefix: &const byte) bool {
+    if url == null || prefix == null {
         return false;
     }
-    if (marks.bits & RICH_MARK_ITALIC) != 0u16 && !rich_text_input_html_append_cstr(out, cap, out_len, "<em>" as &const byte) {
+    var prefix_len: usize = 0usize;
+    while prefix[prefix_len] != 0u8 {
+        prefix_len = prefix_len + 1usize;
+    }
+    if url_len < prefix_len {
         return false;
     }
-    if (marks.bits & RICH_MARK_UNDERLINE) != 0u16 && !rich_text_input_html_append_cstr(out, cap, out_len, "<u>" as &const byte) {
+    var idx: usize = 0usize;
+    while idx < prefix_len {
+        if rich_text_input_ascii_lower(url[idx]) != rich_text_input_ascii_lower(prefix[idx]) {
+            return false;
+        }
+        idx = idx + 1usize;
+    }
+    return true;
+}
+
+fn rich_text_input_html_url_whitelisted(url: &const byte, url_len: usize) bool {
+    if url == null || url_len == 0usize {
         return false;
     }
-    if (marks.bits & RICH_MARK_STRIKE) != 0u16 && !rich_text_input_html_append_cstr(out, cap, out_len, "<s>" as &const byte) {
+    var idx: usize = 0usize;
+    while idx < url_len {
+        const ch: byte = url[idx];
+        if ch <= 32u8 || ch == 127u8 || ch == '"' as byte || ch == 39u8 || ch == '<' as byte || ch == '>' as byte {
+            return false;
+        }
+        idx = idx + 1usize;
+    }
+    return rich_text_input_url_prefix_ci(url, url_len, "http://" as &const byte)
+        || rich_text_input_url_prefix_ci(url, url_len, "https://" as &const byte)
+        || rich_text_input_url_prefix_ci(url, url_len, "mailto:" as &const byte);
+}
+
+fn rich_text_input_html_link_allowed(doc: &RichDocument, marks: RichInlineMarks) bool {
+    if doc == null || marks.link_ref == 0u16 {
+        return false;
+    }
+    const link_url: &const byte = doc.link_ptr(marks.link_ref);
+    const link_len: usize = doc.link_len(marks.link_ref);
+    return rich_text_input_html_url_whitelisted(link_url, link_len);
+}
+
+fn rich_text_input_html_append_marks_open(out: &byte, cap: usize, out_len: &usize, doc: &RichDocument, marks: RichInlineMarks, allow_inline_code: bool) bool {
+    const mark_bits: u16 = marks.bits;
+    const mark_link_ref: u16 = marks.link_ref;
+    if rich_text_input_html_link_allowed(doc, RichInlineMarks{
+        bits: mark_bits,
+        link_ref: mark_link_ref,
+    }) {
+        if !rich_text_input_html_append_cstr(out, cap, out_len, "<a href=\"" as &const byte) {
+            return false;
+        }
+        if !rich_text_input_html_append_escaped(out, cap, out_len, doc.link_ptr(mark_link_ref), doc.link_len(mark_link_ref)) {
+            return false;
+        }
+        if !rich_text_input_html_append_cstr(out, cap, out_len, "\">" as &const byte) {
+            return false;
+        }
+    }
+    if (mark_bits & RICH_MARK_BOLD) != 0u16 && !rich_text_input_html_append_cstr(out, cap, out_len, "<strong>" as &const byte) {
+        return false;
+    }
+    if (mark_bits & RICH_MARK_ITALIC) != 0u16 && !rich_text_input_html_append_cstr(out, cap, out_len, "<em>" as &const byte) {
+        return false;
+    }
+    if (mark_bits & RICH_MARK_UNDERLINE) != 0u16 && !rich_text_input_html_append_cstr(out, cap, out_len, "<u>" as &const byte) {
+        return false;
+    }
+    if (mark_bits & RICH_MARK_STRIKE) != 0u16 && !rich_text_input_html_append_cstr(out, cap, out_len, "<s>" as &const byte) {
         return false;
     }
     if allow_inline_code
-        && (marks.bits & RICH_MARK_INLINE_CODE) != 0u16
+        && (mark_bits & RICH_MARK_INLINE_CODE) != 0u16
         && !rich_text_input_html_append_cstr(out, cap, out_len, "<code>" as &const byte) {
         return false;
     }
     return true;
 }
 
-fn rich_text_input_html_append_marks_close(out: &byte, cap: usize, out_len: &usize, marks: RichInlineMarks, allow_inline_code: bool) bool {
+fn rich_text_input_html_append_marks_close(out: &byte, cap: usize, out_len: &usize, doc: &RichDocument, marks: RichInlineMarks, allow_inline_code: bool) bool {
+    const mark_bits: u16 = marks.bits;
+    const mark_link_ref: u16 = marks.link_ref;
     if allow_inline_code
-        && (marks.bits & RICH_MARK_INLINE_CODE) != 0u16
+        && (mark_bits & RICH_MARK_INLINE_CODE) != 0u16
         && !rich_text_input_html_append_cstr(out, cap, out_len, "</code>" as &const byte) {
         return false;
     }
-    if (marks.bits & RICH_MARK_STRIKE) != 0u16 && !rich_text_input_html_append_cstr(out, cap, out_len, "</s>" as &const byte) {
+    if (mark_bits & RICH_MARK_STRIKE) != 0u16 && !rich_text_input_html_append_cstr(out, cap, out_len, "</s>" as &const byte) {
         return false;
     }
-    if (marks.bits & RICH_MARK_UNDERLINE) != 0u16 && !rich_text_input_html_append_cstr(out, cap, out_len, "</u>" as &const byte) {
+    if (mark_bits & RICH_MARK_UNDERLINE) != 0u16 && !rich_text_input_html_append_cstr(out, cap, out_len, "</u>" as &const byte) {
         return false;
     }
-    if (marks.bits & RICH_MARK_ITALIC) != 0u16 && !rich_text_input_html_append_cstr(out, cap, out_len, "</em>" as &const byte) {
+    if (mark_bits & RICH_MARK_ITALIC) != 0u16 && !rich_text_input_html_append_cstr(out, cap, out_len, "</em>" as &const byte) {
         return false;
     }
-    if (marks.bits & RICH_MARK_BOLD) != 0u16 && !rich_text_input_html_append_cstr(out, cap, out_len, "</strong>" as &const byte) {
+    if (mark_bits & RICH_MARK_BOLD) != 0u16 && !rich_text_input_html_append_cstr(out, cap, out_len, "</strong>" as &const byte) {
+        return false;
+    }
+    if rich_text_input_html_link_allowed(doc, RichInlineMarks{
+        bits: mark_bits,
+        link_ref: mark_link_ref,
+    }) && !rich_text_input_html_append_cstr(out, cap, out_len, "</a>" as &const byte) {
         return false;
     }
     return true;
@@ -267,7 +345,7 @@ fn rich_text_input_html_block_empty(block: &RichBlock) bool {
     return true;
 }
 
-fn rich_text_input_html_append_block_content(out: &byte, cap: usize, out_len: &usize, block: &RichBlock, allow_inline_code: bool) bool {
+fn rich_text_input_html_append_block_content(out: &byte, cap: usize, out_len: &usize, doc: &RichDocument, block: &RichBlock, allow_inline_code: bool) bool {
     if block == null {
         return true;
     }
@@ -278,13 +356,13 @@ fn rich_text_input_html_append_block_content(out: &byte, cap: usize, out_len: &u
     while span_idx < block.span_count {
         const span: &RichSpan = &block.spans[span_idx as usize];
         if span.text_len > 0usize {
-            if !rich_text_input_html_append_marks_open(out, cap, out_len, span.marks, allow_inline_code) {
+            if !rich_text_input_html_append_marks_open(out, cap, out_len, doc, span.marks, allow_inline_code) {
                 return false;
             }
             if !rich_text_input_html_append_escaped(out, cap, out_len, span.text_ptr as &const byte, span.text_len) {
                 return false;
             }
-            if !rich_text_input_html_append_marks_close(out, cap, out_len, span.marks, allow_inline_code) {
+            if !rich_text_input_html_append_marks_close(out, cap, out_len, doc, span.marks, allow_inline_code) {
                 return false;
             }
         }
@@ -731,7 +809,7 @@ RichTextInput {
                 if !rich_text_input_html_append_cstr(out, cap, &out_len, "<li>" as &const byte) {
                     return out_len;
                 }
-                if !rich_text_input_html_append_block_content(out, cap, &out_len, block, true) {
+                if !rich_text_input_html_append_block_content(out, cap, &out_len, &self.doc, block, true) {
                     return out_len;
                 }
                 if !rich_text_input_html_append_cstr(out, cap, &out_len, "</li>" as &const byte) {
@@ -755,7 +833,7 @@ RichTextInput {
                 if !rich_text_input_html_append_cstr(out, cap, &out_len, "<h1>" as &const byte) {
                     return out_len;
                 }
-                if !rich_text_input_html_append_block_content(out, cap, &out_len, block, true) {
+                if !rich_text_input_html_append_block_content(out, cap, &out_len, &self.doc, block, true) {
                     return out_len;
                 }
                 if !rich_text_input_html_append_cstr(out, cap, &out_len, "</h1>" as &const byte) {
@@ -765,7 +843,7 @@ RichTextInput {
                 if !rich_text_input_html_append_cstr(out, cap, &out_len, "<h2>" as &const byte) {
                     return out_len;
                 }
-                if !rich_text_input_html_append_block_content(out, cap, &out_len, block, true) {
+                if !rich_text_input_html_append_block_content(out, cap, &out_len, &self.doc, block, true) {
                     return out_len;
                 }
                 if !rich_text_input_html_append_cstr(out, cap, &out_len, "</h2>" as &const byte) {
@@ -775,7 +853,7 @@ RichTextInput {
                 if !rich_text_input_html_append_cstr(out, cap, &out_len, "<h3>" as &const byte) {
                     return out_len;
                 }
-                if !rich_text_input_html_append_block_content(out, cap, &out_len, block, true) {
+                if !rich_text_input_html_append_block_content(out, cap, &out_len, &self.doc, block, true) {
                     return out_len;
                 }
                 if !rich_text_input_html_append_cstr(out, cap, &out_len, "</h3>" as &const byte) {
@@ -785,7 +863,7 @@ RichTextInput {
                 if !rich_text_input_html_append_cstr(out, cap, &out_len, "<blockquote>" as &const byte) {
                     return out_len;
                 }
-                if !rich_text_input_html_append_block_content(out, cap, &out_len, block, true) {
+                if !rich_text_input_html_append_block_content(out, cap, &out_len, &self.doc, block, true) {
                     return out_len;
                 }
                 if !rich_text_input_html_append_cstr(out, cap, &out_len, "</blockquote>" as &const byte) {
@@ -795,7 +873,7 @@ RichTextInput {
                 if !rich_text_input_html_append_cstr(out, cap, &out_len, "<pre><code>" as &const byte) {
                     return out_len;
                 }
-                if !rich_text_input_html_append_block_content(out, cap, &out_len, block, false) {
+                if !rich_text_input_html_append_block_content(out, cap, &out_len, &self.doc, block, false) {
                     return out_len;
                 }
                 if !rich_text_input_html_append_cstr(out, cap, &out_len, "</code></pre>" as &const byte) {
@@ -805,7 +883,7 @@ RichTextInput {
                 if !rich_text_input_html_append_cstr(out, cap, &out_len, "<p>" as &const byte) {
                     return out_len;
                 }
-                if !rich_text_input_html_append_block_content(out, cap, &out_len, block, true) {
+                if !rich_text_input_html_append_block_content(out, cap, &out_len, &self.doc, block, true) {
                     return out_len;
                 }
                 if !rich_text_input_html_append_cstr(out, cap, &out_len, "</p>" as &const byte) {

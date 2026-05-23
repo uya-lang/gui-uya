@@ -273,7 +273,7 @@
 
 - [x] 实现 HTML 导出
 - [x] 受限 HTML 标签映射
-- [ ] HTML URL 白名单校验
+- [x] HTML URL 白名单校验
 - [x] 实现 plain text 粘贴
 - [x] 粘贴前统一清洗换行和制表符
 - [x] 首版仅保留文本，不保留外部 HTML 样式
@@ -340,18 +340,18 @@
   评估结论：纳入当前版本。当前环境已提供 `SDL_SetTextInputRect`，且现有 `rich_text_host` 已暴露 caret rect，可先用最小宿主同步改善桌面 IME 候选窗定位。
 - [x] 新增 demo 页面
 - [x] 在 `gui/sim/app.uya` 或独立 demo 中接入 `RichTextInput`
-- [ ] 新增文档层单测
-- [ ] 新增布局层单测
-- [ ] 新增 HTML 序列化单测
-- [ ] 新增 delta 规范化单测
-- [ ] 新增 Widget 交互单测
-- [ ] 新增 Web smoke case
+- [x] 新增文档层单测
+- [x] 新增布局层单测
+- [x] 新增 HTML 序列化单测
+- [x] 新增 delta 规范化单测
+- [x] 新增 Widget 交互单测
+- [x] 新增 Web smoke case
 
 ### 验收
 
-- [ ] demo 能实际编辑多段富文本
+- [x] demo 能实际编辑多段富文本
 - [ ] 主流程测试可在本地和 CI 跑通
-- [ ] Web smoke 至少覆盖输入、导出和一次粘贴路径
+- [x] Web smoke 至少覆盖输入、导出和一次粘贴路径
 
 ---
 

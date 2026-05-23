@@ -27,7 +27,7 @@ UYA_DASHBOARD_COMPARE_DIR ?= $(BUILD_DIR)/dashboard_compare
 UYA_DASHBOARD_COMPARE_BIN ?= $(UYA_DASHBOARD_COMPARE_DIR)/uya_dashboard_compare
 DASHBOARD_COMPARE_REPORT ?= $(BUILD_DIR)/dashboard_compare/dashboard_compare_report.md
 
-.PHONY: build test bench bench-report bench-json bench-snapshot bench-verify docs-api ci release release-artifacts clean hooks build-arm build-riscv build-esp32 sim-build sim-run sim-debug sim-headless sim-web-build sim-web-run sim-web-serve sim-web-smoke sim-web-pages text-compare lvgl-text-compare uya-dashboard-compare-build uya-dashboard-compare lvgl-dashboard-compare-build lvgl-dashboard-compare dashboard-compare dashboard-compare-report font-backend-compare demo-font-atlas ddz-openai-proxy-secrets ddz-openai-proxy-secrets-dev ddz-openai-proxy-deploy ddz-openai-proxy-deploy-dev
+.PHONY: build test bench bench-report bench-json bench-snapshot bench-verify docs-api ci release release-artifacts clean hooks build-arm build-riscv build-esp32 sim-build sim-run sim-debug sim-headless sim-web-build sim-web-run sim-web-serve sim-web-smoke sim-web-richtext-smoke sim-web-pages text-compare lvgl-text-compare uya-dashboard-compare-build uya-dashboard-compare lvgl-dashboard-compare-build lvgl-dashboard-compare dashboard-compare dashboard-compare-report font-backend-compare demo-font-atlas ddz-openai-proxy-secrets ddz-openai-proxy-secrets-dev ddz-openai-proxy-deploy ddz-openai-proxy-deploy-dev
 
 SIM_BUILD_DIR ?= $(BUILD_DIR)/sim
 SIM_BIN ?= $(SIM_BUILD_DIR)/gui_uya_sim
@@ -228,6 +228,15 @@ sim-web-serve:
 
 sim-web-smoke: sim-web-build
 	@BUILD_DIR=$(abspath $(SIM_WEB_BUILD_DIR)) SMOKE_EXPECT_BITMAP_READY_AT_LEAST=1 SMOKE_EXPECT_BITMAP_REQUESTED_AT_MOST=6 bash tools/smoke_gui_web.sh
+
+sim-web-richtext-smoke: sim-web-build
+	@BUILD_DIR=$(abspath $(SIM_WEB_BUILD_DIR)) \
+	SMOKE_SCENARIO=richtext \
+	SMOKE_ARGS="--backend web --demo richtext --max-frames 240 --screenshot /tmp/last_frame.png" \
+	SMOKE_EXPECT_BITMAP_READY_AT_LEAST=1 \
+	SMOKE_EXPECT_BITMAP_REQUESTED_AT_MOST=6 \
+	SMOKE_TIMEOUT_MS=45000 \
+	bash tools/smoke_gui_web.sh
 
 sim-web-pages: sim-web-build
 	@BUILD_DIR=$(abspath $(SIM_WEB_BUILD_DIR)) PAGES_DIR=$(abspath $(SIM_WEB_PAGES_DIR)) bash tools/stage_gui_web_pages.sh

@@ -28,6 +28,8 @@ export struct RichDeltaAttrs {
     block: RichBlockAttrs,
     has_inline: bool,
     has_block: bool,
+    link_url_ptr: &const byte,
+    link_url_len: usize,
 }
 
 export enum RichOpKind {
@@ -43,6 +45,9 @@ export struct RichDeltaOp {
     text_ptr: &byte,
     text_len: usize,
     text_cap: usize,
+    link_url_ptr: &byte,
+    link_url_len: usize,
+    link_url_cap: usize,
     attrs: RichDeltaAttrs,
 }
 
@@ -68,6 +73,8 @@ struct RichLinearAtom {
     text_bytes: [byte: 4],
     text_len: u8,
     inline_marks: RichInlineMarks,
+    link_url_ptr: &const byte,
+    link_url_len: usize,
     block_type: RichBlockType,
     indent: u8,
 }
@@ -97,6 +104,8 @@ export fn rich_delta_attrs_none() RichDeltaAttrs {
         block: rich_block_attrs(RichBlockType.Paragraph, 0u8),
         has_inline: false,
         has_block: false,
+        link_url_ptr: null,
+        link_url_len: 0usize,
     };
 }
 
@@ -104,6 +113,13 @@ export fn rich_delta_attrs_inline(marks: RichInlineMarks) RichDeltaAttrs {
     var attrs: RichDeltaAttrs = rich_delta_attrs_none();
     attrs.inline_marks = marks;
     attrs.has_inline = true;
+    return attrs;
+}
+
+fn rich_delta_attrs_inline_link(marks: RichInlineMarks, link_url: &const byte, link_url_len: usize) RichDeltaAttrs {
+    var attrs: RichDeltaAttrs = rich_delta_attrs_inline(marks);
+    attrs.link_url_ptr = link_url;
+    attrs.link_url_len = link_url_len;
     return attrs;
 }
 
@@ -122,7 +138,28 @@ fn rich_delta_attrs_eq(a: RichDeltaAttrs, b: RichDeltaAttrs) bool {
     return a.has_inline == b.has_inline
         && a.has_block == b.has_block
         && rich_inline_marks_eq(a.inline_marks, b.inline_marks)
-        && rich_block_attrs_eq(a.block, b.block);
+        && rich_block_attrs_eq(a.block, b.block)
+        && rich_delta_link_url_eq(a.link_url_ptr, a.link_url_len, b.link_url_ptr, b.link_url_len);
+}
+
+fn rich_delta_link_url_eq(a_ptr: &const byte, a_len: usize, b_ptr: &const byte, b_len: usize) bool {
+    if a_len != b_len {
+        return false;
+    }
+    if a_len == 0usize {
+        return true;
+    }
+    if a_ptr == null || b_ptr == null {
+        return false;
+    }
+    var idx: usize = 0usize;
+    while idx < a_len {
+        if a_ptr[idx] != b_ptr[idx] {
+            return false;
+        }
+        idx = idx + 1usize;
+    }
+    return true;
 }
 
 fn rich_delta_op_reset(op: &RichDeltaOp) void {
@@ -131,12 +168,18 @@ fn rich_delta_op_reset(op: &RichDeltaOp) void {
     op.text_ptr = null;
     op.text_len = 0usize;
     op.text_cap = 0usize;
+    op.link_url_ptr = null;
+    op.link_url_len = 0usize;
+    op.link_url_cap = 0usize;
     op.attrs = rich_delta_attrs_none();
 }
 
 fn rich_delta_op_drop(op: &RichDeltaOp, allocator: &MallocAllocator) void {
     if op.text_ptr != null {
         allocator.dealloc(op.text_ptr);
+    }
+    if op.link_url_ptr != null {
+        allocator.dealloc(op.link_url_ptr);
     }
     rich_delta_op_reset(op);
 }
@@ -179,6 +222,53 @@ fn rich_delta_op_set_text(op: &RichDeltaOp, allocator: &MallocAllocator, text: &
     }
     op.text_ptr[text_len] = 0u8;
     op.text_len = text_len;
+}
+
+fn rich_delta_op_ensure_link_capacity(op: &RichDeltaOp, allocator: &MallocAllocator, needed_len: usize) !void {
+    const needed_cap: usize = needed_len + 1usize;
+    if needed_cap <= op.link_url_cap {
+        return;
+    }
+    var new_cap: usize = op.link_url_cap;
+    if new_cap == 0usize {
+        new_cap = 16usize;
+    }
+    while new_cap < needed_cap {
+        new_cap = new_cap * 2usize;
+    }
+    if op.link_url_ptr == null {
+        op.link_url_ptr = try allocator.alloc(new_cap);
+    } else {
+        op.link_url_ptr = try allocator.realloc(op.link_url_ptr, new_cap);
+    }
+    op.link_url_cap = new_cap;
+}
+
+fn rich_delta_op_set_link_url(op: &RichDeltaOp, allocator: &MallocAllocator, link_url: &const byte, link_url_len: usize) !void {
+    if link_url_len == 0usize {
+        if op.link_url_ptr != null {
+            allocator.dealloc(op.link_url_ptr);
+        }
+        op.link_url_ptr = null;
+        op.link_url_len = 0usize;
+        op.link_url_cap = 0usize;
+        return;
+    }
+    try rich_delta_op_ensure_link_capacity(op, allocator, link_url_len);
+    var idx: usize = 0usize;
+    while idx < link_url_len {
+        op.link_url_ptr[idx] = link_url[idx];
+        idx = idx + 1usize;
+    }
+    op.link_url_ptr[link_url_len] = 0u8;
+    op.link_url_len = link_url_len;
+}
+
+fn rich_delta_op_attrs_match(op: &RichDeltaOp, attrs: RichDeltaAttrs) bool {
+    if !rich_delta_attrs_eq(op.attrs, attrs) {
+        return false;
+    }
+    return rich_delta_link_url_eq(op.link_url_ptr as &const byte, op.link_url_len, attrs.link_url_ptr, attrs.link_url_len);
 }
 
 fn rich_delta_ensure_op_capacity(delta: &RichDelta, needed_count: u32) !void {
@@ -245,12 +335,14 @@ fn rich_linear_atom_push(buf: &RichLinearAtomBuffer, atom: RichLinearAtom) !void
     buf.len = buf.len + 1u32;
 }
 
-fn rich_linear_atom_text(text: &const byte, text_len: usize, marks: RichInlineMarks) RichLinearAtom {
+fn rich_linear_atom_text(text: &const byte, text_len: usize, marks: RichInlineMarks, link_url_ptr: &const byte, link_url_len: usize) RichLinearAtom {
     var atom: RichLinearAtom = RichLinearAtom{
         kind: RichLinearAtomKind.Text,
         text_bytes: [0u8, 0u8, 0u8, 0u8],
         text_len: text_len as u8,
         inline_marks: marks,
+        link_url_ptr: link_url_ptr,
+        link_url_len: link_url_len,
         block_type: RichBlockType.Paragraph,
         indent: 0u8,
     };
@@ -268,6 +360,8 @@ fn rich_linear_atom_break(block_type: RichBlockType, indent: u8) RichLinearAtom 
         text_bytes: [0u8, 0u8, 0u8, 0u8],
         text_len: 0u8,
         inline_marks: rich_inline_marks_none(),
+        link_url_ptr: null,
+        link_url_len: 0usize,
         block_type: block_type,
         indent: indent,
     };
@@ -280,10 +374,18 @@ fn rich_document_to_atoms(doc: &RichDocument, out: &RichLinearAtomBuffer) !void 
         var span_idx: u16 = 0u16;
         while span_idx < block.span_count {
             const span: &RichSpan = &block.spans[span_idx as usize];
+            const link_url_ptr: &const byte = doc.link_ptr(span.marks.link_ref);
+            const link_url_len: usize = doc.link_len(span.marks.link_ref);
             var cursor: usize = 0usize;
             while cursor < span.text_len {
                 const next_cursor: usize = rich_utf8_next_index(span.text_ptr as &const byte, span.text_len, cursor);
-                try rich_linear_atom_push(out, rich_linear_atom_text(@ptr_from_usize(@usize_from_ptr(span.text_ptr as &void) + cursor) as &const byte, next_cursor - cursor, span.marks));
+                try rich_linear_atom_push(out, rich_linear_atom_text(
+                    @ptr_from_usize(@usize_from_ptr(span.text_ptr as &void) + cursor) as &const byte,
+                    next_cursor - cursor,
+                    span.marks,
+                    link_url_ptr,
+                    link_url_len,
+                ));
                 cursor = next_cursor;
             }
             span_idx = span_idx + 1u16;
@@ -293,11 +395,17 @@ fn rich_document_to_atoms(doc: &RichDocument, out: &RichLinearAtomBuffer) !void 
     }
 }
 
-fn rich_delta_insert_text_atoms(buf: &RichLinearAtomBuffer, text: &const byte, text_len: usize, marks: RichInlineMarks) !void {
+fn rich_delta_insert_text_atoms(buf: &RichLinearAtomBuffer, text: &const byte, text_len: usize, marks: RichInlineMarks, link_url_ptr: &const byte, link_url_len: usize) !void {
     var cursor: usize = 0usize;
     while cursor < text_len {
         const next_cursor: usize = rich_utf8_next_index(text, text_len, cursor);
-        try rich_linear_atom_push(buf, rich_linear_atom_text(@ptr_from_usize(@usize_from_ptr(text as &void) + cursor) as &const byte, next_cursor - cursor, marks));
+        try rich_linear_atom_push(buf, rich_linear_atom_text(
+            @ptr_from_usize(@usize_from_ptr(text as &void) + cursor) as &const byte,
+            next_cursor - cursor,
+            marks,
+            link_url_ptr,
+            link_url_len,
+        ));
         cursor = next_cursor;
     }
 }
@@ -344,7 +452,7 @@ fn rich_delta_delete_offsets(doc: &RichDocument, start: u32, end: u32) !RichPos 
 }
 
 fn rich_document_rebuild_from_atoms(doc: &RichDocument, atoms: &RichLinearAtomBuffer) !void {
-    doc.clear();
+    doc.clear_blocks();
     _ = try doc.append_block(RichBlockType.Paragraph, 0u8);
     var block_index: u32 = 0u32;
     var atom_idx: u32 = 0u32;
@@ -352,18 +460,34 @@ fn rich_document_rebuild_from_atoms(doc: &RichDocument, atoms: &RichLinearAtomBu
         const atom: RichLinearAtom = atoms.atoms[atom_idx as usize];
         const block: &RichBlock = &doc.blocks[block_index as usize];
         if atom.kind == RichLinearAtomKind.Text {
+            var resolved_link_ref: u16 = 0u16;
+            if atom.link_url_ptr != null && atom.link_url_len > 0usize {
+                resolved_link_ref = try doc.intern_link(atom.link_url_ptr, atom.link_url_len);
+            }
             if block.span_count == 0u16 {
-                _ = try doc.append_span(block_index, "" as &const byte, 0usize, atom.inline_marks);
+                _ = try doc.append_span(block_index, "" as &const byte, 0usize, RichInlineMarks{
+                    bits: atom.inline_marks.bits,
+                    link_ref: resolved_link_ref,
+                });
             }
             const last_idx: u16 = block.span_count - 1u16;
             const last_span: &RichSpan = &block.spans[last_idx as usize];
             if last_span.text_len == 0usize && rich_inline_marks_eq(last_span.marks, rich_inline_marks_none()) {
-                last_span.marks = atom.inline_marks;
+                last_span.marks = RichInlineMarks{
+                    bits: atom.inline_marks.bits,
+                    link_ref: resolved_link_ref,
+                };
                 try doc.set_span_text(block_index, last_idx, &atom.text_bytes[0], atom.text_len as usize);
-            } else if rich_inline_marks_eq(last_span.marks, atom.inline_marks) {
+            } else if rich_inline_marks_eq(last_span.marks, RichInlineMarks{
+                bits: atom.inline_marks.bits,
+                link_ref: resolved_link_ref,
+            }) {
                 try rich_delta_append_span_bytes(doc, block_index, last_idx, &atom.text_bytes[0], atom.text_len as usize);
             } else {
-                _ = try doc.append_span(block_index, &atom.text_bytes[0], atom.text_len as usize, atom.inline_marks);
+                _ = try doc.append_span(block_index, &atom.text_bytes[0], atom.text_len as usize, RichInlineMarks{
+                    bits: atom.inline_marks.bits,
+                    link_ref: resolved_link_ref,
+                });
             }
         } else {
             block.block_type = atom.block_type;
@@ -453,7 +577,7 @@ RichDelta {
         }
         if self.op_count > 0u32 {
             const last: &RichDeltaOp = &self.ops[self.op_count as usize - 1usize];
-            if last.kind == RichOpKind.Retain && rich_delta_attrs_eq(last.attrs, attrs) {
+            if last.kind == RichOpKind.Retain && rich_delta_op_attrs_match(last, attrs) {
                 last.count = last.count + count;
                 return;
             }
@@ -463,6 +587,9 @@ RichDelta {
         self.ops[self.op_count as usize].kind = RichOpKind.Retain;
         self.ops[self.op_count as usize].count = count;
         self.ops[self.op_count as usize].attrs = attrs;
+        try rich_delta_op_set_link_url(&self.ops[self.op_count as usize], self.allocator, attrs.link_url_ptr, attrs.link_url_len);
+        self.ops[self.op_count as usize].attrs.link_url_ptr = self.ops[self.op_count as usize].link_url_ptr as &const byte;
+        self.ops[self.op_count as usize].attrs.link_url_len = self.ops[self.op_count as usize].link_url_len;
         self.op_count = self.op_count + 1u32;
     }
 
@@ -491,7 +618,7 @@ RichDelta {
         const codepoint_count: u32 = rich_utf8_codepoint_count(text, text_len);
         if self.op_count > 0u32 {
             const last: &RichDeltaOp = &self.ops[self.op_count as usize - 1usize];
-            if last.kind == RichOpKind.InsertText && rich_delta_attrs_eq(last.attrs, attrs) {
+            if last.kind == RichOpKind.InsertText && rich_delta_op_attrs_match(last, attrs) {
                 const old_len: usize = last.text_len;
                 try rich_delta_op_ensure_text_capacity(last, self.allocator, old_len + text_len);
                 var idx: usize = 0usize;
@@ -511,6 +638,9 @@ RichDelta {
         self.ops[self.op_count as usize].count = codepoint_count;
         self.ops[self.op_count as usize].attrs = attrs;
         try rich_delta_op_set_text(&self.ops[self.op_count as usize], self.allocator, text, text_len);
+        try rich_delta_op_set_link_url(&self.ops[self.op_count as usize], self.allocator, attrs.link_url_ptr, attrs.link_url_len);
+        self.ops[self.op_count as usize].attrs.link_url_ptr = self.ops[self.op_count as usize].link_url_ptr as &const byte;
+        self.ops[self.op_count as usize].attrs.link_url_len = self.ops[self.op_count as usize].link_url_len;
         self.op_count = self.op_count + 1u32;
     }
 
@@ -543,6 +673,16 @@ export fn document_to_delta(doc: &RichDocument, out: &RichDelta) !void {
                 if span.text_len > 0usize {
                     if rich_inline_marks_eq(span.marks, rich_inline_marks_none()) {
                         try out.push_insert_text(span.text_ptr as &const byte, span.text_len, rich_delta_attrs_none());
+                    } else if span.marks.link_ref != 0u16 {
+                        try out.push_insert_text(
+                            span.text_ptr as &const byte,
+                            span.text_len,
+                            rich_delta_attrs_inline_link(
+                                span.marks,
+                                doc.link_ptr(span.marks.link_ref),
+                                doc.link_len(span.marks.link_ref),
+                            ),
+                        );
                     } else {
                         try out.push_insert_text(span.text_ptr as &const byte, span.text_len, rich_delta_attrs_inline(span.marks));
                     }
@@ -575,6 +715,13 @@ export fn apply_delta(doc: &RichDocument, delta: &RichDelta) !void {
                 var atom: RichLinearAtom = src.atoms[src_idx as usize];
                 if op.attrs.has_inline && atom.kind == RichLinearAtomKind.Text {
                     atom.inline_marks = op.attrs.inline_marks;
+                    if op.link_url_len > 0usize {
+                        atom.link_url_ptr = op.link_url_ptr as &const byte;
+                        atom.link_url_len = op.link_url_len;
+                    } else if op.attrs.inline_marks.link_ref == 0u16 {
+                        atom.link_url_ptr = null;
+                        atom.link_url_len = 0usize;
+                    }
                 }
                 if op.attrs.has_block && atom.kind == RichLinearAtomKind.Break {
                     atom.block_type = op.attrs.block.block_type;
@@ -588,6 +735,8 @@ export fn apply_delta(doc: &RichDocument, delta: &RichDelta) !void {
                     bits: atom.inline_marks.bits,
                     link_ref: atom.inline_marks.link_ref,
                 };
+                dst.atoms[dst_idx].link_url_ptr = atom.link_url_ptr;
+                dst.atoms[dst_idx].link_url_len = atom.link_url_len;
                 dst.atoms[dst_idx].block_type = atom.block_type;
                 dst.atoms[dst_idx].indent = atom.indent;
                 var byte_idx: usize = 0usize;
@@ -605,10 +754,30 @@ export fn apply_delta(doc: &RichDocument, delta: &RichDelta) !void {
             }
             src_idx = src_idx + op.count;
         } else if op.kind == RichOpKind.InsertText {
+            var insert_link_url_ptr: &const byte = op.link_url_ptr as &const byte;
+            var insert_link_url_len: usize = op.link_url_len;
+            if insert_link_url_len == 0usize && op.attrs.has_inline && op.attrs.inline_marks.link_ref != 0u16 {
+                insert_link_url_ptr = doc.link_ptr(op.attrs.inline_marks.link_ref);
+                insert_link_url_len = doc.link_len(op.attrs.inline_marks.link_ref);
+            }
             if op.attrs.has_inline {
-                try rich_delta_insert_text_atoms(&dst, op.text_ptr as &const byte, op.text_len, op.attrs.inline_marks);
+                try rich_delta_insert_text_atoms(
+                    &dst,
+                    op.text_ptr as &const byte,
+                    op.text_len,
+                    op.attrs.inline_marks,
+                    insert_link_url_ptr,
+                    insert_link_url_len,
+                );
             } else {
-                try rich_delta_insert_text_atoms(&dst, op.text_ptr as &const byte, op.text_len, rich_inline_marks_none());
+                try rich_delta_insert_text_atoms(
+                    &dst,
+                    op.text_ptr as &const byte,
+                    op.text_len,
+                    rich_inline_marks_none(),
+                    null,
+                    0usize,
+                );
             }
         } else if op.kind == RichOpKind.InsertBreak {
             var repeat: u32 = 0u32;

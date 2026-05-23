@@ -30,6 +30,7 @@ use widget.base.IWidgetValueCallback;
 use widget.base.Widget;
 use widget.base.widget_font;
 use widget.base.widget_inner_rect;
+use widget.base.widget_text_len;
 use widget.page.Page;
 use widget.panel.Panel;
 use widget.rich_text_input.RichCommand;
@@ -88,6 +89,31 @@ test "rich text input plain text delta html and on_change work" {
     const html_written: usize = input.export_html(&html[0], 128usize);
     try assert_eq_i32(html_written as i32, 24);
     try assert_eq_bool(strncmp(&html[0] as *const byte, "<p>Hello</p><p>world</p>" as *const byte, 24usize) == 0, true);
+}
+
+test "rich text input export_html only emits whitelisted links" {
+    var input: RichTextInput = RichTextInput.new("" as &const byte);
+    defer input.dispose();
+
+    try input.set_plain_text("safe\nunsafe" as &const byte);
+    try assert_eq_bool(try input.doc.set_span_link(0u32, 0u16, "https://example.com?q=1&v=2" as &const byte, 27usize), true);
+    try assert_eq_bool(try input.doc.set_span_link(1u32, 0u16, "javascript:alert(1)" as &const byte, 19usize), true);
+
+    var delta: RichDelta = rich_delta_new();
+    defer delta.dispose();
+    try input.export_delta(&delta);
+
+    var clone: RichTextInput = RichTextInput.new("" as &const byte);
+    defer clone.dispose();
+    try clone.set_delta(&delta);
+
+    const expected_html: &const byte =
+        "<p><a href=\"https://example.com?q=1&amp;v=2\">safe</a></p><p>unsafe</p>" as &const byte;
+    const expected_len: usize = widget_text_len(expected_html);
+    var html: [byte: 192] = [];
+    const html_written: usize = clone.export_html(&html[0], 192usize);
+    try assert_eq_i32(html_written as i32, expected_len as i32);
+    try assert_eq_bool(strncmp(&html[0] as *const byte, expected_html as *const byte, expected_len) == 0, true);
 }
 
 test "rich text input handles text events undo redo and drag selection" {

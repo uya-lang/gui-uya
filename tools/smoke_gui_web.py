@@ -10,6 +10,8 @@ from pyppeteer.errors import TimeoutError
 
 
 PNG_SIGNATURE = [137, 80, 78, 71, 13, 10, 26, 10]
+RICHTEXT_INPUT_TOKEN = "[[SMOKE_INPUT]]"
+RICHTEXT_PASTE_TOKEN = "\n[[SMOKE_PASTE]]"
 
 
 def parse_expect_sizes(raw_values: list[str]) -> list[int]:
@@ -23,6 +25,141 @@ def parse_expect_sizes(raw_values: list[str]) -> list[int]:
     return sizes
 
 
+async def read_richtext_export(page, copy_fn_name: str) -> str | None:
+    return await page.evaluate(
+        """(copyFnName) => {
+            if (!window.Module || !Module[copyFnName] || !Module._malloc || !Module._free || typeof TextDecoder === 'undefined') {
+              return null;
+            }
+            var cap = 16384;
+            var ptr = Module._malloc(cap);
+            try {
+              var len = Module[copyFnName](ptr, cap) | 0;
+              if (len <= 0) {
+                return '';
+              }
+              var bytes = Module.HEAPU8.slice(ptr, ptr + len);
+              return new TextDecoder('utf-8').decode(bytes);
+            } finally {
+              Module._free(ptr);
+            }
+        }""",
+        copy_fn_name,
+    )
+
+
+async def wait_for_richtext_export_contains(page, copy_fn_name: str, token: str, timeout_ms: int) -> str | None:
+    deadline = asyncio.get_running_loop().time() + timeout_ms / 1000.0
+    last_value = None
+    while asyncio.get_running_loop().time() < deadline:
+        last_value = await read_richtext_export(page, copy_fn_name)
+        if isinstance(last_value, str) and token in last_value:
+            return last_value
+        await asyncio.sleep(0.05)
+    return last_value
+
+
+async def run_richtext_smoke(page, timeout_ms: int) -> dict:
+    await page.waitForFunction(
+        "window.Module && (Module.uyaGuiLastPresentAt || 0) > 0",
+        {"timeout": timeout_ms},
+    )
+    input_ok = await page.evaluate(
+        """(token) => {
+            if (!window.Module || !Module._uya_gui_web_host_richtext_insert_text || !Module._malloc || !Module._free) {
+              return false;
+            }
+            var bytes = new TextEncoder().encode(token);
+            var ptr = Module._malloc(bytes.length);
+            try {
+              Module.HEAPU8.set(bytes, ptr);
+              return !!Module._uya_gui_web_host_richtext_insert_text(ptr, bytes.length | 0);
+            } finally {
+              Module._free(ptr);
+            }
+        }""",
+        RICHTEXT_INPUT_TOKEN,
+    )
+    if not input_ok:
+        return {"ok": False, "error": "input_command_unavailable"}
+
+    plain_after_input = await wait_for_richtext_export_contains(
+        page,
+        "_uya_gui_web_host_richtext_plain_text_copy",
+        RICHTEXT_INPUT_TOKEN,
+        timeout_ms,
+    )
+    if not isinstance(plain_after_input, str) or RICHTEXT_INPUT_TOKEN not in plain_after_input:
+        return {
+            "ok": False,
+            "error": "input_token_missing",
+            "plain": plain_after_input,
+        }
+
+    paste_ok = await page.evaluate(
+        """(text) => {
+            if (!window.Module || !Module._uya_gui_web_host_richtext_paste_plain || !Module._malloc || !Module._free) {
+              return false;
+            }
+            var bytes = new TextEncoder().encode(text);
+            var ptr = Module._malloc(bytes.length);
+            try {
+              Module.HEAPU8.set(bytes, ptr);
+              return !!Module._uya_gui_web_host_richtext_paste_plain(ptr, bytes.length | 0);
+            } finally {
+              Module._free(ptr);
+            }
+        }""",
+        RICHTEXT_PASTE_TOKEN,
+    )
+    if not paste_ok:
+        return {"ok": False, "error": "paste_command_unavailable"}
+
+    final_plain = await wait_for_richtext_export_contains(
+        page,
+        "_uya_gui_web_host_richtext_plain_text_copy",
+        "[[SMOKE_PASTE]]",
+        timeout_ms,
+    )
+    if not isinstance(final_plain, str) or "[[SMOKE_PASTE]]" not in final_plain:
+        return {
+            "ok": False,
+            "error": "paste_token_missing",
+            "plain": final_plain,
+        }
+
+    final_html = await read_richtext_export(page, "_uya_gui_web_host_richtext_html_copy")
+    if not isinstance(final_html, str):
+        return {"ok": False, "error": "html_export_unavailable"}
+    if RICHTEXT_INPUT_TOKEN not in final_html or "[[SMOKE_PASTE]]" not in final_html or "<p>" not in final_html:
+        return {
+            "ok": False,
+            "error": "html_export_missing_tokens",
+            "html": final_html,
+        }
+
+    richtext_state = await page.evaluate(
+        """() => {
+            var sink = document.getElementById('uya-gui-ime-sink');
+            return {
+              activeSession: window.Module && Module._uya_gui_web_host_richtext_active_session
+                ? (Module._uya_gui_web_host_richtext_active_session() | 0)
+                : 0,
+              sinkFocused: !!(sink && document.activeElement === sink),
+              sinkMode: sink ? (sink.dataset.uyaMode || '') : '',
+              sinkActive: sink ? (sink.dataset.uyaRichtextActive || '') : '',
+            };
+        }"""
+    )
+
+    return {
+        "ok": True,
+        "plain": final_plain,
+        "html": final_html,
+        "state": richtext_state,
+    }
+
+
 async def run_smoke(
     url: str,
     screenshot_path: str,
@@ -30,6 +167,7 @@ async def run_smoke(
     expect_bitmap_ready_sizes: list[int],
     expect_bitmap_ready_at_least: int,
     expect_bitmap_requested_at_most: int | None,
+    scenario: str,
 ) -> int:
     browser = await launch(
         headless=True,
@@ -44,6 +182,12 @@ async def run_smoke(
     page.on("pageerror", lambda err: print(f"[pageerror] {err}"))
     try:
         await page.goto(url, waitUntil="networkidle0", timeout=timeout_ms)
+        scenario_result = None
+        if scenario == "richtext":
+            scenario_result = await run_richtext_smoke(page, timeout_ms)
+            if scenario_result.get("ok") is not True:
+                print(json.dumps({"richtext": scenario_result}, ensure_ascii=True))
+                return 1
         try:
             await page.waitForFunction(
                 "window.Module && Module.uyaGuiCompleted === true",
@@ -73,7 +217,7 @@ async def run_smoke(
                 }""",
                 screenshot_path,
             )
-            print(json.dumps({"timeout": diag}, ensure_ascii=True))
+            print(json.dumps({"timeout": diag, "scenario": scenario_result}, ensure_ascii=True))
             return 1
         result = await page.evaluate(
             """(path) => {
@@ -108,6 +252,7 @@ async def run_smoke(
             }""",
             screenshot_path,
         )
+        result["scenario"] = scenario_result
         print(json.dumps(result, ensure_ascii=True))
         if not result["completed"]:
             print("smoke failed: app did not complete", file=sys.stderr)
@@ -155,6 +300,7 @@ def main() -> int:
     parser.add_argument("--expect-bitmap-ready-size", action="append", default=[])
     parser.add_argument("--expect-bitmap-ready-at-least", type=int, default=0)
     parser.add_argument("--expect-bitmap-requested-at-most", type=int, default=None)
+    parser.add_argument("--scenario", choices=["basic", "richtext"], default="basic")
     args = parser.parse_args()
     return asyncio.run(
         run_smoke(
@@ -164,6 +310,7 @@ def main() -> int:
             parse_expect_sizes(args.expect_bitmap_ready_size),
             args.expect_bitmap_ready_at_least,
             args.expect_bitmap_requested_at_most,
+            args.scenario,
         )
     )
 

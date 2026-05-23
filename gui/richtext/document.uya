@@ -5,6 +5,7 @@ use std.mem.allocator.g_allocator;
 
 error RichTextOutOfBounds;
 error RichTextInvalidUtf8Boundary;
+error RichTextTooManyLinks;
 
 export const RICH_MARK_BOLD: u16 = 1u16;
 export const RICH_MARK_ITALIC: u16 = 2u16;
@@ -35,6 +36,12 @@ export struct RichSpan {
     marks: RichInlineMarks,
 }
 
+struct RichLinkTarget {
+    url_ptr: &byte,
+    url_len: usize,
+    url_cap: usize,
+}
+
 export struct RichBlock {
     block_type: RichBlockType,
     indent: u8,
@@ -48,6 +55,9 @@ export struct RichDocument {
     blocks: &RichBlock,
     block_count: u32,
     block_cap: u32,
+    links: &RichLinkTarget,
+    link_count: u16,
+    link_cap: u16,
     revision: u32,
 }
 
@@ -206,6 +216,60 @@ fn rich_span_drop(span: &RichSpan, allocator: &MallocAllocator) void {
     rich_span_reset(span);
 }
 
+fn rich_link_target_reset(link: &RichLinkTarget) void {
+    link.url_ptr = null;
+    link.url_len = 0usize;
+    link.url_cap = 0usize;
+}
+
+fn rich_link_target_drop(link: &RichLinkTarget, allocator: &MallocAllocator) void {
+    if link == null {
+        return;
+    }
+    if link.url_ptr != null {
+        allocator.dealloc(link.url_ptr);
+    }
+    rich_link_target_reset(link);
+}
+
+fn rich_link_target_ensure_capacity(link: &RichLinkTarget, allocator: &MallocAllocator, needed_len: usize) !void {
+    const needed_cap: usize = needed_len + 1usize;
+    if needed_cap <= link.url_cap {
+        return;
+    }
+    var new_cap: usize = link.url_cap;
+    if new_cap == 0usize {
+        new_cap = 16usize;
+    }
+    while new_cap < needed_cap {
+        new_cap = new_cap * 2usize;
+    }
+    if link.url_ptr == null {
+        link.url_ptr = try allocator.alloc(new_cap);
+    } else {
+        link.url_ptr = try allocator.realloc(link.url_ptr, new_cap);
+    }
+    link.url_cap = new_cap;
+}
+
+fn rich_link_target_set_bytes(link: &RichLinkTarget, allocator: &MallocAllocator, url: &const byte, len: usize) !void {
+    if len == 0usize {
+        if link.url_ptr != null {
+            allocator.dealloc(link.url_ptr);
+        }
+        rich_link_target_reset(link);
+        return;
+    }
+    try rich_link_target_ensure_capacity(link, allocator, len);
+    var idx: usize = 0usize;
+    while idx < len {
+        link.url_ptr[idx] = url[idx];
+        idx = idx + 1usize;
+    }
+    link.url_ptr[len] = 0u8;
+    link.url_len = len;
+}
+
 fn rich_block_init(block: &RichBlock, block_type: RichBlockType, indent: u8) void {
     block.block_type = block_type;
     block.indent = indent;
@@ -307,6 +371,30 @@ fn rich_document_ensure_block_capacity(self: &RichDocument, needed_count: u32) !
         self.blocks = (try self.allocator.realloc(self.blocks as &byte, new_bytes)) as &RichBlock;
     }
     self.block_cap = new_cap;
+}
+
+fn rich_document_ensure_link_capacity(self: &RichDocument, needed_count: u16) !void {
+    if needed_count <= self.link_cap {
+        return;
+    }
+    var new_cap: u16 = self.link_cap;
+    if new_cap == 0u16 {
+        new_cap = 4u16;
+    }
+    while new_cap < needed_count {
+        if new_cap > 32767u16 {
+            new_cap = 65535u16;
+            break;
+        }
+        new_cap = new_cap * 2u16;
+    }
+    const new_bytes: usize = @size_of(RichLinkTarget) as usize * new_cap as usize;
+    if self.links == null {
+        self.links = (try self.allocator.alloc(new_bytes)) as &RichLinkTarget;
+    } else {
+        self.links = (try self.allocator.realloc(self.links as &byte, new_bytes)) as &RichLinkTarget;
+    }
+    self.link_cap = new_cap;
 }
 
 fn rich_block_ensure_span_capacity(block: &RichBlock, allocator: &MallocAllocator, needed_count: u16) !void {
@@ -422,6 +510,9 @@ export fn rich_document_new_with_allocator(allocator: &MallocAllocator) RichDocu
         blocks: null,
         block_count: 0u32,
         block_cap: 0u32,
+        links: null,
+        link_count: 0u16,
+        link_cap: 0u16,
         revision: 0u32,
     };
 }
@@ -434,15 +525,30 @@ RichDocument {
         }
         self.blocks = null;
         self.block_cap = 0u32;
+        if self.links != null {
+            self.allocator.dealloc(self.links as &byte);
+        }
+        self.links = null;
+        self.link_cap = 0u16;
     }
 
-    fn clear(self: &Self) void {
+    fn clear_blocks(self: &Self) void {
         var idx: u32 = 0u32;
         while idx < self.block_count {
             rich_block_drop(&self.blocks[idx as usize], self.allocator);
             idx = idx + 1u32;
         }
         self.block_count = 0u32;
+    }
+
+    fn clear(self: &Self) void {
+        self.clear_blocks();
+        var link_idx: u16 = 0u16;
+        while link_idx < self.link_count {
+            rich_link_target_drop(&self.links[link_idx as usize], self.allocator);
+            link_idx = link_idx + 1u16;
+        }
+        self.link_count = 0u16;
         rich_document_touch(self);
     }
 
@@ -525,6 +631,79 @@ RichDocument {
             return error.RichTextOutOfBounds;
         }
         return self.insert_span(block_index, self.blocks[block_index as usize].span_count, text, text_len, marks);
+    }
+
+    fn intern_link(self: &Self, url: &const byte, url_len: usize) !u16 {
+        if url == null || url_len == 0usize {
+            return 0u16;
+        }
+        var link_idx: u16 = 0u16;
+        while link_idx < self.link_count {
+            const link: &RichLinkTarget = &self.links[link_idx as usize];
+            if link.url_len == url_len {
+                var matched: bool = true;
+                var byte_idx: usize = 0usize;
+                while byte_idx < url_len {
+                    if link.url_ptr[byte_idx] != url[byte_idx] {
+                        matched = false;
+                        break;
+                    }
+                    byte_idx = byte_idx + 1usize;
+                }
+                if matched {
+                    return link_idx + 1u16;
+                }
+            }
+            link_idx = link_idx + 1u16;
+        }
+        if self.link_count == 65535u16 {
+            return error.RichTextTooManyLinks;
+        }
+        try rich_document_ensure_link_capacity(self, self.link_count + 1u16);
+        rich_link_target_reset(&self.links[self.link_count as usize]);
+        try rich_link_target_set_bytes(&self.links[self.link_count as usize], self.allocator, url, url_len);
+        self.link_count = self.link_count + 1u16;
+        rich_document_touch(self);
+        return self.link_count;
+    }
+
+    fn set_span_link(self: &Self, block_index: u32, span_index: u16, url: &const byte, url_len: usize) !bool {
+        if block_index >= self.block_count {
+            return false;
+        }
+        const block: &RichBlock = &self.blocks[block_index as usize];
+        if span_index >= block.span_count {
+            return false;
+        }
+        var link_ref: u16 = 0u16;
+        if url != null && url_len > 0usize {
+            link_ref = try self.intern_link(url, url_len);
+        }
+        block.spans[span_index as usize].marks.link_ref = link_ref;
+        rich_document_touch(self);
+        return true;
+    }
+
+    fn link_ptr(self: &Self, link_ref: u16) &const byte {
+        if link_ref == 0u16 {
+            return null;
+        }
+        const index: u16 = link_ref - 1u16;
+        if index >= self.link_count {
+            return null;
+        }
+        return self.links[index as usize].url_ptr as &const byte;
+    }
+
+    fn link_len(self: &Self, link_ref: u16) usize {
+        if link_ref == 0u16 {
+            return 0usize;
+        }
+        const index: u16 = link_ref - 1u16;
+        if index >= self.link_count {
+            return 0usize;
+        }
+        return self.links[index as usize].url_len;
     }
 
     fn set_span_text(self: &Self, block_index: u32, span_index: u16, text: &const byte, text_len: usize) !bool {

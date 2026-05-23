@@ -28,6 +28,8 @@ use sim.runtime_core.IRuntimeInput;
 use sim.runtime_core.SimFrameOutput;
 use sim.runtime_core.SimRuntimeCore;
 use sim.runtime_core.sim_runtime_core_new;
+use widget.rich_text_input.RichCommand;
+use widget.rich_text_input.RichCommandKind;
 
 extern fn uya_gui_web_host_start_loop() i32;
 extern fn malloc(size: usize) &void;
@@ -217,4 +219,64 @@ export fn sim_web_shutdown() void {
     web_runtime_teardown();
     free(g_web_runtime as &void);
     g_web_runtime = null;
+}
+
+export fn sim_web_richtext_export_plain_text(out: &byte, cap: usize) usize {
+    if out == null || cap == 0usize || g_web_runtime == null {
+        return 0usize;
+    }
+    const runtime: &WebRuntimeState = g_web_runtime;
+    if runtime.app == null {
+        return 0usize;
+    }
+    const app: &SimApp = runtime.app;
+    app.sync_richtext_demo();
+    return app.richtext_demo.editor.plain_text(out, cap);
+}
+
+export fn sim_web_richtext_export_html(out: &byte, cap: usize) usize {
+    if out == null || cap == 0usize || g_web_runtime == null {
+        return 0usize;
+    }
+    const runtime: &WebRuntimeState = g_web_runtime;
+    if runtime.app == null {
+        return 0usize;
+    }
+    const app: &SimApp = runtime.app;
+    app.sync_richtext_demo();
+    return app.richtext_demo.editor.export_html(out, cap);
+}
+
+export fn sim_web_richtext_insert_text(text: &const byte, text_len: usize) bool {
+    if text == null || text_len == 0usize || g_web_runtime == null {
+        return false;
+    }
+    const runtime: &WebRuntimeState = g_web_runtime;
+    if runtime.app == null {
+        return false;
+    }
+    const app: &SimApp = runtime.app;
+    app.sync_richtext_demo();
+    return app.richtext_demo.editor.exec(RichCommand{
+        kind: RichCommandKind.InsertText,
+        text_ptr: text,
+        text_len: text_len,
+    });
+}
+
+export fn sim_web_richtext_paste_plain(text: &const byte, text_len: usize) bool {
+    if text == null || text_len == 0usize || g_web_runtime == null {
+        return false;
+    }
+    const runtime: &WebRuntimeState = g_web_runtime;
+    if runtime.app == null {
+        return false;
+    }
+    const app: &SimApp = runtime.app;
+    app.sync_richtext_demo();
+    return app.richtext_demo.editor.exec(RichCommand{
+        kind: RichCommandKind.PastePlain,
+        text_ptr: text,
+        text_len: text_len,
+    });
 }

@@ -52,6 +52,10 @@ extern bool rich_text_host_feed_command(uint8_t kind);
 extern bool rich_text_host_feed_text_command(uint8_t kind, const uint8_t *text, size_t len);
 extern int32_t sim_web_frame(int32_t now_ms);
 extern void sim_web_shutdown(void);
+extern size_t sim_web_richtext_export_plain_text(uint8_t *out, size_t cap);
+extern size_t sim_web_richtext_export_html(uint8_t *out, size_t cap);
+extern bool sim_web_richtext_insert_text(const uint8_t *text, size_t len);
+extern bool sim_web_richtext_paste_plain(const uint8_t *text, size_t len);
 
 static UyaGuiWebDisplay *g_web_display = NULL;
 static int g_web_loop_active = 0;
@@ -402,6 +406,34 @@ EMSCRIPTEN_KEEPALIVE void uya_gui_web_host_richtext_feed_text(uint8_t kind, cons
         return;
     }
     (void)rich_text_host_feed_text_command(kind, text, (size_t)len);
+}
+
+EMSCRIPTEN_KEEPALIVE int32_t uya_gui_web_host_richtext_plain_text_copy(uint8_t *out, int32_t cap) {
+    if (out == NULL || cap <= 0) {
+        return 0;
+    }
+    return (int32_t)sim_web_richtext_export_plain_text(out, (size_t)cap);
+}
+
+EMSCRIPTEN_KEEPALIVE int32_t uya_gui_web_host_richtext_html_copy(uint8_t *out, int32_t cap) {
+    if (out == NULL || cap <= 0) {
+        return 0;
+    }
+    return (int32_t)sim_web_richtext_export_html(out, (size_t)cap);
+}
+
+EMSCRIPTEN_KEEPALIVE int32_t uya_gui_web_host_richtext_insert_text(const uint8_t *text, int32_t len) {
+    if (text == NULL || len <= 0) {
+        return 0;
+    }
+    return sim_web_richtext_insert_text(text, (size_t)len) ? 1 : 0;
+}
+
+EMSCRIPTEN_KEEPALIVE int32_t uya_gui_web_host_richtext_paste_plain(const uint8_t *text, int32_t len) {
+    if (text == NULL || len <= 0) {
+        return 0;
+    }
+    return sim_web_richtext_paste_plain(text, (size_t)len) ? 1 : 0;
 }
 
 void *uya_gui_web_display_open(int32_t width, int32_t height, int32_t scale, const uint8_t *title) {

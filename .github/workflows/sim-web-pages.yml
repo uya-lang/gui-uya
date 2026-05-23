@@ -38,6 +38,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y emscripten
 
+      - name: Run richtext web smoke
+        run: make sim-web-richtext-smoke MODE=release WEB_LEGACY_VM_SUPPORT=1
+
       - name: Build Pages artifact
         run: make sim-web-pages MODE=release WEB_LEGACY_VM_SUPPORT=1
 

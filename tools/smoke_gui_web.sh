@@ -8,6 +8,7 @@ PORT="${PORT:-0}"
 VENV_DIR="${VENV_DIR:-$BUILD_DIR/.web-smoke-venv}"
 SMOKE_ARGS="${SMOKE_ARGS:---backend web --demo dashboard --max-frames 3 --screenshot /tmp/last_frame.png}"
 SMOKE_TIMEOUT_MS="${SMOKE_TIMEOUT_MS:-30000}"
+SMOKE_SCENARIO="${SMOKE_SCENARIO:-basic}"
 SMOKE_EXPECT_BITMAP_READY_SIZES="${SMOKE_EXPECT_BITMAP_READY_SIZES:-}"
 SMOKE_EXPECT_BITMAP_READY_AT_LEAST="${SMOKE_EXPECT_BITMAP_READY_AT_LEAST:-0}"
 SMOKE_EXPECT_BITMAP_REQUESTED_AT_MOST="${SMOKE_EXPECT_BITMAP_REQUESTED_AT_MOST:-}"
@@ -80,4 +81,5 @@ fi
     --url "$SMOKE_URL" \
     --screenshot-path "/tmp/last_frame.png" \
     --timeout-ms "$SMOKE_TIMEOUT_MS" \
+    --scenario "$SMOKE_SCENARIO" \
     "${EXTRA_SMOKE_ARGS[@]}"
