@@ -1,0 +1,65 @@
+use richtext.layout.RichLayoutCache;
+use richtext.layout.rich_layout_cache_new;
+use richtext.document.RichBlockType;
+use richtext.document.RichDocument;
+use richtext.document.rich_document_new;
+use render.font.Font;
+use render.font.font_system_default;
+use std.testing.assert_eq_bool;
+use std.testing.assert_eq_i32;
+
+export const TEST_RICHTEXT_LAYOUT_MODULE: i32 = 1;
+
+test "layout cache builds visual lines with soft wrap across blocks" {
+    var doc: RichDocument = rich_document_new();
+    defer doc.dispose();
+    try doc.set_plain_text("alpha beta\ngamma" as &const byte);
+
+    var font: Font = font_system_default();
+    var layout: RichLayoutCache = rich_layout_cache_new();
+    defer layout.dispose();
+    try layout.relayout(&doc, &font, 35u16, 7u32);
+
+    try assert_eq_i32(layout.line_count as i32, 3);
+    try assert_eq_i32(layout.max_width as i32, 35);
+    try assert_eq_i32(layout.doc_revision as i32, doc.revision as i32);
+    try assert_eq_i32(layout.theme_revision as i32, 7);
+
+    try assert_eq_i32(layout.lines[0].block_index as i32, 0);
+    try assert_eq_i32((try doc.pos_to_linear_offset(layout.lines[0].start)) as i32, 0);
+    try assert_eq_i32((try doc.pos_to_linear_offset(layout.lines[0].end)) as i32, 5);
+
+    try assert_eq_i32(layout.lines[1].block_index as i32, 0);
+    try assert_eq_i32((try doc.pos_to_linear_offset(layout.lines[1].start)) as i32, 6);
+    try assert_eq_i32((try doc.pos_to_linear_offset(layout.lines[1].end)) as i32, 10);
+
+    try assert_eq_i32(layout.lines[2].block_index as i32, 1);
+    try assert_eq_i32((try doc.pos_to_linear_offset(layout.lines[2].start)) as i32, 11);
+    try assert_eq_i32((try doc.pos_to_linear_offset(layout.lines[2].end)) as i32, 16);
+    try assert_eq_i32(layout.lines[1].y as i32, font.line_height as i32);
+    try assert_eq_i32(layout.lines[2].y as i32, font.line_height as i32 * 2);
+    try assert_eq_i32(layout.total_height as i32, font.line_height as i32 * 3);
+}
+
+test "layout cache applies basic block style insets and heights" {
+    var doc: RichDocument = rich_document_new();
+    defer doc.dispose();
+    try doc.set_plain_text("head\nquote\nitem\ncode" as &const byte);
+    doc.blocks[0].block_type = RichBlockType.Heading1;
+    doc.blocks[1].block_type = RichBlockType.Quote;
+    doc.blocks[2].block_type = RichBlockType.BulletItem;
+    doc.blocks[3].block_type = RichBlockType.CodeBlock;
+
+    var font: Font = font_system_default();
+    var layout: RichLayoutCache = rich_layout_cache_new();
+    defer layout.dispose();
+    try layout.relayout(&doc, &font, 160u16, 0u32);
+
+    try assert_eq_i32(layout.line_count as i32, 4);
+    try assert_eq_bool(layout.lines[0].h as i32 > font.line_height as i32, true);
+    try assert_eq_bool(layout.lines[1].x as i32 > 0, true);
+    try assert_eq_bool(layout.lines[2].x as i32 > layout.lines[1].x as i32, true);
+    try assert_eq_bool(layout.lines[3].x as i32 > 0, true);
+    try assert_eq_bool(layout.lines[1].y as i32 > layout.lines[0].y as i32 + layout.lines[0].h as i32, true);
+    try assert_eq_bool(layout.lines[3].y as i32 > layout.lines[2].y as i32 + layout.lines[2].h as i32 - 1, true);
+}

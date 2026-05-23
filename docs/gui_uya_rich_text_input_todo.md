@@ -2,7 +2,7 @@
 
 > 版本: v0.1.0  
 > 日期: 2026-05-23  
-> 状态: 执行中（W2）
+> 状态: 执行中（W3）
 
 > 说明: 本文是 `RichTextInput` 控件的实施路线图，目标是在 UyaGUI 现有 `Widget` / `RenderCtx` / `platform/*` 架构上落地一个参考 Quill 的轻量富文本输入框。本文强调分阶段实施、真实验收和风险前置，不把“未来可能有”的能力当作已完成项。
 
@@ -31,13 +31,13 @@
 | 单行文本输入 | [x] 已有基线 | `gui/widget/lbl.uya` 已有 `TextInput` |
 | 输入事件抽象 | [x] 已有基线 | `TextInput` / `KeyDown` / `FocusIn` 等事件已存在 |
 | 文本渲染 | [x] 已有基线 | `RenderCtx` / `font.uya` 已可绘制 UTF-8 文本 |
-| 多段落编辑模型 | [ ] 缺失 | 还没有文档树与 Delta |
-| 富文本布局缓存 | [ ] 缺失 | 还没有 block/line 增量布局 |
-| 选区与多行光标 | [ ] 缺失 | 只有单行 cursor |
+| 多段落编辑模型 | [x] W2 已落地 | 已有 `RichDocument` / `RichDelta` / `RichHistory` |
+| 富文本布局缓存 | [x] W3 基线 | 已有 `RichLayoutCache` / `RichVisualLine` 与软换行 |
+| 选区与多行光标 | [x] W2 命令基线 | 已有 `RichRange` 与多段移动/编辑命令 |
 | 剪贴板抽象 | [ ] 缺失 | 尚无统一 clipboard bridge |
 | Web hidden textarea | [ ] 缺失 | 当前 Web 仅有 commit 文本输入 |
 | RichText widget API | [ ] 缺失 | 尚无控件对外接口 |
-| 富文本测试集 | [ ] 缺失 | 尚无文档/布局/HTML 回归测试 |
+| 富文本测试集 | [x] 初始基线 | 已有 document/delta/history/layout 单测 |
 
 ## 关键决策
 
@@ -54,8 +54,8 @@
 |------|------|----------|
 | W0 | 方案收口、目录与接口定稿 | 已完成 |
 | W1 | 文档树、Delta、normalize 基线 | 已完成 |
-| W2 | 选择区、编辑命令、历史记录 | 进行中 |
-| W3 | 布局与渲染 MVP | 未开始 |
+| W2 | 选择区、编辑命令、历史记录 | 已完成 |
+| W3 | 布局与渲染 MVP | 进行中 |
 | W4 | `RichTextInput` 控件 API 与交互 MVP | 未开始 |
 | W5 | 纯文本粘贴、HTML/Delta 导出 | 未开始 |
 | W6 | Web hidden textarea、clipboard、IME | 未开始 |
@@ -184,11 +184,11 @@
 
 ### 验收
 
-- [ ] 用程序化命令即可完成一轮完整编辑
-- [ ] undo / redo 不破坏文档结构
-- [ ] 切换样式后 span 会正确归并
-- [ ] 历史栈中不出现 `Toggle*` 这类命令式持久化记录
-- [ ] 回车、退格在列表和普通段落中的语义明确
+- [x] 用程序化命令即可完成一轮完整编辑
+- [x] undo / redo 不破坏文档结构
+- [x] 切换样式后 span 会正确归并
+- [x] 历史栈中不出现 `Toggle*` 这类命令式持久化记录
+- [x] 回车、退格在列表和普通段落中的语义明确
 
 ---
 
@@ -200,11 +200,11 @@
 
 ### TODO
 
-- [ ] 新增 `RichLayoutCache`
-- [ ] 新增 `RichVisualLine`
-- [ ] 实现 block 测量
-- [ ] 实现软换行
-- [ ] 实现标题、引用、列表、代码块的基础段落样式
+- [x] 新增 `RichLayoutCache`
+- [x] 新增 `RichVisualLine`
+- [x] 实现 block 测量
+- [x] 实现软换行
+- [x] 实现标题、引用、列表、代码块的基础段落样式
 - [ ] 实现选区矩形切分
 - [ ] 实现光标绘制
 - [ ] 实现 placeholder 绘制

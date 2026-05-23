@@ -176,6 +176,37 @@ test "backspace and delete forward can remove block breaks" {
     try assert_eq_i32((try delete_doc.pos_to_linear_offset(delete_caret)) as i32, 2);
 }
 
+test "backspace at list item start keeps trailing block attrs when merging" {
+    var paragraph_list_doc: RichDocument = rich_document_new();
+    defer paragraph_list_doc.dispose();
+    try paragraph_list_doc.set_plain_text("p\nitem" as &const byte);
+    paragraph_list_doc.blocks[1].block_type = RichBlockType.BulletItem;
+
+    const paragraph_list_caret: RichPos = try rich_backspace(&paragraph_list_doc, rich_range_collapsed(try paragraph_list_doc.linear_offset_to_pos(2u32)));
+    var paragraph_list_out: [byte: 16] = [];
+    const paragraph_list_written: usize = paragraph_list_doc.export_plain_text(&paragraph_list_out[0], 16usize);
+    try assert_eq_i32(paragraph_list_written as i32, 5);
+    try assert_eq_bool(strncmp(&paragraph_list_out[0] as *const byte, "pitem" as *const byte, 5usize) == 0, true);
+    try assert_eq_i32(paragraph_list_doc.block_count as i32, 1);
+    try assert_eq_i32(paragraph_list_doc.blocks[0].block_type as i32, RichBlockType.BulletItem as i32);
+    try assert_eq_i32((try paragraph_list_doc.pos_to_linear_offset(paragraph_list_caret)) as i32, 1);
+
+    var list_list_doc: RichDocument = rich_document_new();
+    defer list_list_doc.dispose();
+    try list_list_doc.set_plain_text("a\nb" as &const byte);
+    list_list_doc.blocks[0].block_type = RichBlockType.BulletItem;
+    list_list_doc.blocks[1].block_type = RichBlockType.BulletItem;
+
+    const list_list_caret: RichPos = try rich_backspace(&list_list_doc, rich_range_collapsed(try list_list_doc.linear_offset_to_pos(2u32)));
+    var list_list_out: [byte: 16] = [];
+    const list_list_written: usize = list_list_doc.export_plain_text(&list_list_out[0], 16usize);
+    try assert_eq_i32(list_list_written as i32, 2);
+    try assert_eq_bool(strncmp(&list_list_out[0] as *const byte, "ab" as *const byte, 2usize) == 0, true);
+    try assert_eq_i32(list_list_doc.block_count as i32, 1);
+    try assert_eq_i32(list_list_doc.blocks[0].block_type as i32, RichBlockType.BulletItem as i32);
+    try assert_eq_i32((try list_list_doc.pos_to_linear_offset(list_list_caret)) as i32, 1);
+}
+
 test "insert break splits paragraphs and keeps list semantics clear" {
     var paragraph_doc: RichDocument = rich_document_new();
     defer paragraph_doc.dispose();
