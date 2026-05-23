@@ -35,6 +35,7 @@ use widget.rich_toolbar.RichFormatRegistry;
 use widget.rich_toolbar.rich_format_registry_new;
 use richtext.document.RICH_MARK_BOLD;
 use richtext.document.RichBlockType;
+use richtext.selection.RichPos;
 
 export const TEST_RICH_TOOLBAR_MODULE: i32 = 1;
 
@@ -168,6 +169,51 @@ test "rich toolbar active state tracks inline and block commands" {
 
     var list_evt: Event = event_point(EventType.Click, InputDev.Touch, 1, 103u32, Point{ x: rich_toolbar_smoke_click_x(7), y: 18i16 });
     try assert_eq_bool(toolbar.handle_event(&list_evt), true);
+    try assert_eq_bool(toolbar.format_active(toolbar.registry.formats[7]), true);
+}
+
+test "rich toolbar state follows current cursor block family" {
+    var input: RichTextInput = RichTextInput.new("" as &const byte);
+    defer input.dispose();
+    try input.set_plain_text("alpha\nbeta" as &const byte);
+
+    var toolbar: RichToolbar = RichToolbar.new(&input);
+    _ = toolbar.obj();
+
+    const heading_pos: RichPos = try input.doc.linear_offset_to_pos(0u32);
+    try assert_eq_bool(input.collapse_to(heading_pos), true);
+    try assert_eq_bool(input.exec(RichCommand{
+        kind: RichCommandKind.SetHeading2,
+        text_ptr: null,
+        text_len: 0usize,
+    }), true);
+
+    const list_pos: RichPos = try input.doc.linear_offset_to_pos(6u32);
+    try assert_eq_bool(input.collapse_to(list_pos), true);
+    try assert_eq_bool(input.exec(RichCommand{
+        kind: RichCommandKind.ToggleOrderedList,
+        text_ptr: null,
+        text_len: 0usize,
+    }), true);
+
+    toolbar.widget.base.flags.invalid = false;
+    toolbar.widget.base.flags.dirty = false;
+    toolbar.widget.base.self_invalid = false;
+    toolbar.widget.base.invalid_area = Rect{ x: 0, y: 0, w: 0, h: 0 };
+
+    try assert_eq_bool(input.collapse_to(heading_pos), true);
+    try assert_eq_bool(toolbar.widget.base.flags.invalid, true);
+    try assert_eq_bool(toolbar.format_active(toolbar.registry.formats[5]), true);
+    try assert_eq_bool(toolbar.format_active(toolbar.registry.formats[7]), false);
+
+    toolbar.widget.base.flags.invalid = false;
+    toolbar.widget.base.flags.dirty = false;
+    toolbar.widget.base.self_invalid = false;
+    toolbar.widget.base.invalid_area = Rect{ x: 0, y: 0, w: 0, h: 0 };
+
+    try assert_eq_bool(input.collapse_to(list_pos), true);
+    try assert_eq_bool(toolbar.widget.base.flags.invalid, true);
+    try assert_eq_bool(toolbar.format_active(toolbar.registry.formats[5]), false);
     try assert_eq_bool(toolbar.format_active(toolbar.registry.formats[7]), true);
 }
 

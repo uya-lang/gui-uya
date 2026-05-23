@@ -176,6 +176,18 @@ fn rich_toolbar_command_for_spec(spec: RichToolbarFormatSpec) RichCommand {
     };
 }
 
+fn rich_toolbar_block_active(spec: RichToolbarFormatSpec, block_type: RichBlockType) bool {
+    if spec.kind == RichToolbarFormatKind.Heading1 {
+        return block_type == RichBlockType.Heading1
+            || block_type == RichBlockType.Heading2
+            || block_type == RichBlockType.Heading3;
+    }
+    if spec.kind == RichToolbarFormatKind.BulletList || spec.kind == RichToolbarFormatKind.OrderedList {
+        return block_type == RichBlockType.BulletItem || block_type == RichBlockType.OrderedItem;
+    }
+    return spec.block_type != RichBlockType.Paragraph && block_type == spec.block_type;
+}
+
 RichToolbar {
     fn new(editor: &RichTextInput) RichToolbar {
         // Toolbar clicks should not steal focus from the editor, otherwise the
@@ -264,10 +276,7 @@ RichToolbar {
         if spec.mark_bit != 0u16 {
             return self.editor.format_has_mark(spec.mark_bit);
         }
-        if spec.block_type != RichBlockType.Paragraph {
-            return self.editor.format_block_type() == spec.block_type;
-        }
-        return false;
+        return rich_toolbar_block_active(spec, self.editor.format_block_type());
     }
 
     fn trigger_format(self: &Self, index: i32) bool {
