@@ -40,10 +40,19 @@ use render.cpu_backend.cpu_render_batch_execute;
 use render.ctx.RenderCtx;
 use render.ctx.render_ctx_new;
 use render.font.ttf_font_set_default_native_backend_c;
+use render.font.Font;
+use render.font.font_default;
 use render.gpu.IGpuCtx;
 use render.gpu.gpu_execute_batch;
 use render.gpu_software.SoftwareGpuCtx;
 use render.gpu_software.software_gpu_new;
+use richtext.delta.RichDelta;
+use richtext.delta.document_to_delta;
+use richtext.delta.rich_delta_new;
+use richtext.document.RichDocument;
+use richtext.document.rich_document_new;
+use richtext.layout.RichLayoutCache;
+use richtext.layout.rich_layout_cache_new;
 use render.img.ImageData;
 use render.img.draw_image_scaled;
 use render.img.image_data_new;
@@ -70,9 +79,69 @@ const BENCH_EMPTY_FRAME_ITERATIONS: i32 = 250000;
 const BENCH_FULLSCREEN_ITERATIONS: i32 = 1000;
 const BENCH_NOVEL_DRAG_FRAMES: i32 = 64;
 
+struct RichTextDocBenchResult {
+    set_plain_us: u64,
+    layout_us: u64,
+    snapshot_us: u64,
+    line_count: u32,
+    op_count: u32,
+}
+
 struct NovelDragBenchResult {
     avg_us: u64,
     max_us: u64,
+}
+
+fn fill_richtext_bench_text(text: &byte, byte_len: usize) void {
+    var idx: usize = 0usize;
+    var column: usize = 0usize;
+    while idx < byte_len {
+        if column >= 96usize {
+            text[idx] = '\n' as byte;
+            column = 0usize;
+        } else {
+            text[idx] = 'x' as byte;
+            column = column + 1usize;
+        }
+        idx = idx + 1usize;
+    }
+    text[byte_len] = 0u8;
+}
+
+fn bench_richtext_document(byte_len: usize) !RichTextDocBenchResult {
+    const allocator: &MallocAllocator = &g_allocator;
+    const text: &byte = try allocator.alloc(byte_len + 1usize);
+    defer allocator.dealloc(text);
+    fill_richtext_bench_text(text, byte_len);
+
+    var doc: RichDocument = rich_document_new();
+    defer doc.dispose();
+    var layout: RichLayoutCache = rich_layout_cache_new();
+    defer layout.dispose();
+    const font: Font = font_default();
+
+    const set_start_us: u64 = get_tick_us();
+    try doc.set_plain_text(text as &const byte);
+    const set_plain_us: u64 = get_tick_us() - set_start_us;
+
+    const layout_start_us: u64 = get_tick_us();
+    try layout.relayout(&doc, &font, 360u16, 0u32);
+    const layout_us: u64 = get_tick_us() - layout_start_us;
+
+    const snapshot_start_us: u64 = get_tick_us();
+    var snapshot: RichDelta = rich_delta_new();
+    try document_to_delta(&doc, &snapshot);
+    const snapshot_us: u64 = get_tick_us() - snapshot_start_us;
+    const op_count: u32 = snapshot.op_count;
+    snapshot.dispose();
+
+    return RichTextDocBenchResult{
+        set_plain_us: set_plain_us,
+        layout_us: layout_us,
+        snapshot_us: snapshot_us,
+        line_count: layout.line_count,
+        op_count: op_count,
+    };
 }
 
 fn bench_obj_pool() !u64 {
@@ -550,6 +619,15 @@ export fn run_core_bench() i32 {
     const novel_drag: NovelDragBenchResult = bench_novel_drag_render() catch {
         return 16;
     };
+    const richtext_10k: RichTextDocBenchResult = bench_richtext_document(10usize * 1024usize) catch {
+        return 17;
+    };
+    const richtext_50k: RichTextDocBenchResult = bench_richtext_document(50usize * 1024usize) catch {
+        return 18;
+    };
+    const richtext_200k: RichTextDocBenchResult = bench_richtext_document(200usize * 1024usize) catch {
+        return 19;
+    };
 
     printf("Phase5 benchmark/report (%d iterations)\n" as *byte, BENCH_ITERATIONS);
     printf("DirtyRegion : %lu bytes\n" as *byte, @size_of(DirtyRegion) as u64);
@@ -577,5 +655,20 @@ export fn run_core_bench() i32 {
     printf("32 anims    : %lu ms\n" as *byte, animation_ms);
     printf("novel drag  : %lu us\n" as *byte, novel_drag.max_us);
     printf("novel drag avg: %lu us\n" as *byte, novel_drag.avg_us);
+    printf("richtext 10KB set: %lu us\n" as *byte, richtext_10k.set_plain_us);
+    printf("richtext 10KB layout: %lu us\n" as *byte, richtext_10k.layout_us);
+    printf("richtext 10KB snapshot: %lu us\n" as *byte, richtext_10k.snapshot_us);
+    printf("richtext 10KB lines: %lu count\n" as *byte, richtext_10k.line_count as u64);
+    printf("richtext 10KB ops: %lu count\n" as *byte, richtext_10k.op_count as u64);
+    printf("richtext 50KB set: %lu us\n" as *byte, richtext_50k.set_plain_us);
+    printf("richtext 50KB layout: %lu us\n" as *byte, richtext_50k.layout_us);
+    printf("richtext 50KB snapshot: %lu us\n" as *byte, richtext_50k.snapshot_us);
+    printf("richtext 50KB lines: %lu count\n" as *byte, richtext_50k.line_count as u64);
+    printf("richtext 50KB ops: %lu count\n" as *byte, richtext_50k.op_count as u64);
+    printf("richtext 200KB set: %lu us\n" as *byte, richtext_200k.set_plain_us);
+    printf("richtext 200KB layout: %lu us\n" as *byte, richtext_200k.layout_us);
+    printf("richtext 200KB snapshot: %lu us\n" as *byte, richtext_200k.snapshot_us);
+    printf("richtext 200KB lines: %lu count\n" as *byte, richtext_200k.line_count as u64);
+    printf("richtext 200KB ops: %lu count\n" as *byte, richtext_200k.op_count as u64);
     return 0;
 }

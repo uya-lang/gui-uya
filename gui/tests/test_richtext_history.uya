@@ -62,6 +62,7 @@ test "history undo redo restores before and after snapshots" {
 
     var history: RichHistory = rich_history_new();
     defer history.dispose();
+    history.max_merge_span_ms = 1500u32;
     try history.record(&before_doc, &after_doc, RichHistoryMergeKind.InsertText, 2u32, 3u32, 100u64);
     try assert_eq_bool(history.can_undo(), true);
 
@@ -111,6 +112,44 @@ test "history merges contiguous insert text records inside merge window" {
     const redone_written: usize = second_after.export_plain_text(&redone[0], 16usize);
     try assert_eq_i32(redone_written as i32, 3);
     try assert_eq_bool(strncmp(&redone[0] as *const byte, "abc" as *const byte, 3usize) == 0, true);
+}
+
+test "history splits long typing groups even inside rolling merge window" {
+    var doc: RichDocument = rich_document_new();
+    defer doc.dispose();
+    try doc.set_plain_text("a" as &const byte);
+
+    var history: RichHistory = rich_history_new();
+    defer history.dispose();
+    history.max_merge_span_ms = 1500u32;
+
+    var before_first: RichDocument = try rich_history_test_clone_doc(&doc);
+    defer before_first.dispose();
+    _ = try rich_insert_text(&doc, rich_range_collapsed(try doc.linear_offset_to_pos(1u32)), "b" as &const byte, 1usize, rich_inline_marks_none());
+    try history.record(&before_first, &doc, RichHistoryMergeKind.InsertText, 1u32, 2u32, 100u64);
+
+    var before_second: RichDocument = try rich_history_test_clone_doc(&doc);
+    defer before_second.dispose();
+    _ = try rich_insert_text(&doc, rich_range_collapsed(try doc.linear_offset_to_pos(2u32)), "c" as &const byte, 1usize, rich_inline_marks_none());
+    try history.record(&before_second, &doc, RichHistoryMergeKind.InsertText, 2u32, 3u32, 900u64);
+    try assert_eq_i32(history.undo_count as i32, 1);
+
+    var before_third: RichDocument = try rich_history_test_clone_doc(&doc);
+    defer before_third.dispose();
+    _ = try rich_insert_text(&doc, rich_range_collapsed(try doc.linear_offset_to_pos(3u32)), "d" as &const byte, 1usize, rich_inline_marks_none());
+    try history.record(&before_third, &doc, RichHistoryMergeKind.InsertText, 3u32, 4u32, 1600u64);
+    try assert_eq_i32(history.undo_count as i32, 1);
+
+    var before_fourth: RichDocument = try rich_history_test_clone_doc(&doc);
+    defer before_fourth.dispose();
+    _ = try rich_insert_text(&doc, rich_range_collapsed(try doc.linear_offset_to_pos(4u32)), "e" as &const byte, 1usize, rich_inline_marks_none());
+    try history.record(&before_fourth, &doc, RichHistoryMergeKind.InsertText, 4u32, 5u32, 2300u64);
+    try assert_eq_i32(history.undo_count as i32, 2);
+
+    try assert_eq_bool(try history.undo(&doc), true);
+    try rich_history_test_assert_plain_text(&doc, "abcd" as &const byte, 4usize);
+    try assert_eq_bool(try history.undo(&doc), true);
+    try rich_history_test_assert_plain_text(&doc, "a" as &const byte, 1usize);
 }
 
 test "programmatic richtext editing cycle can be recorded and replayed safely" {

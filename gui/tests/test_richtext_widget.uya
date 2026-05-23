@@ -199,6 +199,29 @@ test "rich text input handles text events undo redo and drag selection" {
     try assert_eq_i32((try input.doc.pos_to_linear_offset(input.selection().focus)) as i32, 13);
 }
 
+test "rich text input insert invalidates caret sized dirty region" {
+    var input: RichTextInput = RichTextInput.new("" as &const byte);
+    defer input.dispose();
+    input.widget.at(0, 0);
+    input.widget.size(240, 80);
+
+    var bytes: [byte: 76800] = [];
+    var ctx: RenderCtx = render_ctx_new(framebuffer_new(&bytes[0], 240, 80, 960, PixelFormat.ARGB8888));
+    input.render(&ctx);
+    input.widget.base.flags.invalid = false;
+    input.widget.base.flags.dirty = false;
+    input.widget.base.self_invalid = false;
+    input.widget.base.invalid_area = Rect{ x: 0, y: 0, w: 0, h: 0 };
+
+    try assert_eq_bool(input.exec(RichCommand{
+        kind: RichCommandKind.InsertText,
+        text_ptr: "x" as &const byte,
+        text_len: 1usize,
+    }), true);
+    try assert_eq_bool(input.widget.base.invalid_area.w < input.widget.base.screen_area().w, true);
+    try assert_eq_bool(input.widget.base.invalid_area.h < input.widget.base.screen_area().h, true);
+}
+
 test "rich text input paste plain normalizes newlines and tabs" {
     var input: RichTextInput = RichTextInput.new("" as &const byte);
     defer input.dispose();

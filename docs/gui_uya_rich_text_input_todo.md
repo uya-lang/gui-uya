@@ -314,7 +314,7 @@
   - [x] 短文本 commit 可继续走现有 `TextInput` 路径
   - [x] paste / copy / cut / composition 不走当前 `WEB_EVT_TEXT_INPUT`
   - [x] 长文本通过 bridge 直调或 side buffer 进入编辑器
-- [ ] 验证移动端虚拟键盘是否能弹出
+- [x] 验证移动端虚拟键盘是否能弹出
 
 ### 验收
 
@@ -363,20 +363,20 @@
 
 ### TODO
 
-- [ ] 新增 `RichToolbar`
-- [ ] 新增当前格式态查询 API
-- [ ] 新增格式注册表
-- [ ] 预留 mention/image/embed 接口
-- [ ] 补齐主题 token
-- [ ] 做 10 KB / 50 KB / 200 KB 文档基准
-- [ ] 优化连续输入历史合并策略
-- [ ] 优化局部 dirty 重绘
+- [x] 新增 `RichToolbar`
+- [x] 新增当前格式态查询 API
+- [x] 新增格式注册表
+- [x] 预留 mention/image/embed 接口
+- [x] 补齐主题 token
+- [x] 做 10 KB / 50 KB / 200 KB 文档基准
+- [x] 优化连续输入历史合并策略
+- [x] 优化局部 dirty 重绘
 
 ### 验收
 
-- [ ] 工具栏能驱动常用格式
-- [ ] 大多数常规场景编辑保持流畅
-- [ ] 扩展格式不需要推翻现有文档模型
+- [x] 工具栏能驱动常用格式
+- [x] 大多数常规场景编辑保持流畅
+- [x] 扩展格式不需要推翻现有文档模型
 
 ---
 

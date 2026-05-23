@@ -290,12 +290,16 @@ test "theme manager applies component specific styles" {
     var label: GuiObj = gui_obj_default();
     var slider: GuiObj = gui_obj_default();
     var image: GuiObj = gui_obj_default();
+    var rich_text: GuiObj = gui_obj_default();
+    var rich_toolbar: GuiObj = gui_obj_default();
 
     panel.type_tag = 0x1007u32;
     button.type_tag = 0x1001u32;
     label.type_tag = 0x1002u32;
     slider.type_tag = 0x1004u32;
     image.type_tag = 0x1003u32;
+    rich_text.type_tag = 0x100Du32;
+    rich_toolbar.type_tag = 0x100Eu32;
     button.flags.clickable = true;
     slider.flags.focusable = true;
 
@@ -303,6 +307,8 @@ test "theme manager applies component specific styles" {
     panel.add_child(&label);
     panel.add_child(&slider);
     panel.add_child(&image);
+    panel.add_child(&rich_text);
+    panel.add_child(&rich_toolbar);
 
     manager.apply_to_tree(&panel);
     const current: &Theme = manager.current();
@@ -316,4 +322,8 @@ test "theme manager applies component specific styles" {
     try assert_style_u32(&label.style, StyleProp.FontSize, current.text_style.get_u32_or(StyleProp.FontSize, 0u32));
     try assert_style_u32(&slider.style, StyleProp.Radius, current.compact_style.get_u32_or(StyleProp.Radius, 0u32));
     try assert_style_color(&image.style, StyleProp.BgColor, current.panel_style.get_color_or(StyleProp.BgColor, BLACK));
+    try assert_style_color(&rich_text.style, StyleProp.BgColor, current.rich_text_style.get_color_or(StyleProp.BgColor, BLACK));
+    try assert_style_u32(&rich_text.style, StyleProp.FontSize, current.rich_text_style.get_u32_or(StyleProp.FontSize, 0u32));
+    try assert_style_color(&rich_toolbar.style, StyleProp.BgColor, current.rich_toolbar_style.get_color_or(StyleProp.BgColor, BLACK));
+    try assert_style_u32(&rich_toolbar.style, StyleProp.Radius, current.rich_toolbar_style.get_u32_or(StyleProp.Radius, 0u32));
 }

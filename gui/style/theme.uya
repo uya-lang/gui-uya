@@ -21,6 +21,8 @@ const THEME_WIDGET_LIST: u32 = 0x1008u32;
 const THEME_WIDGET_GRID_VIEW: u32 = 0x1009u32;
 const THEME_WIDGET_CHART: u32 = 0x100Au32;
 const THEME_WIDGET_CANVAS: u32 = 0x100Bu32;
+const THEME_WIDGET_RICH_TEXT_INPUT: u32 = 0x100Du32;
+const THEME_WIDGET_RICH_TOOLBAR: u32 = 0x100Eu32;
 
 export enum ThemeVariant {
     Light,
@@ -42,6 +44,8 @@ export struct Theme {
     panel_style: Style,
     text_style: Style,
     compact_style: Style,
+    rich_text_style: Style,
+    rich_toolbar_style: Style,
 }
 
 export struct ThemeManager {
@@ -66,6 +70,8 @@ fn theme_entry_default() Theme {
         panel_style: style_default(),
         text_style: style_default(),
         compact_style: style_default(),
+        rich_text_style: style_default(),
+        rich_toolbar_style: style_default(),
     };
 }
 
@@ -101,6 +107,10 @@ fn theme_apply_to_obj(theme: &Theme, obj: &GuiObj) void {
         || obj.type_tag == THEME_WIDGET_LIST
         || obj.type_tag == THEME_WIDGET_GRID_VIEW {
         obj.style = theme.compact_style.clone();
+    } else if obj.type_tag == THEME_WIDGET_RICH_TEXT_INPUT {
+        obj.style = theme.rich_text_style.clone();
+    } else if obj.type_tag == THEME_WIDGET_RICH_TOOLBAR {
+        obj.style = theme.rich_toolbar_style.clone();
     } else if obj.type_tag == THEME_WIDGET_IMAGE
         || obj.type_tag == THEME_WIDGET_CHART
         || obj.type_tag == THEME_WIDGET_CANVAS {
@@ -194,6 +204,8 @@ export fn material_light_theme() Theme {
         panel_style: theme_make_style(theme_color(0xFFFFFFu32), theme_color(0x111111u32), 1, theme_color(0xD8D8D8u32), 6, 10, 14),
         text_style: theme_make_style(theme_color(0xF7F7F7u32), theme_color(0x111111u32), 0, theme_color(0xF7F7F7u32), 0, 0, 14),
         compact_style: theme_make_style(theme_color(0xF1F5F9u32), theme_color(0x1E293Bu32), 1, theme_color(0xCBD5E1u32), 4, 4, 12),
+        rich_text_style: theme_make_style(theme_color(0xFFFFFFu32), theme_color(0x0F172Au32), 1, theme_color(0xCBD5E1u32), 10, 8, 14),
+        rich_toolbar_style: theme_make_style(theme_color(0xF8FAFCu32), theme_color(0x0F172Au32), 1, theme_color(0xCBD5E1u32), 8, 6, 12),
     };
 }
 
@@ -213,6 +225,8 @@ export fn material_dark_theme() Theme {
         panel_style: theme_make_style(theme_color(0x1B2430u32), theme_color(0xF8FAFCu32), 1, theme_color(0x334155u32), 6, 10, 14),
         text_style: theme_make_style(theme_color(0x101418u32), theme_color(0xF8FAFCu32), 0, theme_color(0x101418u32), 0, 0, 14),
         compact_style: theme_make_style(theme_color(0x0F172Au32), theme_color(0xE2E8F0u32), 1, theme_color(0x334155u32), 3, 3, 11),
+        rich_text_style: theme_make_style(theme_color(0x111827u32), theme_color(0xF8FAFCu32), 1, theme_color(0x475569u32), 10, 8, 14),
+        rich_toolbar_style: theme_make_style(theme_color(0x0F172Au32), theme_color(0xE2E8F0u32), 1, theme_color(0x334155u32), 8, 6, 12),
     };
 }
 
@@ -224,5 +238,7 @@ export fn compact_theme() Theme {
     theme.panel_style = theme_make_style(theme_color(0xEEF2F6u32), theme_color(0x0F172Au32), 1, theme_color(0xCBD5E1u32), 3, 3, 11);
     theme.button_style = theme.compact_style.clone();
     theme.text_style.set_u32(StyleProp.FontSize, 11u32);
+    theme.rich_text_style = theme_make_style(theme_color(0xFFFFFFu32), theme_color(0x0F172Au32), 1, theme_color(0xCBD5E1u32), 6, 5, 12);
+    theme.rich_toolbar_style = theme_make_style(theme_color(0xF1F5F9u32), theme_color(0x1E293Bu32), 1, theme_color(0xCBD5E1u32), 5, 4, 11);
     return theme;
 }

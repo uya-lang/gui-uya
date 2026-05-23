@@ -122,6 +122,25 @@ fn rich_text_input_clamp_u16(value: i32) u16 {
     return (value as! u16).value;
 }
 
+fn rich_text_input_dirty_region_for_caret(before_rect: Rect, after_rect: Rect, widget_area: Rect, scroll_changed: bool) Rect {
+    const full_area: Rect = Rect{ x: widget_area.x, y: widget_area.y, w: widget_area.w, h: widget_area.h };
+    const widget_area_pixels: u32 = widget_area.w as u32 * widget_area.h as u32;
+    if scroll_changed || before_rect.is_empty() || after_rect.is_empty() {
+        return full_area;
+    }
+    const caret_bounds: Rect = before_rect.union_rect(after_rect);
+    const inflated: Rect = caret_bounds.inflate(2, 2);
+    const caret_union: Rect = inflated.intersect(widget_area);
+    if caret_union.is_empty() {
+        return full_area;
+    }
+    const dirty_pixels: u32 = caret_union.w as u32 * caret_union.h as u32;
+    if widget_area_pixels == 0u32 || dirty_pixels * 4u32 > widget_area_pixels {
+        return full_area;
+    }
+    return caret_union;
+}
+
 fn rich_text_input_placeholder_color(bg: Color, fg: Color) Color {
     return fg.lerp(bg, 0.45);
 }
@@ -804,6 +823,13 @@ RichTextInput {
         self.widget.emit_value_change(self.current_plain_text_len());
     }
 
+    fn invalidate_caret_region(self: &Self, before_rect: Rect, before_scroll_y: i32) void {
+        const area: Rect = self.widget.base.screen_area();
+        const after_rect: Rect = self.current_caret_rect();
+        const dirty: Rect = rich_text_input_dirty_region_for_caret(before_rect, after_rect, area, before_scroll_y != self.scroll_y);
+        self.widget.base.invalidate_region(dirty);
+    }
+
     fn sync_after_document_replace(self: &Self, caret: RichPos, emit_change: bool) void {
         self.pending_marks = rich_inline_marks_none();
         self.selection_range = rich_range_collapsed(caret);
@@ -1056,6 +1082,8 @@ RichTextInput {
         };
         defer before_doc.dispose();
 
+        const before_caret_rect: Rect = self.current_caret_rect();
+        const before_scroll_y: i32 = self.scroll_y;
         const caret_before: u32 = self.caret_offset();
         var caret: RichPos = self.selection_range.focus;
         var working_range: RichRange = self.selection_range;
@@ -1114,7 +1142,7 @@ RichTextInput {
         _ = self.ensure_layout() catch {};
         self.scroll_selection_into_view();
         self.emit_change();
-        self.widget.base.invalidate();
+        self.invalidate_caret_region(before_caret_rect, before_scroll_y);
         return true;
     }
 

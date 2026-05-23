@@ -17,6 +17,7 @@ struct RichHistoryEntry {
     merge_kind: RichHistoryMergeKind,
     caret_before: u32,
     caret_after: u32,
+    group_start_ms: u64,
     timestamp_ms: u64,
 }
 
@@ -29,6 +30,7 @@ export struct RichHistory {
     redo_count: u32,
     redo_cap: u32,
     merge_window_ms: u32,
+    max_merge_span_ms: u32,
 }
 
 fn rich_history_entry_new(allocator: &MallocAllocator) RichHistoryEntry {
@@ -38,6 +40,7 @@ fn rich_history_entry_new(allocator: &MallocAllocator) RichHistoryEntry {
         merge_kind: RichHistoryMergeKind.None,
         caret_before: 0u32,
         caret_after: 0u32,
+        group_start_ms: 0u64,
         timestamp_ms: 0u64,
     };
 }
@@ -48,6 +51,7 @@ fn rich_history_entry_dispose(entry: &RichHistoryEntry) void {
     entry.merge_kind = RichHistoryMergeKind.None;
     entry.caret_before = 0u32;
     entry.caret_after = 0u32;
+    entry.group_start_ms = 0u64;
     entry.timestamp_ms = 0u64;
 }
 
@@ -67,7 +71,7 @@ fn rich_history_restore_snapshot(doc: &RichDocument, snapshot: &RichDelta) !void
     try apply_delta(doc, snapshot);
 }
 
-fn rich_history_can_merge(last: &RichHistoryEntry, merge_kind: RichHistoryMergeKind, caret_before: u32, timestamp_ms: u64, merge_window_ms: u32) bool {
+fn rich_history_can_merge(last: &RichHistoryEntry, merge_kind: RichHistoryMergeKind, caret_before: u32, timestamp_ms: u64, merge_window_ms: u32, max_merge_span_ms: u32) bool {
     if merge_kind != RichHistoryMergeKind.InsertText || last.merge_kind != RichHistoryMergeKind.InsertText {
         return false;
     }
@@ -77,7 +81,13 @@ fn rich_history_can_merge(last: &RichHistoryEntry, merge_kind: RichHistoryMergeK
     if timestamp_ms < last.timestamp_ms {
         return false;
     }
-    return timestamp_ms - last.timestamp_ms <= merge_window_ms as u64;
+    if timestamp_ms - last.timestamp_ms > merge_window_ms as u64 {
+        return false;
+    }
+    if timestamp_ms < last.group_start_ms {
+        return false;
+    }
+    return timestamp_ms - last.group_start_ms <= max_merge_span_ms as u64;
 }
 
 export fn rich_history_new() RichHistory {
@@ -94,6 +104,7 @@ export fn rich_history_new_with_allocator(allocator: &MallocAllocator) RichHisto
         redo_count: 0u32,
         redo_cap: 0u32,
         merge_window_ms: 800u32,
+        max_merge_span_ms: 5000u32,
     };
 }
 
@@ -171,11 +182,14 @@ RichHistory {
         entry.merge_kind = merge_kind;
         entry.caret_before = caret_before;
         entry.caret_after = caret_after;
+        entry.group_start_ms = timestamp_ms;
         entry.timestamp_ms = timestamp_ms;
+
+        self.clear_redo();
 
         if self.undo_count > 0u32 {
             const last: &RichHistoryEntry = &self.undo_entries[self.undo_count as usize - 1usize];
-            if rich_history_can_merge(last, merge_kind, caret_before, timestamp_ms, self.merge_window_ms) {
+            if rich_history_can_merge(last, merge_kind, caret_before, timestamp_ms, self.merge_window_ms, self.max_merge_span_ms) {
                 last.after.dispose();
                 last.after = entry.after;
                 last.caret_after = caret_after;
@@ -185,7 +199,6 @@ RichHistory {
             }
         }
 
-        self.clear_redo();
         try self.ensure_undo_capacity(self.undo_count + 1u32);
         self.undo_entries[self.undo_count as usize] = entry;
         self.undo_count = self.undo_count + 1u32;
