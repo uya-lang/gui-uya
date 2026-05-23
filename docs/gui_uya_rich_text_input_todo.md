@@ -169,18 +169,18 @@
 - [x] 新增 `RichRange`
 - [x] 实现选区归一化
 - [x] 实现左右移动
-- [ ] 实现上下移动
+- [x] 实现上下移动
 - [x] 实现段首段尾移动
-- [ ] 实现选区删除
-- [ ] 实现插入文本
-- [ ] 实现退格 / 前删
-- [ ] 实现回车拆段 / 合段
-- [ ] 实现 block type 切换
-- [ ] 实现 inline mark toggle
-- [ ] 新增 `RichHistory`
-- [ ] 实现 undo / redo
-- [ ] 实现连续输入合并策略
-- [ ] 命令执行后统一下沉为 patch delta
+- [x] 实现选区删除
+- [x] 实现插入文本
+- [x] 实现退格 / 前删
+- [x] 实现回车拆段 / 合段
+- [x] 实现 block type 切换
+- [x] 实现 inline mark toggle
+- [x] 新增 `RichHistory`
+- [x] 实现 undo / redo
+- [x] 实现连续输入合并策略
+- [x] 命令执行后统一下沉为 patch delta
 
 ### 验收
 

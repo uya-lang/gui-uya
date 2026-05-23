@@ -8,6 +8,10 @@ use richtext.document.rich_inline_marks_eq;
 use richtext.document.rich_inline_marks_none;
 use richtext.document.rich_utf8_codepoint_count;
 use richtext.document.rich_utf8_next_index;
+use richtext.selection.RichPos;
+use richtext.selection.RichRange;
+use richtext.selection.rich_range_collapsed;
+use richtext.selection.rich_range_normalized;
 use std.mem.allocator.MallocAllocator;
 use std.mem.allocator.g_allocator;
 use std.mem.mem.mem_copy;
@@ -49,6 +53,11 @@ export struct RichDelta {
     op_cap: u32,
 }
 
+export struct RichInlineToggleResult {
+    range: RichRange,
+    pending_marks: RichInlineMarks,
+}
+
 enum RichLinearAtomKind {
     Text,
     Break,
@@ -68,6 +77,11 @@ struct RichLinearAtomBuffer {
     atoms: &RichLinearAtom,
     len: u32,
     cap: u32,
+}
+
+struct RichLinearRange {
+    start: u32,
+    end: u32,
 }
 
 export fn rich_block_attrs(block_type: RichBlockType, indent: u8) RichBlockAttrs {
@@ -286,6 +300,47 @@ fn rich_delta_insert_text_atoms(buf: &RichLinearAtomBuffer, text: &const byte, t
         try rich_linear_atom_push(buf, rich_linear_atom_text(@ptr_from_usize(@usize_from_ptr(text as &void) + cursor) as &const byte, next_cursor - cursor, marks));
         cursor = next_cursor;
     }
+}
+
+fn rich_delta_block_text_codepoints(block: &RichBlock) u32 {
+    if block == null {
+        return 0u32;
+    }
+    var total: u32 = 0u32;
+    var span_idx: u16 = 0u16;
+    while span_idx < block.span_count {
+        const span: &RichSpan = &block.spans[span_idx as usize];
+        total = total + rich_utf8_codepoint_count(span.text_ptr as &const byte, span.text_len);
+        span_idx = span_idx + 1u16;
+    }
+    return total;
+}
+
+fn rich_delta_range_offsets(doc: &RichDocument, range: RichRange) !RichLinearRange {
+    const normalized: RichRange = rich_range_normalized(range);
+    return RichLinearRange{
+        start: try doc.pos_to_linear_offset(normalized.anchor),
+        end: try doc.pos_to_linear_offset(normalized.focus),
+    };
+}
+
+fn rich_delta_block_is_list(block_type: RichBlockType) bool {
+    return block_type == RichBlockType.BulletItem || block_type == RichBlockType.OrderedItem;
+}
+
+fn rich_delta_delete_offsets(doc: &RichDocument, start: u32, end: u32) !RichPos {
+    if end <= start {
+        return try doc.linear_offset_to_pos(start);
+    }
+
+    var patch: RichDelta = rich_delta_new_with_allocator(doc.allocator);
+    defer patch.dispose();
+    if start > 0u32 {
+        try patch.push_retain(start, rich_delta_attrs_none());
+    }
+    try patch.push_delete(end - start);
+    try apply_delta(doc, &patch);
+    return try doc.linear_offset_to_pos(start);
 }
 
 fn rich_document_rebuild_from_atoms(doc: &RichDocument, atoms: &RichLinearAtomBuffer) !void {
@@ -575,6 +630,265 @@ export fn apply_delta(doc: &RichDocument, delta: &RichDelta) !void {
     }
 
     try rich_document_rebuild_from_atoms(doc, &dst);
+}
+
+export fn rich_delete_range(doc: &RichDocument, range: RichRange) !RichPos {
+    const offsets: RichLinearRange = try rich_delta_range_offsets(doc, range);
+    return try rich_delta_delete_offsets(doc, offsets.start, offsets.end);
+}
+
+export fn rich_insert_text(doc: &RichDocument, range: RichRange, text: &const byte, text_len: usize, marks: RichInlineMarks) !RichPos {
+    const offsets: RichLinearRange = try rich_delta_range_offsets(doc, range);
+    if text == null || text_len == 0usize {
+        return try rich_delta_delete_offsets(doc, offsets.start, offsets.end);
+    }
+
+    var patch: RichDelta = rich_delta_new_with_allocator(doc.allocator);
+    defer patch.dispose();
+    if offsets.start > 0u32 {
+        try patch.push_retain(offsets.start, rich_delta_attrs_none());
+    }
+    if offsets.end > offsets.start {
+        try patch.push_delete(offsets.end - offsets.start);
+    }
+    const none_marks: RichInlineMarks = rich_inline_marks_none();
+    if rich_inline_marks_eq(marks, none_marks) {
+        try patch.push_insert_text(text, text_len, rich_delta_attrs_none());
+    } else {
+        try patch.push_insert_text(text, text_len, rich_delta_attrs_inline(marks));
+    }
+    try apply_delta(doc, &patch);
+    return try doc.linear_offset_to_pos(offsets.start + rich_utf8_codepoint_count(text, text_len));
+}
+
+export fn rich_backspace(doc: &RichDocument, range: RichRange) !RichPos {
+    const offsets: RichLinearRange = try rich_delta_range_offsets(doc, range);
+    if offsets.end > offsets.start {
+        return try rich_delta_delete_offsets(doc, offsets.start, offsets.end);
+    }
+    if offsets.start == 0u32 {
+        return try doc.linear_offset_to_pos(0u32);
+    }
+
+    var patch: RichDelta = rich_delta_new_with_allocator(doc.allocator);
+    defer patch.dispose();
+    if offsets.start > 1u32 {
+        try patch.push_retain(offsets.start - 1u32, rich_delta_attrs_none());
+    }
+    try patch.push_delete(1u32);
+    try apply_delta(doc, &patch);
+    return try doc.linear_offset_to_pos(offsets.start - 1u32);
+}
+
+export fn rich_delete_forward(doc: &RichDocument, range: RichRange) !RichPos {
+    const offsets: RichLinearRange = try rich_delta_range_offsets(doc, range);
+    if offsets.end > offsets.start {
+        return try rich_delta_delete_offsets(doc, offsets.start, offsets.end);
+    }
+    const max_offset: u32 = doc.max_cursor_offset();
+    if offsets.start >= max_offset {
+        return try doc.linear_offset_to_pos(max_offset);
+    }
+
+    var patch: RichDelta = rich_delta_new_with_allocator(doc.allocator);
+    defer patch.dispose();
+    if offsets.start > 0u32 {
+        try patch.push_retain(offsets.start, rich_delta_attrs_none());
+    }
+    try patch.push_delete(1u32);
+    try apply_delta(doc, &patch);
+    return try doc.linear_offset_to_pos(offsets.start);
+}
+
+export fn rich_insert_break(doc: &RichDocument, range: RichRange) !RichPos {
+    const offsets: RichLinearRange = try rich_delta_range_offsets(doc, range);
+    if offsets.end > offsets.start {
+        const caret: RichPos = try rich_delta_delete_offsets(doc, offsets.start, offsets.end);
+        return try rich_insert_break(doc, rich_range_collapsed(caret));
+    }
+    const caret: RichPos = try doc.linear_offset_to_pos(offsets.start);
+    if caret.block_index >= doc.block_count {
+        return error.RichTextOutOfBounds;
+    }
+    const block: &RichBlock = &doc.blocks[caret.block_index as usize];
+    const block_len: u32 = rich_delta_block_text_codepoints(block);
+    if block_len == 0u32 && rich_delta_block_is_list(block.block_type) {
+        var rewrite: RichDelta = rich_delta_new_with_allocator(doc.allocator);
+        defer rewrite.dispose();
+        if offsets.start > 0u32 {
+            try rewrite.push_retain(offsets.start, rich_delta_attrs_none());
+        }
+        try rewrite.push_retain(1u32, rich_delta_attrs_block(RichBlockType.Paragraph, 0u8));
+        try apply_delta(doc, &rewrite);
+        return try doc.linear_offset_to_pos(offsets.start);
+    }
+
+    var patch: RichDelta = rich_delta_new_with_allocator(doc.allocator);
+    defer patch.dispose();
+    if offsets.start > 0u32 {
+        try patch.push_retain(offsets.start, rich_delta_attrs_none());
+    }
+    try patch.push_insert_break(rich_delta_attrs_block(block.block_type, block.indent));
+    try apply_delta(doc, &patch);
+    return try doc.linear_offset_to_pos(offsets.start + 1u32);
+}
+
+export fn rich_set_block_type(doc: &RichDocument, range: RichRange, block_type: RichBlockType, indent: u8) !RichRange {
+    const offsets: RichLinearRange = try rich_delta_range_offsets(doc, range);
+    const start: u32 = offsets.start;
+    const end: u32 = offsets.end;
+    var collapsed_block_index: u32 = 0u32;
+    if start == end {
+        collapsed_block_index = (try doc.linear_offset_to_pos(start)).block_index;
+    }
+
+    var patch: RichDelta = rich_delta_new_with_allocator(doc.allocator);
+    defer patch.dispose();
+
+    var block_start: u32 = 0u32;
+    var block_idx: u32 = 0u32;
+    while block_idx < doc.block_count {
+        const block: &RichBlock = &doc.blocks[block_idx as usize];
+        const block_len: u32 = rich_delta_block_text_codepoints(block);
+        if block_len > 0u32 {
+            try patch.push_retain(block_len, rich_delta_attrs_none());
+        }
+
+        var selected: bool = false;
+        if start == end {
+            selected = block_idx == collapsed_block_index;
+        } else {
+            var coverage_end: u32 = block_start + block_len;
+            if block_idx + 1u32 < doc.block_count {
+                coverage_end = coverage_end + 1u32;
+            }
+            selected = start < coverage_end && end > block_start;
+        }
+        if selected {
+            try patch.push_retain(1u32, rich_delta_attrs_block(block_type, indent));
+        } else {
+            try patch.push_retain(1u32, rich_delta_attrs_none());
+        }
+
+        if block_idx + 1u32 < doc.block_count {
+            block_start = block_start + block_len + 1u32;
+        } else {
+            block_start = block_start + block_len;
+        }
+        block_idx = block_idx + 1u32;
+    }
+
+    try apply_delta(doc, &patch);
+    return RichRange{
+        anchor: try doc.linear_offset_to_pos(start),
+        focus: try doc.linear_offset_to_pos(end),
+    };
+}
+
+export fn rich_toggle_inline_mark(doc: &RichDocument, range: RichRange, pending_marks: RichInlineMarks, mark_bit: u16) !RichInlineToggleResult {
+    const offsets: RichLinearRange = try rich_delta_range_offsets(doc, range);
+    const start: u32 = offsets.start;
+    const end: u32 = offsets.end;
+    if start == end {
+        var next_pending: RichInlineMarks = pending_marks;
+        if (next_pending.bits & mark_bit) != 0u16 {
+            next_pending.bits = next_pending.bits & (~mark_bit);
+        } else {
+            next_pending.bits = next_pending.bits | mark_bit;
+        }
+        return RichInlineToggleResult{
+            range: RichRange{
+                anchor: try doc.linear_offset_to_pos(start),
+                focus: try doc.linear_offset_to_pos(end),
+            },
+            pending_marks: next_pending,
+        };
+    }
+
+    var saw_selected_text: bool = false;
+    var all_selected_have_mark: bool = true;
+    var scan_cursor: u32 = 0u32;
+    var scan_block_idx: u32 = 0u32;
+    while scan_block_idx < doc.block_count {
+        const scan_block: &RichBlock = &doc.blocks[scan_block_idx as usize];
+        var scan_span_idx: u16 = 0u16;
+        while scan_span_idx < scan_block.span_count {
+            const scan_span: &RichSpan = &scan_block.spans[scan_span_idx as usize];
+            var scan_byte_idx: usize = 0usize;
+            while scan_byte_idx < scan_span.text_len {
+                const next_scan_byte: usize = rich_utf8_next_index(scan_span.text_ptr as &const byte, scan_span.text_len, scan_byte_idx);
+                if scan_cursor >= start && scan_cursor < end {
+                    saw_selected_text = true;
+                    if (scan_span.marks.bits & mark_bit) == 0u16 {
+                        all_selected_have_mark = false;
+                    }
+                }
+                _ = next_scan_byte;
+                scan_cursor = scan_cursor + 1u32;
+                scan_byte_idx = next_scan_byte;
+            }
+            scan_span_idx = scan_span_idx + 1u16;
+        }
+        if scan_block_idx + 1u32 < doc.block_count {
+            scan_cursor = scan_cursor + 1u32;
+        }
+        scan_block_idx = scan_block_idx + 1u32;
+    }
+
+    if !saw_selected_text {
+        return RichInlineToggleResult{
+            range: RichRange{
+                anchor: try doc.linear_offset_to_pos(start),
+                focus: try doc.linear_offset_to_pos(end),
+            },
+            pending_marks: pending_marks,
+        };
+    }
+
+    var patch: RichDelta = rich_delta_new_with_allocator(doc.allocator);
+    defer patch.dispose();
+    var cursor: u32 = 0u32;
+    var block_idx: u32 = 0u32;
+    while block_idx < doc.block_count {
+        const block: &RichBlock = &doc.blocks[block_idx as usize];
+        var span_idx: u16 = 0u16;
+        while span_idx < block.span_count {
+            const span: &RichSpan = &block.spans[span_idx as usize];
+            var byte_idx: usize = 0usize;
+            while byte_idx < span.text_len {
+                const next_byte_idx: usize = rich_utf8_next_index(span.text_ptr as &const byte, span.text_len, byte_idx);
+                if cursor >= start && cursor < end {
+                    var updated_marks: RichInlineMarks = span.marks;
+                    if all_selected_have_mark {
+                        updated_marks.bits = updated_marks.bits & (~mark_bit);
+                    } else {
+                        updated_marks.bits = updated_marks.bits | mark_bit;
+                    }
+                    try patch.push_retain(1u32, rich_delta_attrs_inline(updated_marks));
+                } else {
+                    try patch.push_retain(1u32, rich_delta_attrs_none());
+                }
+                _ = next_byte_idx;
+                cursor = cursor + 1u32;
+                byte_idx = next_byte_idx;
+            }
+            span_idx = span_idx + 1u16;
+        }
+        try patch.push_retain(1u32, rich_delta_attrs_none());
+        if block_idx + 1u32 < doc.block_count {
+            cursor = cursor + 1u32;
+        }
+        block_idx = block_idx + 1u32;
+    }
+
+    try apply_delta(doc, &patch);
+    return RichInlineToggleResult{
+        range: RichRange{
+            anchor: try doc.linear_offset_to_pos(start),
+            focus: try doc.linear_offset_to_pos(end),
+        },
+        pending_marks: pending_marks,
+    };
 }
 
 export fn rich_delta_from_plain_text(text: &const byte) !RichDelta {

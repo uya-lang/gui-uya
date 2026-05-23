@@ -1,0 +1,76 @@
+use libc.strncmp;
+use richtext.delta.rich_insert_text;
+use richtext.document.RichDocument;
+use richtext.document.rich_document_new;
+use richtext.document.rich_inline_marks_none;
+use richtext.history.RichHistory;
+use richtext.history.RichHistoryMergeKind;
+use richtext.history.rich_history_new;
+use richtext.selection.rich_range_collapsed;
+use std.testing.assert_eq_bool;
+use std.testing.assert_eq_i32;
+
+export const TEST_RICHTEXT_HISTORY_MODULE: i32 = 1;
+
+test "history undo redo restores before and after snapshots" {
+    var before_doc: RichDocument = rich_document_new();
+    defer before_doc.dispose();
+    try before_doc.set_plain_text("ab" as &const byte);
+
+    var after_doc: RichDocument = rich_document_new();
+    defer after_doc.dispose();
+    try after_doc.set_plain_text("ab" as &const byte);
+    _ = try rich_insert_text(&after_doc, rich_range_collapsed(try after_doc.linear_offset_to_pos(2u32)), "c" as &const byte, 1usize, rich_inline_marks_none());
+
+    var history: RichHistory = rich_history_new();
+    defer history.dispose();
+    try history.record(&before_doc, &after_doc, RichHistoryMergeKind.InsertText, 2u32, 3u32, 100u64);
+    try assert_eq_bool(history.can_undo(), true);
+
+    try assert_eq_bool(try history.undo(&after_doc), true);
+    var undone: [byte: 16] = [];
+    const undone_written: usize = after_doc.export_plain_text(&undone[0], 16usize);
+    try assert_eq_i32(undone_written as i32, 2);
+    try assert_eq_bool(strncmp(&undone[0] as *const byte, "ab" as *const byte, 2usize) == 0, true);
+    try assert_eq_bool(history.can_redo(), true);
+
+    try assert_eq_bool(try history.redo(&after_doc), true);
+    var redone: [byte: 16] = [];
+    const redone_written: usize = after_doc.export_plain_text(&redone[0], 16usize);
+    try assert_eq_i32(redone_written as i32, 3);
+    try assert_eq_bool(strncmp(&redone[0] as *const byte, "abc" as *const byte, 3usize) == 0, true);
+}
+
+test "history merges contiguous insert text records inside merge window" {
+    var first_before: RichDocument = rich_document_new();
+    defer first_before.dispose();
+    try first_before.set_plain_text("a" as &const byte);
+
+    var first_after: RichDocument = rich_document_new();
+    defer first_after.dispose();
+    try first_after.set_plain_text("a" as &const byte);
+    _ = try rich_insert_text(&first_after, rich_range_collapsed(try first_after.linear_offset_to_pos(1u32)), "b" as &const byte, 1usize, rich_inline_marks_none());
+
+    var second_after: RichDocument = rich_document_new();
+    defer second_after.dispose();
+    try second_after.set_plain_text("ab" as &const byte);
+    _ = try rich_insert_text(&second_after, rich_range_collapsed(try second_after.linear_offset_to_pos(2u32)), "c" as &const byte, 1usize, rich_inline_marks_none());
+
+    var history: RichHistory = rich_history_new();
+    defer history.dispose();
+    try history.record(&first_before, &first_after, RichHistoryMergeKind.InsertText, 1u32, 2u32, 100u64);
+    try history.record(&first_after, &second_after, RichHistoryMergeKind.InsertText, 2u32, 3u32, 300u64);
+    try assert_eq_i32(history.undo_count as i32, 1);
+
+    try assert_eq_bool(try history.undo(&second_after), true);
+    var undone: [byte: 16] = [];
+    const undone_written: usize = second_after.export_plain_text(&undone[0], 16usize);
+    try assert_eq_i32(undone_written as i32, 1);
+    try assert_eq_bool(strncmp(&undone[0] as *const byte, "a" as *const byte, 1usize) == 0, true);
+
+    try assert_eq_bool(try history.redo(&second_after), true);
+    var redone: [byte: 16] = [];
+    const redone_written: usize = second_after.export_plain_text(&redone[0], 16usize);
+    try assert_eq_i32(redone_written as i32, 3);
+    try assert_eq_bool(strncmp(&redone[0] as *const byte, "abc" as *const byte, 3usize) == 0, true);
+}

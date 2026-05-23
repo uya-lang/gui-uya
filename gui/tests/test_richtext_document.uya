@@ -91,6 +91,58 @@ test "rich document position and linear offsets stay consistent" {
     try assert_eq_i32(block_end.utf8_offset as i32, 6);
 }
 
+test "rich document vertical movement preserves logical column and clamps by block length" {
+    var doc: RichDocument = rich_document_new();
+    defer doc.dispose();
+
+    try doc.set_plain_text("A中B\nxy\n世界" as &const byte);
+    _ = try doc.split_span(0u32, 0u16, 1usize);
+    _ = try doc.split_span(0u32, 1u16, 3usize);
+
+    const source_for_down: RichPos = RichPos{
+        block_index: 0u32,
+        span_index: 2u16,
+        utf8_offset: 0u32,
+        affinity: 0u8,
+    };
+    const moved_down_once: RichPos = try doc.move_down(source_for_down);
+    try assert_eq_i32(moved_down_once.block_index as i32, 1);
+    try assert_eq_i32(moved_down_once.span_index as i32, 0);
+    try assert_eq_i32(moved_down_once.utf8_offset as i32, 2);
+
+    const moved_down_twice: RichPos = try doc.move_down(moved_down_once);
+    try assert_eq_i32(moved_down_twice.block_index as i32, 2);
+    try assert_eq_i32(moved_down_twice.span_index as i32, 0);
+    try assert_eq_i32(moved_down_twice.utf8_offset as i32, 6);
+
+    const moved_up_once: RichPos = try doc.move_up(moved_down_twice);
+    try assert_eq_i32(moved_up_once.block_index as i32, 1);
+    try assert_eq_i32(moved_up_once.utf8_offset as i32, 2);
+
+    const moved_up_twice: RichPos = try doc.move_up(moved_up_once);
+    try assert_eq_i32(moved_up_twice.block_index as i32, 0);
+    try assert_eq_i32((try doc.pos_to_linear_offset(moved_up_twice)) as i32, 2);
+
+    const top_stays: RichPos = try doc.move_up(RichPos{
+        block_index: 0u32,
+        span_index: 2u16,
+        utf8_offset: 0u32,
+        affinity: 0u8,
+    });
+    try assert_eq_i32(top_stays.block_index as i32, 0);
+    try assert_eq_i32(top_stays.span_index as i32, 2);
+    try assert_eq_i32(top_stays.utf8_offset as i32, 0);
+
+    const bottom_stays: RichPos = try doc.move_down(RichPos{
+        block_index: 2u32,
+        span_index: 0u16,
+        utf8_offset: 6u32,
+        affinity: 0u8,
+    });
+    try assert_eq_i32(bottom_stays.block_index as i32, 2);
+    try assert_eq_i32(bottom_stays.utf8_offset as i32, 6);
+}
+
 test "rich range normalization keeps anchor and focus ordered" {
     const normalized: RichRange = rich_range_normalized(RichRange{
         anchor: RichPos{

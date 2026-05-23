@@ -62,6 +62,24 @@ export fn rich_inline_marks_eq(a: RichInlineMarks, b: RichInlineMarks) bool {
     return a.bits == b.bits && a.link_ref == b.link_ref;
 }
 
+export fn rich_inline_marks_has_bit(marks: RichInlineMarks, bit: u16) bool {
+    return (marks.bits & bit) != 0u16;
+}
+
+export fn rich_inline_marks_with_bit(marks: RichInlineMarks, bit: u16) RichInlineMarks {
+    return RichInlineMarks{
+        bits: marks.bits | bit,
+        link_ref: marks.link_ref,
+    };
+}
+
+export fn rich_inline_marks_without_bit(marks: RichInlineMarks, bit: u16) RichInlineMarks {
+    return RichInlineMarks{
+        bits: marks.bits & (~bit),
+        link_ref: marks.link_ref,
+    };
+}
+
 export fn rich_utf8_span(first: u8) usize {
     if (first & 0x80u8) == 0u8 {
         return 1usize;
@@ -371,6 +389,27 @@ fn rich_document_find_pos_in_block(block: &RichBlock, block_index: u32, codepoin
         span_idx = span_idx + 1u16;
     }
     return rich_document_block_end_pos(block, block_index);
+}
+
+fn rich_document_pos_block_codepoint_offset(block: &RichBlock, pos: RichPos) !u32 {
+    if block == null || block.span_count == 0u16 {
+        return 0u32;
+    }
+    if pos.span_index >= block.span_count {
+        return error.RichTextOutOfBounds;
+    }
+    var offset: u32 = 0u32;
+    var span_idx: u16 = 0u16;
+    while span_idx < pos.span_index {
+        const span_before: &RichSpan = &block.spans[span_idx as usize];
+        offset = offset + rich_utf8_codepoint_count(span_before.text_ptr as &const byte, span_before.text_len);
+        span_idx = span_idx + 1u16;
+    }
+    const span: &RichSpan = &block.spans[pos.span_index as usize];
+    if pos.utf8_offset as usize > span.text_len {
+        return error.RichTextOutOfBounds;
+    }
+    return offset + try rich_utf8_byte_offset_to_codepoint_offset(span.text_ptr as &const byte, span.text_len, pos.utf8_offset as usize);
 }
 
 export fn rich_document_new() RichDocument {
@@ -824,5 +863,47 @@ RichDocument {
             return error.RichTextOutOfBounds;
         }
         return rich_document_block_end_pos(&self.blocks[pos.block_index as usize], pos.block_index);
+    }
+
+    fn move_up(self: &Self, pos: RichPos) !RichPos {
+        if self.block_count == 0u32 {
+            return rich_pos_zero();
+        }
+        if pos.block_index >= self.block_count {
+            return error.RichTextOutOfBounds;
+        }
+        if pos.block_index == 0u32 {
+            return pos;
+        }
+        const current_block: &RichBlock = &self.blocks[pos.block_index as usize];
+        var target_offset: u32 = try rich_document_pos_block_codepoint_offset(current_block, pos);
+        const target_block_index: u32 = pos.block_index - 1u32;
+        const target_block: &RichBlock = &self.blocks[target_block_index as usize];
+        const target_block_len: u32 = rich_document_block_text_codepoints(target_block);
+        if target_offset > target_block_len {
+            target_offset = target_block_len;
+        }
+        return rich_document_find_pos_in_block(target_block, target_block_index, target_offset);
+    }
+
+    fn move_down(self: &Self, pos: RichPos) !RichPos {
+        if self.block_count == 0u32 {
+            return rich_pos_zero();
+        }
+        if pos.block_index >= self.block_count {
+            return error.RichTextOutOfBounds;
+        }
+        if pos.block_index + 1u32 >= self.block_count {
+            return pos;
+        }
+        const current_block: &RichBlock = &self.blocks[pos.block_index as usize];
+        var target_offset: u32 = try rich_document_pos_block_codepoint_offset(current_block, pos);
+        const target_block_index: u32 = pos.block_index + 1u32;
+        const target_block: &RichBlock = &self.blocks[target_block_index as usize];
+        const target_block_len: u32 = rich_document_block_text_codepoints(target_block);
+        if target_offset > target_block_len {
+            target_offset = target_block_len;
+        }
+        return rich_document_find_pos_in_block(target_block, target_block_index, target_offset);
     }
 }

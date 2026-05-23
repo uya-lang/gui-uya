@@ -1,16 +1,28 @@
 use libc.strncmp;
 use richtext.delta.RichDelta;
+use richtext.delta.RichInlineToggleResult;
 use richtext.delta.RichOpKind;
 use richtext.delta.apply_delta;
 use richtext.delta.document_to_delta;
+use richtext.delta.rich_backspace;
+use richtext.delta.rich_delete_forward;
+use richtext.delta.rich_delete_range;
 use richtext.delta.rich_delta_attrs_inline;
 use richtext.delta.rich_delta_attrs_none;
 use richtext.delta.rich_delta_new;
+use richtext.delta.rich_insert_break;
+use richtext.delta.rich_insert_text;
+use richtext.delta.rich_set_block_type;
+use richtext.delta.rich_toggle_inline_mark;
 use richtext.document.RICH_MARK_BOLD;
 use richtext.document.RichBlockType;
 use richtext.document.RichDocument;
 use richtext.document.RichInlineMarks;
 use richtext.document.rich_document_new;
+use richtext.document.rich_inline_marks_none;
+use richtext.selection.RichPos;
+use richtext.selection.RichRange;
+use richtext.selection.rich_range_collapsed;
 use std.testing.assert_eq_bool;
 use std.testing.assert_eq_i32;
 
@@ -104,4 +116,159 @@ test "patch delta retain attrs can rewrite inline marks without toggle ops" {
     try assert_eq_i32(snapshot.ops[1].kind as i32, RichOpKind.InsertText as i32);
     try assert_eq_bool(snapshot.ops[1].attrs.has_inline, false);
     try assert_eq_bool(strncmp(snapshot.ops[1].text_ptr as *const byte, "b" as *const byte, 1usize) == 0, true);
+}
+
+test "delete range removes selected content across blocks and collapses at start" {
+    var doc: RichDocument = rich_document_new();
+    defer doc.dispose();
+    try doc.set_plain_text("ab\ncd" as &const byte);
+
+    const caret: RichPos = try rich_delete_range(&doc, RichRange{
+        anchor: try doc.linear_offset_to_pos(1u32),
+        focus: try doc.linear_offset_to_pos(4u32),
+    });
+
+    var out: [byte: 16] = [];
+    const written: usize = doc.export_plain_text(&out[0], 16usize);
+    try assert_eq_i32(written as i32, 2);
+    try assert_eq_bool(strncmp(&out[0] as *const byte, "ad" as *const byte, 2usize) == 0, true);
+    try assert_eq_i32((try doc.pos_to_linear_offset(caret)) as i32, 1);
+}
+
+test "insert text replaces selection through patch delta helper" {
+    var doc: RichDocument = rich_document_new();
+    defer doc.dispose();
+    try doc.set_plain_text("ab\ncd" as &const byte);
+
+    const caret: RichPos = try rich_insert_text(&doc, RichRange{
+        anchor: try doc.linear_offset_to_pos(1u32),
+        focus: try doc.linear_offset_to_pos(4u32),
+    }, "XY" as &const byte, 2usize, rich_inline_marks_none());
+
+    var out: [byte: 16] = [];
+    const written: usize = doc.export_plain_text(&out[0], 16usize);
+    try assert_eq_i32(written as i32, 4);
+    try assert_eq_bool(strncmp(&out[0] as *const byte, "aXYd" as *const byte, 4usize) == 0, true);
+    try assert_eq_i32((try doc.pos_to_linear_offset(caret)) as i32, 3);
+}
+
+test "backspace and delete forward can remove block breaks" {
+    var backspace_doc: RichDocument = rich_document_new();
+    defer backspace_doc.dispose();
+    try backspace_doc.set_plain_text("ab\ncd" as &const byte);
+    const backspace_caret: RichPos = try rich_backspace(&backspace_doc, rich_range_collapsed(try backspace_doc.linear_offset_to_pos(3u32)));
+
+    var backspace_out: [byte: 16] = [];
+    const backspace_written: usize = backspace_doc.export_plain_text(&backspace_out[0], 16usize);
+    try assert_eq_i32(backspace_written as i32, 4);
+    try assert_eq_bool(strncmp(&backspace_out[0] as *const byte, "abcd" as *const byte, 4usize) == 0, true);
+    try assert_eq_i32((try backspace_doc.pos_to_linear_offset(backspace_caret)) as i32, 2);
+
+    var delete_doc: RichDocument = rich_document_new();
+    defer delete_doc.dispose();
+    try delete_doc.set_plain_text("ab\ncd" as &const byte);
+    const delete_caret: RichPos = try rich_delete_forward(&delete_doc, rich_range_collapsed(try delete_doc.linear_offset_to_pos(2u32)));
+
+    var delete_out: [byte: 16] = [];
+    const delete_written: usize = delete_doc.export_plain_text(&delete_out[0], 16usize);
+    try assert_eq_i32(delete_written as i32, 4);
+    try assert_eq_bool(strncmp(&delete_out[0] as *const byte, "abcd" as *const byte, 4usize) == 0, true);
+    try assert_eq_i32((try delete_doc.pos_to_linear_offset(delete_caret)) as i32, 2);
+}
+
+test "insert break splits paragraphs and keeps list semantics clear" {
+    var paragraph_doc: RichDocument = rich_document_new();
+    defer paragraph_doc.dispose();
+    try paragraph_doc.set_plain_text("ab" as &const byte);
+    const paragraph_caret: RichPos = try rich_insert_break(&paragraph_doc, rich_range_collapsed(try paragraph_doc.linear_offset_to_pos(1u32)));
+
+    var paragraph_out: [byte: 16] = [];
+    const paragraph_written: usize = paragraph_doc.export_plain_text(&paragraph_out[0], 16usize);
+    try assert_eq_i32(paragraph_written as i32, 3);
+    try assert_eq_bool(strncmp(&paragraph_out[0] as *const byte, "a\nb" as *const byte, 3usize) == 0, true);
+    try assert_eq_i32((try paragraph_doc.pos_to_linear_offset(paragraph_caret)) as i32, 2);
+
+    var empty_list_doc: RichDocument = rich_document_new();
+    defer empty_list_doc.dispose();
+    try empty_list_doc.set_plain_text("" as &const byte);
+    empty_list_doc.blocks[0].block_type = RichBlockType.BulletItem;
+    const empty_list_caret: RichPos = try rich_insert_break(&empty_list_doc, rich_range_collapsed(try empty_list_doc.linear_offset_to_pos(0u32)));
+    try assert_eq_i32(empty_list_doc.block_count as i32, 1);
+    try assert_eq_i32(empty_list_doc.blocks[0].block_type as i32, RichBlockType.Paragraph as i32);
+    try assert_eq_i32((try empty_list_doc.pos_to_linear_offset(empty_list_caret)) as i32, 0);
+
+    var list_doc: RichDocument = rich_document_new();
+    defer list_doc.dispose();
+    try list_doc.set_plain_text("item" as &const byte);
+    list_doc.blocks[0].block_type = RichBlockType.BulletItem;
+    const list_caret: RichPos = try rich_insert_break(&list_doc, rich_range_collapsed(try list_doc.linear_offset_to_pos(4u32)));
+    try assert_eq_i32(list_doc.block_count as i32, 2);
+    try assert_eq_i32(list_doc.blocks[0].block_type as i32, RichBlockType.BulletItem as i32);
+    try assert_eq_i32(list_doc.blocks[1].block_type as i32, RichBlockType.BulletItem as i32);
+    try assert_eq_i32((try list_doc.pos_to_linear_offset(list_caret)) as i32, 5);
+}
+
+test "set block type updates current block and respects exclusive range end" {
+    var collapsed_doc: RichDocument = rich_document_new();
+    defer collapsed_doc.dispose();
+    try collapsed_doc.set_plain_text("ab" as &const byte);
+    const collapsed_range: RichRange = try rich_set_block_type(&collapsed_doc, rich_range_collapsed(try collapsed_doc.linear_offset_to_pos(1u32)), RichBlockType.Heading2, 0u8);
+    try assert_eq_i32(collapsed_doc.blocks[0].block_type as i32, RichBlockType.Heading2 as i32);
+    try assert_eq_i32((try collapsed_doc.pos_to_linear_offset(collapsed_range.anchor)) as i32, 1);
+    try assert_eq_i32((try collapsed_doc.pos_to_linear_offset(collapsed_range.focus)) as i32, 1);
+
+    var range_doc: RichDocument = rich_document_new();
+    defer range_doc.dispose();
+    try range_doc.set_plain_text("a\nb\nc" as &const byte);
+    _ = try rich_set_block_type(&range_doc, RichRange{
+        anchor: try range_doc.linear_offset_to_pos(0u32),
+        focus: try range_doc.linear_offset_to_pos(2u32),
+    }, RichBlockType.Quote, 0u8);
+    try assert_eq_i32(range_doc.blocks[0].block_type as i32, RichBlockType.Quote as i32);
+    try assert_eq_i32(range_doc.blocks[1].block_type as i32, RichBlockType.Paragraph as i32);
+
+    _ = try rich_set_block_type(&range_doc, RichRange{
+        anchor: try range_doc.linear_offset_to_pos(0u32),
+        focus: try range_doc.linear_offset_to_pos(3u32),
+    }, RichBlockType.OrderedItem, 1u8);
+    try assert_eq_i32(range_doc.blocks[0].block_type as i32, RichBlockType.OrderedItem as i32);
+    try assert_eq_i32(range_doc.blocks[0].indent as i32, 1);
+    try assert_eq_i32(range_doc.blocks[1].block_type as i32, RichBlockType.OrderedItem as i32);
+    try assert_eq_i32(range_doc.blocks[1].indent as i32, 1);
+    try assert_eq_i32(range_doc.blocks[2].block_type as i32, RichBlockType.Paragraph as i32);
+}
+
+test "toggle inline mark updates pending marks and normalizes spans" {
+    var collapsed_doc: RichDocument = rich_document_new();
+    defer collapsed_doc.dispose();
+    try collapsed_doc.set_plain_text("ab" as &const byte);
+    const collapsed_result: RichInlineToggleResult = try rich_toggle_inline_mark(&collapsed_doc, rich_range_collapsed(try collapsed_doc.linear_offset_to_pos(1u32)), rich_inline_marks_none(), RICH_MARK_BOLD);
+    try assert_eq_i32(collapsed_result.pending_marks.bits as i32, RICH_MARK_BOLD as i32);
+    try assert_eq_i32(collapsed_doc.blocks[0].spans[0].marks.bits as i32, 0);
+
+    var selection_doc: RichDocument = rich_document_new();
+    defer selection_doc.dispose();
+    try selection_doc.set_plain_text("ab" as &const byte);
+
+    _ = try rich_toggle_inline_mark(&selection_doc, RichRange{
+        anchor: try selection_doc.linear_offset_to_pos(0u32),
+        focus: try selection_doc.linear_offset_to_pos(1u32),
+    }, rich_inline_marks_none(), RICH_MARK_BOLD);
+    try assert_eq_i32(selection_doc.blocks[0].span_count as i32, 2);
+    try assert_eq_i32(selection_doc.blocks[0].spans[0].marks.bits as i32, RICH_MARK_BOLD as i32);
+    try assert_eq_i32(selection_doc.blocks[0].spans[1].marks.bits as i32, 0);
+
+    _ = try rich_toggle_inline_mark(&selection_doc, RichRange{
+        anchor: try selection_doc.linear_offset_to_pos(1u32),
+        focus: try selection_doc.linear_offset_to_pos(2u32),
+    }, rich_inline_marks_none(), RICH_MARK_BOLD);
+    try assert_eq_i32(selection_doc.blocks[0].span_count as i32, 1);
+    try assert_eq_i32(selection_doc.blocks[0].spans[0].marks.bits as i32, RICH_MARK_BOLD as i32);
+
+    _ = try rich_toggle_inline_mark(&selection_doc, RichRange{
+        anchor: try selection_doc.linear_offset_to_pos(0u32),
+        focus: try selection_doc.linear_offset_to_pos(2u32),
+    }, rich_inline_marks_none(), RICH_MARK_BOLD);
+    try assert_eq_i32(selection_doc.blocks[0].span_count as i32, 1);
+    try assert_eq_i32(selection_doc.blocks[0].spans[0].marks.bits as i32, 0);
 }
