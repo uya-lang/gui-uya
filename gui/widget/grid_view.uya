@@ -14,6 +14,7 @@ use widget.base.WIDGET_TYPE_LABEL;
 use widget.base.WIDGET_TYPE_PANEL;
 use widget.base.WIDGET_TYPE_GRID_VIEW;
 use widget.base.WIDGET_TYPE_RICH_TEXT_INPUT;
+use widget.base.WIDGET_TYPE_RICH_TOOLBAR;
 use widget.base.widget_bind_callbacks;
 use widget.base.widget_draw_surface;
 use widget.base.widget_inner_rect;
@@ -23,6 +24,7 @@ use widget.img.Image;
 use widget.lbl.Label;
 use widget.panel.Panel;
 use widget.rich_text_input.RichTextInput;
+use widget.rich_toolbar.RichToolbar;
 
 fn grid_render_obj(obj: &GuiObj, ctx: &RenderCtx) void {
     if obj == null || obj.user_data == null {
@@ -60,6 +62,13 @@ fn grid_render_obj(obj: &GuiObj, ctx: &RenderCtx) void {
         const input: &RichTextInput = obj.user_data as &RichTextInput;
         if input != null {
             input.render(ctx);
+        }
+        return;
+    }
+    if obj.type_tag == WIDGET_TYPE_RICH_TOOLBAR {
+        const toolbar: &RichToolbar = obj.user_data as &RichToolbar;
+        if toolbar != null {
+            toolbar.render(ctx);
         }
     }
 }

@@ -16,6 +16,7 @@ use widget.lbl.TextOverflow;
 use widget.page.Page;
 use widget.panel.Panel;
 use widget.rich_text_input.RichTextInput;
+use widget.rich_toolbar.RichToolbar;
 
 export struct RichTextRetained {
     tree: ObjTree,
@@ -26,6 +27,7 @@ export struct RichTextRetained {
     editor_panel: Panel,
     editor_title: Label,
     editor_hint: Label,
+    toolbar: RichToolbar,
     editor: RichTextInput,
     footer: Label,
     ready: bool,
@@ -42,6 +44,7 @@ export fn richtext_retained_new() RichTextRetained {
         editor_title: Label.new("Editor"),
         editor_hint: Label.new("当前示例使用真实 RichTextInput 控件。首版 HTML 导出和宿主桥会继续在后续里程碑补强。"),
         editor: RichTextInput.new("输入多段内容，试试拖拽选区与多行编辑"),
+        toolbar: RichToolbar.new(null),
         footer: Label.new("建议操作：输入几行文本、拖拽选区、回车拆段、退格合段、尝试桌面与 Web 的粘贴链路。"),
         ready: false,
     };
@@ -96,6 +99,11 @@ export fn richtext_retained_init(demo: &RichTextRetained) void {
 
     demo.editor.widget.at(sim_layout_x(18), sim_layout_y(86));
     demo.editor.widget.size(sim_layout_w(564u16), sim_layout_h(188u16));
+    demo.toolbar.bind_editor(&demo.editor);
+    demo.toolbar.widget.at(sim_layout_x(18), sim_layout_y(82));
+    demo.toolbar.widget.size(sim_layout_w(420u16), sim_layout_h(34u16));
+    demo.editor.widget.at(sim_layout_x(18), sim_layout_y(124));
+    demo.editor.widget.size(sim_layout_w(564u16), sim_layout_h(150u16));
     _ = demo.editor.set_plain_text(
         "RichTextInput 已接入模拟器 demo。\n你可以在这里输入多段文本、拖拽选择内容，或直接粘贴多行文本。\nSDL2 与 Web 的宿主桥能力会继续沿 TODO 文档向前推进。"
             as &const byte
@@ -113,6 +121,7 @@ export fn richtext_retained_init(demo: &RichTextRetained) void {
     demo.hero.add(demo.subtitle.obj());
     demo.editor_panel.add(demo.editor_title.obj());
     demo.editor_panel.add(demo.editor_hint.obj());
+    demo.editor_panel.add(demo.toolbar.obj());
     demo.editor_panel.add(demo.editor.obj());
     demo.editor_panel.add(demo.footer.obj());
 

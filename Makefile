@@ -6,6 +6,7 @@ EXAMPLE_DIR ?= gui/examples
 SMOKE_APP ?= gui/phase6_smoke.uya
 BENCH_APP ?= gui/bench_suite.uya
 TEST_ENTRY ?= gui/test_suite.uya
+TEST_EXTRA_ENTRY ?= gui/test_suite_extra.uya
 RICHTEXT_TEST_ENTRY ?= gui/richtext_test_suite.uya
 WEB_PRESENT_TEST_ENTRY ?= gui/web_present_plan_suite.uya
 RENDER_TEST_ENTRY ?= gui/render_test_suite.uya
@@ -56,6 +57,7 @@ build:
 
 test:
 	$(UYA) test $(TEST_ENTRY) $(UYA_OPT) --stack-size $(TEST_STACK_SIZE)
+	$(UYA) test $(TEST_EXTRA_ENTRY) $(UYA_OPT) --stack-size $(TEST_STACK_SIZE)
 	$(UYA) test $(RICHTEXT_TEST_ENTRY) $(UYA_OPT) --stack-size $(TEST_STACK_SIZE)
 	$(UYA) test $(WEB_PRESENT_TEST_ENTRY) $(UYA_OPT) --stack-size $(TEST_STACK_SIZE)
 	$(UYA) test $(RENDER_TEST_ENTRY) $(UYA_OPT) --stack-size $(TEST_STACK_SIZE)

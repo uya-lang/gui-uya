@@ -14,6 +14,7 @@ use platform.text_host.RICH_TEXT_HOST_CMD_CUT;
 use platform.text_host.RICH_TEXT_HOST_CMD_COMPOSITION_END;
 use platform.text_host.RICH_TEXT_HOST_CMD_COMPOSITION_START;
 use platform.text_host.RICH_TEXT_HOST_CMD_COMPOSITION_UPDATE;
+use platform.text_host.RICH_TEXT_HOST_CMD_BLUR;
 use platform.text_host.RICH_TEXT_HOST_CMD_PASTE_TEXT;
 use platform.text_host.rich_text_host_active_session;
 use platform.text_host.rich_text_host_feed_command;
@@ -35,10 +36,13 @@ use widget.page.Page;
 use widget.panel.Panel;
 use widget.rich_text_input.RichCommand;
 use widget.rich_text_input.RichCommandKind;
+use widget.rich_toolbar.RichToolbar;
 use widget.rich_text_input.RichTextInput;
 use richtext.delta.RichDelta;
 use richtext.delta.RichOpKind;
 use richtext.delta.rich_delta_new;
+use richtext.document.RICH_MARK_BOLD;
+use richtext.document.RichBlockType;
 
 export const TEST_RICHTEXT_WIDGET_MODULE: i32 = 1;
 
@@ -246,6 +250,10 @@ test "rich text input consumes host bridge paste and cut commands" {
     const cut_written: usize = input.plain_text(&out[0], 32usize);
     try assert_eq_i32(cut_written as i32, 1);
     try assert_eq_bool(strncmp(&out[0] as *const byte, "A" as *const byte, 1usize) == 0, true);
+
+    try assert_eq_bool(rich_text_host_feed_command(RICH_TEXT_HOST_CMD_BLUR), true);
+    input.render(&ctx);
+    try assert_eq_i32(rich_text_host_active_session() as i32, 0);
 }
 
 test "rich text input host bridge keeps long paste and composition lifecycle intact" {
@@ -340,4 +348,34 @@ test "rich text input scrolls caret into view and renders inside panel and page"
     page.render(&page_ctx);
     const page_inner: Rect = widget_inner_rect(&page_input.widget);
     try assert_eq_bool(ctx_pixel(&page_ctx, page_inner.x + 2i16, page_inner.y + 3i16) == Color{ r: 15, g: 23, b: 42, a: 255 }, true);
+}
+
+test "rich toolbar drives common formats and reports active state" {
+    var input: RichTextInput = RichTextInput.new("" as &const byte);
+    defer input.dispose();
+    input.widget.at(0, 48);
+    input.widget.size(180, 72);
+
+    var toolbar: RichToolbar = RichToolbar.new(&input);
+    toolbar.widget.at(0, 0);
+    toolbar.widget.size(360, 34);
+
+    try assert_eq_i32(toolbar.format_count() as i32, 8);
+    try assert_eq_bool(input.format_has_mark(RICH_MARK_BOLD), false);
+    try assert_eq_bool(toolbar.trigger_format(0), true);
+    try assert_eq_bool(input.format_has_mark(RICH_MARK_BOLD), true);
+
+    try assert_eq_bool(input.exec(RichCommand{
+        kind: RichCommandKind.InsertText,
+        text_ptr: "bold" as &const byte,
+        text_len: 4usize,
+    }), true);
+
+    var out: [byte: 32] = [];
+    const written: usize = input.export_html(&out[0], 32usize);
+    try assert_eq_bool(written > 0usize, true);
+    try assert_eq_bool(strncmp(&out[0] as *const byte, "<p><strong>bold" as *const byte, 15usize) == 0, true);
+
+    try assert_eq_bool(toolbar.trigger_format(5), true);
+    try assert_eq_i32(input.format_block_type() as i32, RichBlockType.Heading1 as i32);
 }

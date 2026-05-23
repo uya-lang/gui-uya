@@ -1,4 +1,7 @@
 use libc.printf;
+use core.event.Event;
+use core.event.EventType;
+use core.event.event_focus;
 use platform.web.disp_web.WebDisplay;
 use platform.web.disp_web.web_display_last_error;
 use platform.web.disp_web.web_display_new;
@@ -278,5 +281,36 @@ export fn sim_web_richtext_paste_plain(text: &const byte, text_len: usize) bool 
         kind: RichCommandKind.PastePlain,
         text_ptr: text,
         text_len: text_len,
+    });
+}
+
+export fn sim_web_richtext_focus_editor() bool {
+    if g_web_runtime == null {
+        return false;
+    }
+    const runtime: &WebRuntimeState = g_web_runtime;
+    if runtime.app == null {
+        return false;
+    }
+    const app: &SimApp = runtime.app;
+    app.sync_richtext_demo();
+    var focus_evt: Event = event_focus(EventType.FocusIn, 0, 0u32);
+    return app.richtext_demo.editor.handle_event(&focus_evt);
+}
+
+export fn sim_web_richtext_select_all() bool {
+    if g_web_runtime == null {
+        return false;
+    }
+    const runtime: &WebRuntimeState = g_web_runtime;
+    if runtime.app == null {
+        return false;
+    }
+    const app: &SimApp = runtime.app;
+    app.sync_richtext_demo();
+    return app.richtext_demo.editor.exec(RichCommand{
+        kind: RichCommandKind.SelectAll,
+        text_ptr: null,
+        text_len: 0usize,
     });
 }

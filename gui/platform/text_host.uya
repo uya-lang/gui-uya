@@ -10,6 +10,7 @@ export const RICH_TEXT_HOST_CMD_COMPOSITION_END: u8 = 4u8;
 export const RICH_TEXT_HOST_CMD_PASTE_TEXT: u8 = 5u8;
 export const RICH_TEXT_HOST_CMD_CUT: u8 = 6u8;
 export const RICH_TEXT_HOST_CMD_COPY: u8 = 7u8;
+export const RICH_TEXT_HOST_CMD_BLUR: u8 = 8u8;
 export const RICH_TEXT_HOST_QUEUE_CAPACITY: i32 = 32;
 export const RICH_TEXT_HOST_TEXT_BYTES: i32 = 4096;
 

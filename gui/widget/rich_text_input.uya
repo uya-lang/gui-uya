@@ -14,6 +14,7 @@ use platform.text_host.RICH_TEXT_HOST_CMD_COMPOSITION_START;
 use platform.text_host.RICH_TEXT_HOST_CMD_COMPOSITION_UPDATE;
 use platform.text_host.RICH_TEXT_HOST_CMD_COPY;
 use platform.text_host.RICH_TEXT_HOST_CMD_CUT;
+use platform.text_host.RICH_TEXT_HOST_CMD_BLUR;
 use platform.text_host.RICH_TEXT_HOST_CMD_INSERT_TEXT;
 use platform.text_host.RICH_TEXT_HOST_CMD_PASTE_TEXT;
 use platform.text_host.RICH_TEXT_HOST_TEXT_BYTES;
@@ -407,6 +408,14 @@ export struct RichCommand {
     text_len: usize,
 }
 
+export struct RichTextFormatState {
+    marks: RichInlineMarks,
+    block_type: RichBlockType,
+    can_mention: bool,
+    can_image: bool,
+    can_embed: bool,
+}
+
 export struct RichTextInput {
     widget: Widget,
     doc: RichDocument,
@@ -505,6 +514,64 @@ RichTextInput {
 
     fn selection(self: &Self) RichRange {
         return self.selection_range;
+    }
+
+    fn format_block_type(self: &Self) RichBlockType {
+        if self.selection_range.focus.block_index < self.doc.block_count {
+            return self.doc.blocks[self.selection_range.focus.block_index as usize].block_type;
+        }
+        return RichBlockType.Paragraph;
+    }
+
+    fn format_inline_marks(self: &Self) RichInlineMarks {
+        if rich_range_is_collapsed(self.selection_range)
+            && (self.pending_marks.bits != 0u16 || self.pending_marks.link_ref != 0u16) {
+            return self.pending_marks;
+        }
+        if !rich_range_is_collapsed(self.selection_range) {
+            const normalized: RichRange = rich_range_normalized(self.selection_range);
+            if normalized.anchor.block_index < self.doc.block_count {
+                const block: &RichBlock = &self.doc.blocks[normalized.anchor.block_index as usize];
+                if normalized.anchor.span_index < block.span_count {
+                    return block.spans[normalized.anchor.span_index as usize].marks;
+                }
+            }
+        } else if self.pending_marks.bits != 0u16 || self.pending_marks.link_ref != 0u16 {
+            return self.pending_marks;
+        }
+        if self.selection_range.focus.block_index < self.doc.block_count {
+            const block: &RichBlock = &self.doc.blocks[self.selection_range.focus.block_index as usize];
+            if self.selection_range.focus.span_index < block.span_count {
+                return block.spans[self.selection_range.focus.span_index as usize].marks;
+            }
+        }
+        return self.pending_marks;
+    }
+
+    fn format_has_mark(self: &Self, mark_bit: u16) bool {
+        return (self.format_inline_marks().bits & mark_bit) != 0u16;
+    }
+
+    fn format_state(self: &Self) RichTextFormatState {
+        return RichTextFormatState{
+            marks: self.format_inline_marks(),
+            block_type: self.format_block_type(),
+            can_mention: true,
+            can_image: true,
+            can_embed: true,
+        };
+    }
+
+    fn current_block_type(self: &Self) RichBlockType {
+        return self.format_block_type();
+    }
+
+    fn current_format_has_mark(self: &Self, mark_bit: u16) bool {
+        return self.format_has_mark(mark_bit);
+    }
+
+    fn current_format_state(self: &Self) RichTextFormatState {
+        return self.format_state();
     }
 
     fn current_plain_text_len(self: &Self) i32 {
@@ -649,6 +716,12 @@ RichTextInput {
             } else if cmd.kind == RICH_TEXT_HOST_CMD_CUT {
                 self.update_host_selection_text();
                 _ = self.delete_selected_range(0u32);
+            } else if cmd.kind == RICH_TEXT_HOST_CMD_BLUR {
+                self.pointer_selecting = false;
+                self.host_composing = false;
+                self.widget.set_state(WidgetState.Normal);
+                rich_text_host_deactivate(self.session_id);
+                self.widget.base.invalidate();
             }
             cmd = RichTextHostCommand{
                 kind: 0u8,

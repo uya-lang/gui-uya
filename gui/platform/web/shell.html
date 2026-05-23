@@ -216,6 +216,8 @@
         top: 0;
         width: 1px;
         height: 1px;
+        font-size: 16px;
+        line-height: 16px;
         padding: 0;
         border: 0;
         margin: 0;
@@ -1632,6 +1634,7 @@
           var imeAwaitingFinalInput = false;
           var imeClosingKeyGuard = false;
           var imeClosingKeyGuardToken = 0;
+          var imeSuspended = false;
           var pendingPrintableKey = null;
           var RICH_TEXT_HOST_CMD_INSERT_TEXT = 1;
           var RICH_TEXT_HOST_CMD_COMPOSITION_START = 2;
@@ -1640,6 +1643,7 @@
           var RICH_TEXT_HOST_CMD_PASTE_TEXT = 5;
           var RICH_TEXT_HOST_CMD_CUT = 6;
           var RICH_TEXT_HOST_CMD_COPY = 7;
+          var RICH_TEXT_HOST_CMD_BLUR = 8;
 
           function encodeUtf8(text) {
             if (!text) {
@@ -1783,6 +1787,9 @@
             if (!imeSink) {
               return;
             }
+            if (blurSink) {
+              imeSuspended = true;
+            }
             imeComposing = false;
             imeCommitHandled = false;
             imeAwaitingFinalInput = false;
@@ -1797,6 +1804,18 @@
               } catch (err) {
               }
             }
+          }
+
+          function blurRichTextSessionFromImeSink(blurSink) {
+            if (!imeSink) {
+              return;
+            }
+            imeSuspended = true;
+            var wasRichText = imeSinkMode() === 'richtext' || imeSink.dataset.uyaRichtextActive === '1';
+            if (wasRichText && richTextSessionActive()) {
+              feedRichTextCommand(RICH_TEXT_HOST_CMD_BLUR);
+            }
+            resetImeSinkState('idle', !!blurSink);
           }
 
           function releaseRichTextImeSink() {
@@ -1814,6 +1833,7 @@
             if (!imeSink) {
               return;
             }
+            imeSuspended = false;
             placeImeSink(canvasX, canvasY);
             clearImeSink();
             clearPendingPrintableKey();
@@ -1936,6 +1956,7 @@
               case 'Escape': return 27;
               case 'Enter': return 13;
               case 'Backspace': return 8;
+              case 'Delete': return 127;
               case ' ': return 32;
               case 'Spacebar': return 32;
               case 'ArrowLeft': return 1000;
@@ -1956,6 +1977,11 @@
 
           function feed(kind, x, y, value, keyCode, modifiers) {
             Module._uya_gui_web_host_feed_event(kind, x | 0, y | 0, value | 0, keyCode | 0, modifiers | 0);
+          }
+
+          function feedEditingKey(keyCode, modifiers) {
+            feed(5, 0, 0, 0, keyCode | 0, modifiers | 0);
+            feed(6, 0, 0, 0, keyCode | 0, modifiers | 0);
           }
 
           function pointFromEvent(clientX, clientY) {
@@ -2043,6 +2069,9 @@
             }
             if (!richTextSessionActive()) {
               releaseRichTextImeSink();
+              return;
+            }
+            if (imeSuspended) {
               return;
             }
             if (!Module._uya_gui_web_host_richtext_caret_x
@@ -2207,6 +2236,24 @@
               return;
             }
             var inputType = evt && typeof evt.inputType === 'string' ? evt.inputType : '';
+            if (inputType === 'insertParagraph') {
+              feedEditingKey(13, modifierBits(evt));
+              clearImeSink();
+              evt.preventDefault();
+              return;
+            }
+            if (inputType === 'deleteContentBackward') {
+              feedEditingKey(8, modifierBits(evt));
+              clearImeSink();
+              evt.preventDefault();
+              return;
+            }
+            if (inputType === 'deleteContentForward') {
+              feedEditingKey(127, modifierBits(evt));
+              clearImeSink();
+              evt.preventDefault();
+              return;
+            }
             if (inputType.indexOf('insertFromPaste') >= 0 || inputType.indexOf('insertFromDrop') >= 0) {
               evt.preventDefault();
             }
@@ -2287,14 +2334,17 @@
               evt.preventDefault();
             }
           });
+          imeSink.addEventListener('blur', function() {
+            blurRichTextSessionFromImeSink(false);
+          });
           if (!Module.uyaGuiWindowBound) {
             window.addEventListener('blur', function() {
-              resetImeSinkState('idle', true);
+              blurRichTextSessionFromImeSink(true);
               feed(7, 0, 0, 0, 0, 0);
             });
             document.addEventListener('visibilitychange', function() {
               if (document.hidden) {
-                resetImeSinkState('idle', true);
+                blurRichTextSessionFromImeSink(true);
                 feed(7, 0, 0, 0, 0, 0);
               } else {
                 Module.uyaGuiUpdateCanvasCss();
@@ -2596,6 +2646,8 @@
                 autocomplete="off"
                 autocorrect="off"
                 autocapitalize="off"
+                inputmode="text"
+                enterkeyhint="done"
                 spellcheck="false"
                 rows="1"></textarea>
             </div>

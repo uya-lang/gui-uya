@@ -56,6 +56,8 @@ extern size_t sim_web_richtext_export_plain_text(uint8_t *out, size_t cap);
 extern size_t sim_web_richtext_export_html(uint8_t *out, size_t cap);
 extern bool sim_web_richtext_insert_text(const uint8_t *text, size_t len);
 extern bool sim_web_richtext_paste_plain(const uint8_t *text, size_t len);
+extern bool sim_web_richtext_focus_editor(void);
+extern bool sim_web_richtext_select_all(void);
 
 static UyaGuiWebDisplay *g_web_display = NULL;
 static int g_web_loop_active = 0;
@@ -434,6 +436,14 @@ EMSCRIPTEN_KEEPALIVE int32_t uya_gui_web_host_richtext_paste_plain(const uint8_t
         return 0;
     }
     return sim_web_richtext_paste_plain(text, (size_t)len) ? 1 : 0;
+}
+
+EMSCRIPTEN_KEEPALIVE int32_t uya_gui_web_host_richtext_focus_editor(void) {
+    return sim_web_richtext_focus_editor() ? 1 : 0;
+}
+
+EMSCRIPTEN_KEEPALIVE int32_t uya_gui_web_host_richtext_select_all(void) {
+    return sim_web_richtext_select_all() ? 1 : 0;
 }
 
 void *uya_gui_web_display_open(int32_t width, int32_t height, int32_t scale, const uint8_t *title) {
